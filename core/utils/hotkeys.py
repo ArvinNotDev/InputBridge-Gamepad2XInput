@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import os
+from pathlib import Path
 from typing import Iterable, Union, Dict, List, Tuple, Any
 
 
@@ -39,6 +39,8 @@ class Hotkey:
         :param keys_file_name: Path to the JSON file used for persistence.
         """
         self.keys_file_name = keys_file_name
+        self.keys_file_path = Path(keys_file_name)
+        self._last_loaded_mtime_ns: int | None = None
 
         # Controller button order (must match UI / controller monitor mapping)
         self.buttons_layout = [
@@ -62,7 +64,7 @@ class Hotkey:
         # { "<binary_pattern>": "<function_name>" }
         self.keys: Dict[str, str] = {}
 
-        self.update_hotkeys()
+        self.update_hotkeys(force=True)
 
     # ------------------------------------------------------------------
     # Public API
@@ -79,7 +81,10 @@ class Hotkey:
         if function not in self.function_choices:
             return False, f"Unknown function '{function}'. Allowed: {self.function_choices}"
 
-        normalized = self._normalize_binary_input(binary_input)
+        try:
+            normalized = self._normalize_binary_input(binary_input)
+        except ValueError as exc:
+            return False, str(exc)
 
         if len(normalized) != len(self.buttons_layout):
             return (
@@ -105,7 +110,10 @@ class Hotkey:
         """
         self.update_hotkeys()
 
-        normalized = self._normalize_binary_input(binary_input)
+        try:
+            normalized = self._normalize_binary_input(binary_input)
+        except ValueError as exc:
+            return False, "", str(exc)
 
         if len(normalized) != len(self.buttons_layout):
             return (
@@ -134,7 +142,10 @@ class Hotkey:
         """
         self.update_hotkeys()
 
-        normalized = self._normalize_binary_input(binary_input)
+        try:
+            normalized = self._normalize_binary_input(binary_input)
+        except ValueError as exc:
+            return False, str(exc)
 
         if len(normalized) != len(self.buttons_layout):
             return (
@@ -248,25 +259,31 @@ class Hotkey:
     # Persistence
     # ------------------------------------------------------------------
 
-    def update_hotkeys(self) -> None:
+    def update_hotkeys(self, *, force: bool = False) -> None:
         """
         Load hotkeys from the JSON file.
 
         If the file is missing or corrupted, an empty mapping is created.
         """
-        if not os.path.exists(self.keys_file_name):
+        if not self.keys_file_path.exists():
             self.keys = {}
             self._save_hotkeys()
             return
 
         try:
-            with open(self.keys_file_name, "r", encoding="utf-8") as f:
+            stat = self.keys_file_path.stat()
+            if not force and stat.st_mtime_ns == self._last_loaded_mtime_ns:
+                return
+
+            with self.keys_file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
 
             if not isinstance(data, dict):
                 self.keys = {}
             else:
                 self.keys = {str(k): str(v) for k, v in data.items()}
+
+            self._last_loaded_mtime_ns = stat.st_mtime_ns
 
         except (json.JSONDecodeError, OSError):
             self.keys = {}
@@ -276,7 +293,12 @@ class Hotkey:
         """
         Persist hotkey mappings to the JSON file.
         """
-        os.makedirs(os.path.dirname(self.keys_file_name) or ".", exist_ok=True)
+        self.keys_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(self.keys_file_name, "w", encoding="utf-8") as f:
+        with self.keys_file_path.open("w", encoding="utf-8") as f:
             json.dump(self.keys, f, indent=2, ensure_ascii=False)
+
+        try:
+            self._last_loaded_mtime_ns = self.keys_file_path.stat().st_mtime_ns
+        except OSError:
+            self._last_loaded_mtime_ns = None
