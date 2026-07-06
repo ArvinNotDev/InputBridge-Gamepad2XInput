@@ -1,266 +1,264 @@
+from __future__ import annotations
+
 import configparser
 from pathlib import Path
+from typing import Any, Mapping
+
+
+DEFAULT_SETTINGS: dict[str, dict[str, str]] = {
+    "device": {
+        "polling_rate": "1.0",
+        "auto_reconnect": "false",
+        "dpad_as_mouse": "true",
+        "left_stick_deadzone": "0.100000",
+        "right_stick_deadzone": "0.100000",
+        "right_stick_invert_x": "false",
+        "right_stick_invert_y": "false",
+        "left_stick_invert_x": "false",
+        "left_stick_invert_y": "true",
+        "invert_buttons": "false",
+        "mouse_mode": "false",
+        "mouse_sensitivity": "1.000000",
+    },
+    "ui": {
+        "language": "eng",
+        "theme": "dark",
+    },
+    "developer": {
+        "debug": "false",
+        "raw_hid_debug": "false",
+        "log_to_file": "false",
+        "log_file_path": "logs/mapper.log",
+    },
+}
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
 
 class SettingsManager:
-    def __init__(self, path="config/settings.conf"):
+    """Read, validate, and persist application settings."""
+
+    DEVICE = "device"
+    UI = "ui"
+    DEVELOPER = "developer"
+
+    def __init__(self, path: str | Path = "config/settings.conf") -> None:
         self.path = Path(path)
         self.config = configparser.ConfigParser()
+        self._load()
+        self.normalize()
 
+    def _load(self) -> None:
         if not self.path.exists():
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.config["device"] = {
-                "polling_rate": "1.0",
-                "auto_reconnect": "false",
-                "dpad_as_mouse": "true",
-                "left_stick_deadzone": "0.000000",
-                "right_stick_deadzone": "0.000000",
-                "right_stick_invert_x": "false",
-                "right_stick_invert_y": "false",
-                "left_stick_invert_x": "false",
-                "left_stick_invert_y": "true",
-                "mouse_mode": "false",
-                "mouse_sensitivity": "1.0"
-            }
-            self.config["ui"] = {
-                "language": "eng",
-                "theme": "dark"
-            }
-            self.config["developer"] = {
-                "debug": "false",
-                "raw_hid_debug": "false",
-                "log_to_file": "false",
-                "log_file_path": "logs/mapper.log"
-            }
-            with self.path.open("w", encoding="utf-8") as f:
-                self.config.write(f)
+            self._load_defaults()
+            self.save()
+            return
 
-        self.config.read(self.path)
+        try:
+            self.config.read(self.path, encoding="utf-8")
+        except configparser.Error:
+            self._load_defaults()
+            self.save()
+
+    def _load_defaults(self) -> None:
+        self.config.clear()
+        self.config.read_dict(DEFAULT_SETTINGS)
+
+    def _ensure_section(self, section: str) -> None:
+        if not self.config.has_section(section):
+            self.config.add_section(section)
+
+    def _ensure_defaults(self) -> None:
+        for section, values in DEFAULT_SETTINGS.items():
+            self._ensure_section(section)
+            for key, value in values.items():
+                if not self.config.has_option(section, key):
+                    self.config.set(section, key, value)
+
+    def _get_float(
+        self,
+        section: str,
+        key: str,
+        fallback: float,
+        *,
+        minimum: float | None = None,
+        maximum: float | None = None,
+    ) -> float:
+        try:
+            value = self.config.getfloat(section, key, fallback=fallback)
+        except ValueError:
+            value = fallback
+
+        if minimum is not None:
+            value = max(minimum, value)
+        if maximum is not None:
+            value = min(maximum, value)
+        return value
+
+    def _set_float(self, section: str, key: str, value: float, *, precision: int = 6) -> None:
+        self._ensure_section(section)
+        self.config.set(section, key, f"{float(value):.{precision}f}")
+
+    def _get_bool(self, section: str, key: str, fallback: bool) -> bool:
+        try:
+            return self.config.getboolean(section, key, fallback=fallback)
+        except ValueError:
+            return fallback
+
+    def _set_bool(self, section: str, key: str, enabled: bool) -> None:
+        self._ensure_section(section)
+        self.config.set(section, key, "true" if bool(enabled) else "false")
+
+    def _get_text(self, section: str, key: str, fallback: str) -> str:
+        return self.config.get(section, key, fallback=fallback).strip() or fallback
+
+    def _set_text(self, section: str, key: str, value: Any) -> None:
+        self._ensure_section(section)
+        self.config.set(section, key, str(value).strip())
 
     # -------- device --------
-    def get_polling_rate(self):
-        return self.config.getfloat("device", "polling_rate", fallback=1.0)
+    def get_polling_rate(self) -> float:
+        return self._get_float(self.DEVICE, "polling_rate", 1.0, minimum=1.0, maximum=1000.0)
 
-    def set_polling_rate(self, v: float):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "polling_rate", str(float(v)))
+    def set_polling_rate(self, value: float) -> None:
+        self._set_float(self.DEVICE, "polling_rate", _clamp(float(value), 1.0, 1000.0), precision=1)
 
-    def get_auto_reconnect(self):
-        return self.config.getboolean("device", "auto_reconnect", fallback=False)
+    def get_auto_reconnect(self) -> bool:
+        return self._get_bool(self.DEVICE, "auto_reconnect", False)
 
-    def set_auto_reconnect(self, enabled: bool):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "auto_reconnect", "true" if enabled else "false")
+    def set_auto_reconnect(self, enabled: bool) -> None:
+        self._set_bool(self.DEVICE, "auto_reconnect", enabled)
 
-    def get_dpad_as_mouse(self):
-        return self.config.getboolean("device", "dpad_as_mouse", fallback=True)
+    def get_dpad_as_mouse(self) -> bool:
+        return self._get_bool(self.DEVICE, "dpad_as_mouse", True)
 
-    def set_dpad_as_mouse(self, enabled: bool):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "dpad_as_mouse", "true" if enabled else "false")
+    def set_dpad_as_mouse(self, enabled: bool) -> None:
+        self._set_bool(self.DEVICE, "dpad_as_mouse", enabled)
 
-    def get_deadzones(self):
-        left = self.config.getfloat("device", "left_stick_deadzone", fallback=0.1)
-        right = self.config.getfloat("device", "right_stick_deadzone", fallback=0.1)
-        left = max(0.0, min(1.0, left))
-        right = max(0.0, min(1.0, right))
+    def get_deadzones(self) -> tuple[float, float]:
+        left = self._get_float(self.DEVICE, "left_stick_deadzone", 0.1, minimum=0.0, maximum=1.0)
+        right = self._get_float(self.DEVICE, "right_stick_deadzone", 0.1, minimum=0.0, maximum=1.0)
         return left, right
 
-    def set_deadzones(self, left: float, right: float):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        left = max(0.0, min(1.0, float(left)))
-        right = max(0.0, min(1.0, float(right)))
-        self.config.set("device", "left_stick_deadzone", f"{left:.6f}")
-        self.config.set("device", "right_stick_deadzone", f"{right:.6f}")
+    def set_deadzones(self, left: float, right: float) -> None:
+        self._set_float(self.DEVICE, "left_stick_deadzone", _clamp(float(left), 0.0, 1.0))
+        self._set_float(self.DEVICE, "right_stick_deadzone", _clamp(float(right), 0.0, 1.0))
 
-    def get_joystick_invertion(self):
-        left_x = self.config.getboolean("device", "left_stick_invert_x", fallback=False)
-        left_y = self.config.getboolean("device", "left_stick_invert_y", fallback=False)
-        right_x = self.config.getboolean("device", "right_stick_invert_x", fallback=False)
-        right_y = self.config.getboolean("device", "right_stick_invert_y", fallback=False)
-        return ((left_x, left_y), (right_x, right_y))
-    
-    def set_joystick_invertion(self, left: tuple, right: tuple):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "left_stick_invert_x", "true" if bool(left[0]) else "false")
-        self.config.set("device", "left_stick_invert_y", "true" if bool(left[1]) else "false")
-        self.config.set("device", "right_stick_invert_x", "true" if bool(right[0]) else "false")
-        self.config.set("device", "right_stick_invert_y", "true" if bool(right[1]) else "false")
+    def get_joystick_inversion(self) -> tuple[tuple[bool, bool], tuple[bool, bool]]:
+        left_x = self._get_bool(self.DEVICE, "left_stick_invert_x", False)
+        left_y = self._get_bool(self.DEVICE, "left_stick_invert_y", True)
+        right_x = self._get_bool(self.DEVICE, "right_stick_invert_x", False)
+        right_y = self._get_bool(self.DEVICE, "right_stick_invert_y", False)
+        return (left_x, left_y), (right_x, right_y)
 
-    def set_button_invertion(self, invert):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "invert_buttons", "true" if bool(invert) else "false")
-    
-    def get_button_invertion(self):
-        return self.config.getboolean("device", "invert_buttons", fallback=False)
+    def set_joystick_inversion(self, left: tuple[bool, bool], right: tuple[bool, bool]) -> None:
+        self._set_bool(self.DEVICE, "left_stick_invert_x", left[0])
+        self._set_bool(self.DEVICE, "left_stick_invert_y", left[1])
+        self._set_bool(self.DEVICE, "right_stick_invert_x", right[0])
+        self._set_bool(self.DEVICE, "right_stick_invert_y", right[1])
 
-    def get_mouse_mode(self):
-        return self.config.getboolean("device", "mouse_mode", fallback=False)
-    
-    def set_mouse_mode(self, enabled: bool):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "mouse_mode", "true" if enabled else "false")
+    def get_joystick_invertion(self) -> tuple[tuple[bool, bool], tuple[bool, bool]]:
+        return self.get_joystick_inversion()
 
-    def get_mouse_sensitivity(self):
-        return self.config.getfloat("device", "mouse_sensitivity", fallback=1.0)
-    
-    def set_mouse_sensitivity(self, sens: float):
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        self.config.set("device", "mouse_sensitivity", f"{float(sens):.6f}")
+    def set_joystick_invertion(self, left: tuple[bool, bool], right: tuple[bool, bool]) -> None:
+        self.set_joystick_inversion(left, right)
+
+    def get_button_inversion(self) -> bool:
+        return self._get_bool(self.DEVICE, "invert_buttons", False)
+
+    def set_button_inversion(self, invert: bool) -> None:
+        self._set_bool(self.DEVICE, "invert_buttons", invert)
+
+    def get_button_invertion(self) -> bool:
+        return self.get_button_inversion()
+
+    def set_button_invertion(self, invert: bool) -> None:
+        self.set_button_inversion(invert)
+
+    def get_mouse_mode(self) -> bool:
+        return self._get_bool(self.DEVICE, "mouse_mode", False)
+
+    def set_mouse_mode(self, enabled: bool) -> None:
+        self._set_bool(self.DEVICE, "mouse_mode", enabled)
+
+    def get_mouse_sensitivity(self) -> float:
+        return self._get_float(self.DEVICE, "mouse_sensitivity", 1.0, minimum=0.1, maximum=10.0)
+
+    def set_mouse_sensitivity(self, sensitivity: float) -> None:
+        self._set_float(self.DEVICE, "mouse_sensitivity", _clamp(float(sensitivity), 0.1, 10.0))
 
     # -------- ui --------
-    def get_ui_language(self):
-        return self.config.get("ui", "language", fallback="eng")
+    def get_ui_language(self) -> str:
+        return self._get_text(self.UI, "language", "eng")
 
-    def set_ui_language(self, lang: str):
-        if not self.config.has_section("ui"):
-            self.config.add_section("ui")
-        self.config.set("ui", "language", str(lang))
+    def set_ui_language(self, language: str) -> None:
+        self._set_text(self.UI, "language", language or "eng")
 
-    def get_ui_theme(self):
-        return self.config.get("ui", "theme", fallback="dark")
+    def get_ui_theme(self) -> str:
+        return self._get_text(self.UI, "theme", "dark")
 
-    def set_ui_theme(self, theme_name: str):
-        if not self.config.has_section("ui"):
-            self.config.add_section("ui")
-        self.config.set("ui", "theme", str(theme_name))
+    def set_ui_theme(self, theme_name: str) -> None:
+        self._set_text(self.UI, "theme", theme_name or "dark")
 
     # -------- developer --------
-    def get_developer_debug(self):
-        return self.config.getboolean("developer", "debug", fallback=False)
+    def get_developer_debug(self) -> bool:
+        return self._get_bool(self.DEVELOPER, "debug", False)
 
-    def set_developer_debug(self, enabled: bool):
-        if not self.config.has_section("developer"):
-            self.config.add_section("developer")
-        self.config.set("developer", "debug", "true" if enabled else "false")
+    def set_developer_debug(self, enabled: bool) -> None:
+        self._set_bool(self.DEVELOPER, "debug", enabled)
 
-    def get_raw_hid_debug(self):
-        return self.config.getboolean("developer", "raw_hid_debug", fallback=False)
+    def get_raw_hid_debug(self) -> bool:
+        return self._get_bool(self.DEVELOPER, "raw_hid_debug", False)
 
-    def set_raw_hid_debug(self, enabled: bool):
-        if not self.config.has_section("developer"):
-            self.config.add_section("developer")
-        self.config.set("developer", "raw_hid_debug", "true" if enabled else "false")
+    def set_raw_hid_debug(self, enabled: bool) -> None:
+        self._set_bool(self.DEVELOPER, "raw_hid_debug", enabled)
 
-    def get_log_to_file(self):
-        return self.config.getboolean("developer", "log_to_file", fallback=False)
+    def get_log_to_file(self) -> bool:
+        return self._get_bool(self.DEVELOPER, "log_to_file", False)
 
-    def set_log_to_file(self, enabled: bool):
-        if not self.config.has_section("developer"):
-            self.config.add_section("developer")
-        self.config.set("developer", "log_to_file", "true" if enabled else "false")
+    def set_log_to_file(self, enabled: bool) -> None:
+        self._set_bool(self.DEVELOPER, "log_to_file", enabled)
 
-    def get_log_file_path(self):
-        return self.config.get("developer", "log_file_path", fallback="logs/mapper.log")
+    def get_log_file_path(self) -> str:
+        return self._get_text(self.DEVELOPER, "log_file_path", "logs/mapper.log")
 
-    def set_log_file_path(self, path: str):
-        if not self.config.has_section("developer"):
-            self.config.add_section("developer")
-        self.config.set("developer", "log_file_path", str(path))
+    def set_log_file_path(self, path: str) -> None:
+        self._set_text(self.DEVELOPER, "log_file_path", path or "logs/mapper.log")
 
     # -------- save/load --------
-    def save(self):
+    def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("w", encoding="utf-8") as f:
-            self.config.write(f)
+        with self.path.open("w", encoding="utf-8") as config_file:
+            self.config.write(config_file)
 
-    # -------- normalization (ensure all keys exist and sane) --------
-    def normalize(self):
-        """
-        Ensure all expected keys exist with sane values.
-        This lets the UI read everything once and know the file is consistent.
-        """
-        # Device defaults
-        if not self.config.has_section("device"):
-            self.config.add_section("device")
-        # polling rate
-        try:
-            _ = self.get_polling_rate()
-        except Exception:
-            self.set_polling_rate(1.0)
-        # auto reconnect
-        try:
-            _ = self.get_auto_reconnect()
-        except Exception:
-            self.set_auto_reconnect(False)
-        # dpad as mouse
-        try:
-            _ = self.get_dpad_as_mouse()
-        except Exception:
-            self.set_dpad_as_mouse(True)
-        # deadzones
-        try:
-            left, right = self.get_deadzones()
-            self.set_deadzones(left, right)
-        except Exception:
-            self.set_deadzones(0.1, 0.1)
-        # joystick inversion
-        try:
-            left_inv, right_inv = self.get_joystick_invertion()
-            self.set_joystick_invertion(left_inv, right_inv)
-        except Exception:
-            self.set_joystick_invertion((False, True), (False, False))
-        # button inversion
-        try:
-            inv_btn = self.get_button_invertion()
-            self.set_button_invertion(inv_btn)
-        except Exception:
-            self.set_button_invertion(False)
-        # mouse mode + sensitivity
-        try:
-            _ = self.get_mouse_mode()
-        except Exception:
-            self.set_mouse_mode(False)
-        try:
-            sens = self.get_mouse_sensitivity()
-            self.set_mouse_sensitivity(sens)
-        except Exception:
-            self.set_mouse_sensitivity(1.0)
+    def normalize(self) -> None:
+        """Ensure expected keys exist and persisted values are parseable."""
+        self._ensure_defaults()
 
-        # UI defaults
-        if not self.config.has_section("ui"):
-            self.config.add_section("ui")
-        try:
-            lang = self.get_ui_language()
-            self.set_ui_language(lang)
-        except Exception:
-            self.set_ui_language("eng")
-        try:
-            theme = self.get_ui_theme()
-            self.set_ui_theme(theme)
-        except Exception:
-            self.set_ui_theme("dark")
+        normalizers: Mapping[str, tuple[Any, ...]] = {
+            "polling_rate": (self.set_polling_rate, self.get_polling_rate()),
+            "auto_reconnect": (self.set_auto_reconnect, self.get_auto_reconnect()),
+            "dpad_as_mouse": (self.set_dpad_as_mouse, self.get_dpad_as_mouse()),
+            "mouse_mode": (self.set_mouse_mode, self.get_mouse_mode()),
+            "mouse_sensitivity": (self.set_mouse_sensitivity, self.get_mouse_sensitivity()),
+            "invert_buttons": (self.set_button_inversion, self.get_button_inversion()),
+            "ui_language": (self.set_ui_language, self.get_ui_language()),
+            "ui_theme": (self.set_ui_theme, self.get_ui_theme()),
+            "developer_debug": (self.set_developer_debug, self.get_developer_debug()),
+            "raw_hid_debug": (self.set_raw_hid_debug, self.get_raw_hid_debug()),
+            "log_to_file": (self.set_log_to_file, self.get_log_to_file()),
+            "log_file_path": (self.set_log_file_path, self.get_log_file_path()),
+        }
 
-        # Developer defaults
-        if not self.config.has_section("developer"):
-            self.config.add_section("developer")
-        try:
-            dbg = self.get_developer_debug()
-            self.set_developer_debug(dbg)
-        except Exception:
-            self.set_developer_debug(False)
-        try:
-            raw = self.get_raw_hid_debug()
-            self.set_raw_hid_debug(raw)
-        except Exception:
-            self.set_raw_hid_debug(False)
-        try:
-            log = self.get_log_to_file()
-            self.set_log_to_file(log)
-        except Exception:
-            self.set_log_to_file(False)
-        try:
-            path = self.get_log_file_path()
-            self.set_log_file_path(path)
-        except Exception:
-            self.set_log_file_path("logs/mapper.log")
+        for setter, value in normalizers.values():
+            setter(value)
 
-        # Write back normalized config
+        left_deadzone, right_deadzone = self.get_deadzones()
+        self.set_deadzones(left_deadzone, right_deadzone)
+
+        left_inversion, right_inversion = self.get_joystick_inversion()
+        self.set_joystick_inversion(left_inversion, right_inversion)
+
         self.save()
