@@ -1,6 +1,14 @@
-from PySide6.QtCore import QObject, QThread, Signal
-import hid
+import logging
 import time
+
+from PySide6.QtCore import QObject, Signal
+import hid
+
+
+LOGGER = logging.getLogger(__name__)
+READ_SIZE = 65
+READ_TIMEOUT_MS = 1
+MIN_POLL_INTERVAL = 0.001
 
 
 class HIDWorker(QObject):
@@ -11,7 +19,7 @@ class HIDWorker(QObject):
     def __init__(self, controller, poll_interval=0.008):
         super().__init__()
         self.controller = controller
-        self.poll_interval = poll_interval
+        self.poll_interval = max(float(poll_interval), MIN_POLL_INTERVAL)
         self._running = True
 
     def stop(self):
@@ -21,29 +29,23 @@ class HIDWorker(QObject):
         ds = hid.device()
         try:
             ds.open_path(self.controller.device_path)
-            # for rid in [0x05, 0x09, 0x20]:
-            #     try:
-            #         data = ds.get_feature_report(rid, 65)
-            #         print(hex(rid), data)
-            #     except Exception as e:
-            #         print("fail", hex(rid), e)
-            ds.get_feature_report(0x05, 65)     # feature report to make the controller give more data
         except Exception as e:
             self.error.emit(f"Failed to open {self.controller}: {e}")
             self.finished.emit()
             return
 
         try:
+            ds.get_feature_report(0x05, READ_SIZE)
+        except Exception as exc:
+            LOGGER.debug("Controller %s did not accept feature report 0x05: %s", self.controller, exc)
+
+        try:
             while self._running:
                 try:
                     try:
-                        report = ds.read(65, timeout_ms=1)
-                        # for i, r in enumerate(report):
-                        #     if not r:
-                        #         report = report[:i] + report[i+1:]
-                        # print(report)
+                        report = ds.read(READ_SIZE, timeout_ms=READ_TIMEOUT_MS)
                     except TypeError:
-                        report = ds.read(65, timeout=1)
+                        report = ds.read(READ_SIZE, timeout=READ_TIMEOUT_MS)
 
                     if report:
                         self.data_received.emit(bytes(report))
@@ -55,5 +57,8 @@ class HIDWorker(QObject):
                     break
 
         finally:
-            ds.close()
+            try:
+                ds.close()
+            except Exception as exc:
+                LOGGER.debug("Failed to close HID device %s: %s", self.controller, exc)
             self.finished.emit()
