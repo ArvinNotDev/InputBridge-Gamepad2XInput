@@ -1,6 +1,7 @@
 import json
 from typing import Tuple
 
+from core import input_mapping
 from core.emulator import EmulateX360, EmulateKeyboard
 from core.mouse import Mouse
 
@@ -119,67 +120,32 @@ class Mapper:
 
     @staticmethod
     def _clamp(v: int, lo: int, hi: int) -> int:
-        return max(lo, min(hi, v))
+        return int(input_mapping.clamp(v, lo, hi))
 
     @staticmethod
     def _scale_stick_0_255_to_x360(val: int, invert_y: bool) -> int:
         """
         Convert 0–255 axis value to XInput signed 16‑bit range.
         """
-        centered = float(val) - 128.0
-        normalized = -centered / 127.0 if invert_y else centered / 127.0
-        scaled = int(round(normalized * 32767.0))
-        return int(Mapper._clamp(scaled, -32768, 32767))
+        return input_mapping.scale_axis_0_255_to_x360(val, invert_y)
 
     def _read_byte_safe(self, report: list[int], idx: int | None) -> int:
         """
         Safely read a byte from a HID report by index.
         """
-        if idx is None or idx < 0 or idx >= len(report):
-            return 0
-        return report[idx]
+        return input_mapping.read_report_byte(report, idx)
 
     def _get_button_from_cfg(self, report: list[int], cfg: dict | None) -> bool:
         """
         Decode a digital button state from the report using a mapping entry.
         """
-        if cfg is None:
-            return False
-
-        byte_idx = cfg.get("index", cfg.get("byte"))
-        val = self._read_byte_safe(report, byte_idx)
-
-        mask = cfg.get("mask")
-        if mask is not None:
-            mask_int = int(mask, 16) if isinstance(mask, str) else int(mask)
-            val &= mask_int
-
-        if "value" in cfg:
-            return val == cfg["value"]
-        return val != 0
+        return input_mapping.get_button_state(report, cfg)
 
     def _get_dpad_from_hat(self, report: list[int], cfg: dict | None) -> Tuple[bool, bool, bool, bool]:
         """
         Decode a hat‑switch style D‑Pad into individual directions.
         """
-        if cfg is None:
-            return False, False, False, False
-
-        byte_idx = cfg.get("byte")
-        raw_val = self._read_byte_safe(report, byte_idx)
-
-        mask = cfg.get("mask", 0x0F)
-        if isinstance(mask, str):
-            mask = int(mask, 16)
-
-        hat_val = raw_val & mask
-
-        up = hat_val in (0, 1, 7)
-        down = hat_val in (3, 4, 5)
-        right = hat_val in (1, 2, 3)
-        left = hat_val in (5, 6, 7)
-
-        return up, down, left, right
+        return input_mapping.get_dpad_from_hat(report, cfg)
 
     def _apply_deadzone(
         self,
@@ -191,26 +157,13 @@ class Mapper:
         """
         Apply radial deadzone and axis inversion, then scale to XInput space.
         """
-        invert_x, invert_y = invertion
-
-        cx = raw_x - 128
-        cy = raw_y - 128
-
-        if abs(cx) < deadzone * 127:
-            cx = 0
-        if abs(cy) < deadzone * 127:
-            cy = 0
-
-        x_scaled = self._scale_stick_0_255_to_x360(cx + 128, invert_x)
-        y_scaled = self._scale_stick_0_255_to_x360(cy + 128, invert_y)
-
-        return x_scaled, y_scaled
+        return input_mapping.apply_deadzone(raw_x, raw_y, deadzone, invertion)
 
     def _apply_button_invertion(self, button: bool, invert: bool) -> bool:
         """
         Optionally invert a digital button state.
         """
-        return not button if invert else button
+        return input_mapping.invert_button(button, invert)
 
     # -------------------------------------------------------------------------
     # X360 mapping (physical HID)
@@ -400,14 +353,11 @@ class Phone_mapper:
 
     @staticmethod
     def _clamp(v: int, lo: int, hi: int) -> int:
-        return max(lo, min(hi, v))
+        return int(input_mapping.clamp(v, lo, hi))
 
     @staticmethod
     def _scale_stick_0_255_to_x360(val: int, invert_y: bool) -> int:
-        centered = float(val) - 128.0
-        normalized = -centered / 127.0 if invert_y else centered / 127.0
-        scaled = int(round(normalized * 32767.0))
-        return int(Phone_mapper._clamp(scaled, -32768, 32767))
+        return input_mapping.scale_axis_0_255_to_x360(val, invert_y)
 
     def _apply_deadzone(
         self,
@@ -419,26 +369,13 @@ class Phone_mapper:
         """
         Apply deadzone and inversion for phone joystick input (0–255).
         """
-        invert_x, invert_y = invertion
-
-        cx = raw_x - 128
-        cy = raw_y - 128
-
-        if abs(cx) < deadzone * 127:
-            cx = 0
-        if abs(cy) < deadzone * 127:
-            cy = 0
-
-        x_scaled = self._scale_stick_0_255_to_x360(cx + 128, invert_x)
-        y_scaled = self._scale_stick_0_255_to_x360(cy + 128, invert_y)
-
-        return x_scaled, y_scaled
+        return input_mapping.apply_deadzone(raw_x, raw_y, deadzone, invertion)
 
     def _apply_button_invertion(self, button: bool, invert: bool) -> bool:
         """
         Optionally invert a digital button state.
         """
-        return not button if invert else button
+        return input_mapping.invert_button(button, invert)
 
     # -------------------------------------------------------------------------
     # X360 mapping (phone JSON)
