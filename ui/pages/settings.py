@@ -418,7 +418,7 @@ class SettingsPage(QWidget):
     # ==========================================================
     def restore_device_defaults(self):
         self.spin_poll.setValue(0)
-        self.chk_reconnect.setChecked(False)
+        self.chk_reconnect.setChecked(True)
         self.chk_dpad_mouse.setChecked(True)
         self.chk_mouse_mode.setChecked(False)
         self.spin_mouse_sens.setValue(1.0)

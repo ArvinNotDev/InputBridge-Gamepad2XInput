@@ -10,7 +10,7 @@ class SettingsManager:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.config["device"] = {
                 "polling_rate": "1.0",
-                "auto_reconnect": "false",
+                "auto_reconnect": "true",
                 "dpad_as_mouse": "true",
                 "left_stick_deadzone": "0.000000",
                 "right_stick_deadzone": "0.000000",
@@ -46,7 +46,7 @@ class SettingsManager:
         self.config.set("device", "polling_rate", str(float(v)))
 
     def get_auto_reconnect(self):
-        return self.config.getboolean("device", "auto_reconnect", fallback=False)
+        return self.config.getboolean("device", "auto_reconnect", fallback=True)
 
     def set_auto_reconnect(self, enabled: bool):
         if not self.config.has_section("device"):
@@ -189,7 +189,7 @@ class SettingsManager:
         try:
             _ = self.get_auto_reconnect()
         except Exception:
-            self.set_auto_reconnect(False)
+            self.set_auto_reconnect(True)
         # dpad as mouse
         try:
             _ = self.get_dpad_as_mouse()
