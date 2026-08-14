@@ -1,10 +1,12 @@
-from PySide6.QtCore import QObject, QThread
+from PySide6.QtCore import QObject, QThread, Signal
 from .hid_manager import HIDWorker
 import hid
 from core.controller import Controller
 
 class HIDManager(QObject):
     """Manages multiple HID controllers with polling in QThreads."""
+    device_error = Signal(object, str)  # device_path, message
+
     def __init__(self, poll_interval=0.008):
         super().__init__()
         self.poll_interval = poll_interval
@@ -32,15 +34,29 @@ class HIDManager(QObject):
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
+        worker.error.connect(
+            lambda message, device_path=path: self._on_worker_error(
+                device_path, message
+            )
+        )
 
         if on_data:
             worker.data_received.connect(on_data)
+        # Errors are routed through the manager so UI-owned cleanup happens in
+        # the Qt/UI thread instead of from the HID polling thread.
         if on_error:
-            worker.error.connect(on_error)
+            self.device_error.connect(
+                lambda device_path, message, expected_path=path: (
+                    on_error(message) if device_path == expected_path else None
+                )
+            )
 
-        thread.start()
         self._workers[path] = (thread, worker, controller)
+        thread.start()
         return controller
+
+    def _on_worker_error(self, device_path, message: str) -> None:
+        self.device_error.emit(device_path, message)
 
     def stop_polling(self, device_path):
         if device_path not in self._workers:
