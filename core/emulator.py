@@ -1,5 +1,6 @@
 import vgamepad as vg
 import time
+import threading
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkeys import Hotkey
 from core.utils.hotkey_commander import HotkeyCommander
@@ -18,6 +19,7 @@ custom_commands = {}
 class ListOfAllControllers:
     controllers_path = []
     controllers_name = []
+    lock = threading.RLock()
 
 class EmulateX360:
     def __init__(self, device_path, controller_name, hotkey):
@@ -25,8 +27,9 @@ class EmulateX360:
         self.controller_name = controller_name
         self.hotkey = hotkey
         self.hotkey_commander = HotkeyCommander(media_functions, custom_commands)
-        ListOfAllControllers.controllers_path.append(device_path)
-        ListOfAllControllers.controllers_name.append(controller_name)
+        with ListOfAllControllers.lock:
+            ListOfAllControllers.controllers_path.append(device_path)
+            ListOfAllControllers.controllers_name.append(controller_name)
         self.is_monitoring = False
         self.could_instantiate = False
 
@@ -168,9 +171,10 @@ class EmulateX360:
 
         # Remove from tracking lists
         try:
-            idx = ListOfAllControllers.controllers_path.index(self.device_path)
-            ListOfAllControllers.controllers_path.pop(idx)
-            ListOfAllControllers.controllers_name.pop(idx)
+            with ListOfAllControllers.lock:
+                idx = ListOfAllControllers.controllers_path.index(self.device_path)
+                ListOfAllControllers.controllers_path.pop(idx)
+                ListOfAllControllers.controllers_name.pop(idx)
         except ValueError:
             pass
         

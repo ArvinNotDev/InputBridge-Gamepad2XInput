@@ -685,13 +685,15 @@ class HotkeyPage(QWidget):
         """
         self.list_widget.clear()
 
-        active_paths = emulator.ListOfAllControllers.controllers_path
+        with emulator.ListOfAllControllers.lock:
+            active_paths = list(emulator.ListOfAllControllers.controllers_path)
+            active_names = list(emulator.ListOfAllControllers.controllers_name)
 
         keys_to_remove = [path for path in self.x360_instances if path not in active_paths]
         for path in keys_to_remove:
             del self.x360_instances[path]
 
-        for i, name in enumerate(emulator.ListOfAllControllers.controllers_name):
+        for i, name in enumerate(active_names):
             item = QListWidgetItem(name)
             if i < len(active_paths):
                 item.setData(Qt.UserRole, active_paths[i])
