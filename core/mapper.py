@@ -1,8 +1,12 @@
 import json
+import time
 from typing import Tuple
 
 from core.emulator import EmulateX360, EmulateKeyboard
+from core.emulator import media_functions, custom_commands
 from core.mouse import Mouse
+from core.utils.controller_monitor import controllerMonitor
+from core.utils.hotkey_commander import HotkeyCommander
 
 
 class Mapper:
@@ -25,6 +29,7 @@ class Mapper:
         self._connected = False
         self.debug = debug
         self.settings = settings
+        self.controllers_page = controllers_page
 
         self.mouse_mode = True
         self.mouse_mode_hotkey = False
@@ -33,7 +38,7 @@ class Mapper:
         self._prev_r3 = False
         self._prev_a = False
         self._prev_b = False
-        self._prev_battery = []
+        self._last_battery = None
 
         if emulate_to == "x360":
             self.emulator = EmulateX360(
@@ -83,6 +88,13 @@ class Mapper:
         if self._connected:
             print(f"[Mapper] Stopped mapping for {self.controller.name}")
         self._connected = False
+
+        clear_battery = getattr(self.controllers_page, "clear_battery", None)
+        if clear_battery is not None:
+            try:
+                clear_battery(self.controller.device_path)
+            except Exception:
+                pass
 
         if hasattr(self.emulator, "shutdown"):
             try:
@@ -253,9 +265,15 @@ class Mapper:
         raw_rjy = self._read_byte_safe(report, axes_cfg.get("right_stick_y", {}).get("byte"))
         raw_lt = self._read_byte_safe(report, axes_cfg.get("left_trigger", {}).get("byte"))
         raw_rt = self._read_byte_safe(report, axes_cfg.get("right_trigger", {}).get("byte"))
-        raw_battery = self._read_byte_safe(report, battery_cfg.get("percent", {}).get("byte"))
-        battery_percent, is_charging = self._interpret_battery(raw_battery)
-        # print(f"Battery: {battery_percent}%, Charging: {is_charging}")
+        battery_percent = None
+        is_charging = False
+        battery_percent_cfg = battery_cfg.get("percent", {})
+        if battery_percent_cfg.get("byte") is not None:
+            raw_battery = self._read_byte_safe(
+                report, battery_percent_cfg.get("byte")
+            )
+            battery_percent, is_charging = self._interpret_battery(raw_battery)
+            self._publish_battery(battery_percent, is_charging)
 
 
         left_deadzone, right_deadzone = self.settings.get_deadzones()
@@ -337,6 +355,19 @@ class Mapper:
         self._prev_back = back
         self._prev_r3 = r3
 
+    def _publish_battery(self, percent: int, is_charging: bool) -> None:
+        """Publish battery changes without touching Qt widgets from HID threads."""
+        state = (int(percent), bool(is_charging))
+        if state == self._last_battery:
+            return
+        self._last_battery = state
+        publisher = getattr(self.controllers_page, "battery_updated", None)
+        if publisher is not None:
+            try:
+                publisher.emit(self.controller.device_path, *state)
+            except Exception:
+                pass
+
     def _handle_keyboard_input(self, data: bytes) -> None:
         """
         Placeholder for keyboard emulation mapping.
@@ -363,10 +394,14 @@ class Phone_mapper:
         self.debug = debug
         self._connected = True
         self.controllers_page = controllers_page
+        self.hotkey = hotkey_page.hotkey
+        self.hotkey_commander = HotkeyCommander(media_functions, custom_commands)
+        self._last_hotkey_func = None
+        self._last_hotkey_time = 0.0
+        self._hotkey_interval = 0.1
 
         if emulate_to == "x360":
             self.emulator = EmulateX360(self.uuid, self.uuid, hotkey_page.hotkey)
-            self.controllers_page.add_x360_instance(self.emulator)
         elif emulate_to == "keyboard":
             self.emulator = EmulateKeyboard()
         else:
@@ -440,6 +475,22 @@ class Phone_mapper:
         """
         return not button if invert else button
 
+    def _maybe_do_hotkey(self, ok: bool, func: str | None) -> None:
+        if not ok or func is None:
+            self._last_hotkey_func = None
+            return
+
+        now = time.monotonic()
+        if func != self._last_hotkey_func:
+            self._last_hotkey_func = func
+            self._last_hotkey_time = now
+            self.hotkey_commander.do(func, False)
+            return
+
+        if now - self._last_hotkey_time >= self._hotkey_interval:
+            self._last_hotkey_time = now
+            self.hotkey_commander.do(func, False)
+
     # -------------------------------------------------------------------------
     # X360 mapping (phone JSON)
     # -------------------------------------------------------------------------
@@ -493,6 +544,14 @@ class Phone_mapper:
         l3 = self._apply_button_invertion(l3, button_inv)
         r3 = self._apply_button_invertion(r3, button_inv)
 
+        binary, _, _, _, _, _, _ = controllerMonitor.monitor(
+            a, b, y_, x_, start, back,
+            r3, l3, dpu, dpd, dpr, dpl, rb, lb,
+            rt, lt, ljx, ljy, rjx, rjy,
+        )
+        ok, func, _ = self.hotkey.get_hotkey(binary)
+        self._maybe_do_hotkey(ok, func)
+
         self.emulator.update(
             ljx, ljy, rjx, rjy,
             a, x_, b, y_,
@@ -500,3 +559,11 @@ class Phone_mapper:
             dpu, dpd, dpr, dpl,
             back, start, l3, r3,
         )
+
+    def shutdown(self) -> None:
+        self._connected = False
+        if hasattr(self.emulator, "shutdown"):
+            try:
+                self.emulator.shutdown()
+            except Exception as exc:
+                print(f"[Phone_mapper] Failed to shutdown emulator: {exc}")

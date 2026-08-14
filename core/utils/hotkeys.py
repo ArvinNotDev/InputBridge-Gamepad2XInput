@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Iterable, Union, Dict, List, Tuple, Any
 
 
@@ -61,8 +62,11 @@ class Hotkey:
 
         # { "<binary_pattern>": "<function_name>" }
         self.keys: Dict[str, str] = {}
+        self._keys_mtime_ns: int | None = None
+        self._last_refresh_check = 0.0
+        self._refresh_check_interval = 0.5
 
-        self.update_hotkeys()
+        self.update_hotkeys(force=True)
 
     # ------------------------------------------------------------------
     # Public API
@@ -248,18 +252,31 @@ class Hotkey:
     # Persistence
     # ------------------------------------------------------------------
 
-    def update_hotkeys(self) -> None:
+    def update_hotkeys(self, force: bool = False) -> None:
         """
         Load hotkeys from the JSON file.
 
         If the file is missing or corrupted, an empty mapping is created.
         """
+        now = time.monotonic()
+        if (
+            not force
+            and now - self._last_refresh_check < self._refresh_check_interval
+        ):
+            return
+        self._last_refresh_check = now
+
         if not os.path.exists(self.keys_file_name):
             self.keys = {}
-            self._save_hotkeys()
+            if force:
+                self._save_hotkeys()
             return
 
         try:
+            mtime_ns = os.stat(self.keys_file_name).st_mtime_ns
+            if not force and mtime_ns == self._keys_mtime_ns:
+                return
+
             with open(self.keys_file_name, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
@@ -267,10 +284,13 @@ class Hotkey:
                 self.keys = {}
             else:
                 self.keys = {str(k): str(v) for k, v in data.items()}
+            self._keys_mtime_ns = mtime_ns
 
         except (json.JSONDecodeError, OSError):
             self.keys = {}
-            self._save_hotkeys()
+            self._keys_mtime_ns = None
+            if force:
+                self._save_hotkeys()
 
     def _save_hotkeys(self) -> None:
         """
@@ -280,3 +300,7 @@ class Hotkey:
 
         with open(self.keys_file_name, "w", encoding="utf-8") as f:
             json.dump(self.keys, f, indent=2, ensure_ascii=False)
+        try:
+            self._keys_mtime_ns = os.stat(self.keys_file_name).st_mtime_ns
+        except OSError:
+            self._keys_mtime_ns = None
