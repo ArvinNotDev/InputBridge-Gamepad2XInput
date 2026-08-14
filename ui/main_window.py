@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -102,18 +103,25 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
 
         controllers_page = ControllersPage()
+        self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
+        self.hotkey_page = hotkey_page
         # The order here must match indices 0..4
         # 0: Controller Emulation
-        self.pages.addWidget(ControllerEmulation(self.settings, controllers_page, hotkey_page))
+        self.controller_emulation_page = ControllerEmulation(
+            self.settings, controllers_page, hotkey_page
+        )
+        self.pages.addWidget(self.controller_emulation_page)
         # 1: Remote Gamepad (server page)
-        self.pages.addWidget(ServerPage(self.settings, controllers_page, hotkey_page))
+        self.server_page = ServerPage(self.settings, controllers_page, hotkey_page)
+        self.pages.addWidget(self.server_page)
         # 2: Hotkeys page
         self.pages.addWidget(hotkey_page)
         # 3: Test XInput
         self.pages.addWidget(controllers_page)
         # 4: Settings
-        self.pages.addWidget(SettingsPage(self.theme_manager, self.settings))
+        self.settings_page = SettingsPage(self.theme_manager, self.settings)
+        self.pages.addWidget(self.settings_page)
 
         main_layout.addLayout(left_column)
         main_layout.addWidget(self.pages, 1)
@@ -125,6 +133,8 @@ class MainWindow(QMainWindow):
         self.tray_icon: QSystemTrayIcon | None = None
         if QSystemTrayIcon.isSystemTrayAvailable():
             self._init_tray_icon()
+            app.setQuitOnLastWindowClosed(False)
+        app.aboutToQuit.connect(self.shutdown)
 
     # --------------------
     # Menu
@@ -149,7 +159,7 @@ class MainWindow(QMainWindow):
 
         tray_icon = QSystemTrayIcon(self)
 
-        icon = QIcon("ui/assets/tray.png")
+        icon = QIcon(str(Path(__file__).resolve().parent / "assets" / "tray.png"))
         if icon.isNull():
             icon = QIcon.fromTheme("applications-system")
 
@@ -161,6 +171,13 @@ class MainWindow(QMainWindow):
 
         tray_icon.activated.connect(self._on_tray_activated)
         tray_icon.show()
+        self.server_page.tray_status_callback = self._refresh_tray_menu
+        self.server_page.signals.client_connected.connect(
+            lambda _addr: self._refresh_tray_menu()
+        )
+        self.server_page.signals.client_disconnected.connect(
+            lambda _addr: self._refresh_tray_menu()
+        )
 
     def _create_tray_menu(self) -> None:
 
@@ -169,22 +186,74 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
 
-        show_action = QAction("Show", menu)
-        show_action.triggered.connect(self._show_from_tray)
+        self._tray_menu = menu
 
-        hide_action = QAction("Hide", menu)
-        hide_action.triggered.connect(self.hide)
+        self._tray_status_action = QAction("Server: stopped", menu)
+        self._tray_status_action.setEnabled(False)
+        menu.addAction(self._tray_status_action)
+        menu.addSeparator()
 
+        self._tray_show_action = QAction("Show window", menu)
+        self._tray_show_action.triggered.connect(self._show_from_tray)
+        menu.addAction(self._tray_show_action)
+
+        self._tray_hide_action = QAction("Hide window", menu)
+        self._tray_hide_action.triggered.connect(self.hide)
+        menu.addAction(self._tray_hide_action)
+
+        self._tray_server_action = QAction("Start server", menu)
+        self._tray_server_action.triggered.connect(self._toggle_server_from_tray)
+        menu.addAction(self._tray_server_action)
+
+        menu.addSeparator()
+        for label, index in (
+            ("Controller emulation", self.IDX_CONTROLLER_EMULATION),
+            ("Remote gamepad", self.IDX_REMOTE_GAMEPAD),
+            ("Hotkeys", self.IDX_HOTKEY),
+            ("Settings", self.IDX_SETTINGS),
+        ):
+            action = QAction(label, menu)
+            action.triggered.connect(
+                lambda checked=False, target=index: self._show_page_from_tray(target)
+            )
+            menu.addAction(action)
+
+        menu.addSeparator()
         quit_action = QAction("Quit", menu)
-
-        def _tray_quit():
-            self._is_quitting = True
-            QApplication.quit()
-
-        quit_action.triggered.connect(_tray_quit)
-
-        menu.addActions([show_action, hide_action, quit_action])
+        quit_action.triggered.connect(self._quit_from_tray)
+        menu.addAction(quit_action)
+        menu.aboutToShow.connect(self._refresh_tray_menu)
         self.tray_icon.setContextMenu(menu)
+        self._refresh_tray_menu()
+
+    def _refresh_tray_menu(self) -> None:
+        if self.tray_icon is None:
+            return
+        running = bool(getattr(self.server_page, "server_running", False))
+        client_count = len(getattr(self.server_page, "clients", {}))
+        mapped_count = len(getattr(self.controller_emulation_page, "mappers", {}))
+        self._tray_status_action.setText(
+            f"Server: {'running' if running else 'stopped'} · "
+            f"Clients: {client_count} · Mapped: {mapped_count}"
+        )
+        self._tray_server_action.setText("Stop server" if running else "Start server")
+        self.tray_icon.setToolTip(
+            f"{self.WINDOW_TITLE} — "
+            f"{'server running' if running else 'server stopped'}"
+        )
+        self._tray_hide_action.setEnabled(self.isVisible())
+
+    def _toggle_server_from_tray(self) -> None:
+        self.server_page.toggle_server()
+        self._refresh_tray_menu()
+
+    def _show_page_from_tray(self, index: int) -> None:
+        self.menu.setCurrentRow(index)
+        self._show_from_tray()
+
+    def _quit_from_tray(self) -> None:
+        self._is_quitting = True
+        QApplication.quit()
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
 
@@ -204,6 +273,26 @@ class MainWindow(QMainWindow):
 
         self.activateWindow()
         self.raise_()
+        self._refresh_tray_menu()
+
+    def shutdown(self) -> None:
+        if getattr(self, "_shutdown_complete", False):
+            return
+        self._shutdown_complete = True
+        try:
+            self.server_page.shutdown()
+        except Exception as exc:
+            print(f"[MainWindow] Server shutdown failed: {exc}")
+        try:
+            self.controller_emulation_page.shutdown()
+        except Exception as exc:
+            print(f"[MainWindow] HID shutdown failed: {exc}")
+        try:
+            self.controllers_page.refresh_timer.stop()
+        except Exception:
+            pass
+        if self.tray_icon is not None:
+            self.tray_icon.hide()
 
     # --------------------
     # Close behavior
@@ -212,6 +301,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         # If we are quitting explicitly (from menu or tray), exit
         if self._is_quitting:
+            self.shutdown()
             event.accept()
             return
 
@@ -234,5 +324,6 @@ class MainWindow(QMainWindow):
 
             event.ignore()
         else:
+            self.shutdown()
             super().closeEvent(event)
 
