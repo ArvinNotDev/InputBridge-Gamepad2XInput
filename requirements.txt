@@ -3,3 +3,4 @@ PySide6
 hidapi
 pyautogui
 keyboard
+pyinstaller>=6.11

@@ -7,6 +7,7 @@ from core.emulator import media_functions, custom_commands
 from core.mouse import Mouse
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkey_commander import HotkeyCommander
+from core.utils.paths import resource_path
 
 
 class Mapper:
@@ -64,7 +65,7 @@ class Mapper:
         Load controller profile from the profiles directory.
         """
         try:
-            with open(f"profiles/{filename}", "r") as config:
+            with resource_path("profiles", filename).open("r", encoding="utf-8") as config:
                 return json.load(config)
         except FileNotFoundError:
             print(f"Warning: Profile '{filename}' not found.")

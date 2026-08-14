@@ -15,11 +15,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QObject, QSize, QTimer
 
 from core.mapper import Phone_mapper
+from core.utils.paths import data_path
 
 
 HOST = "0.0.0.0"
 PORT = 5000
-TRUSTED_FILE = "trusted_clients.json"
+TRUSTED_FILE = str(data_path("trusted_clients.json"))
 
 
 # ---------------------------------------------------------

@@ -1,5 +1,4 @@
 import sys
-from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -24,6 +23,7 @@ from ui.pages.hotkey import HotkeyPage
 from core.settings import SettingsManager
 
 from core.utils.hotkeys import Hotkey
+from core.utils.paths import data_path, resource_path
 
 class MainWindow(QMainWindow):
 
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
                 "previous track": "previous track",
                 "volume mute": "volume mute",
             }
-        self.hotkey = Hotkey("hotkeys.json")
+        self.hotkey = Hotkey(str(data_path("hotkeys.json")))
         self.settings = SettingsManager()
 
         # quitting flag
@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
 
         tray_icon = QSystemTrayIcon(self)
 
-        icon = QIcon(str(Path(__file__).resolve().parent / "assets" / "tray.png"))
+        icon = QIcon(str(resource_path("ui", "assets", "tray.png")))
         if icon.isNull():
             icon = QIcon.fromTheme("applications-system")
 

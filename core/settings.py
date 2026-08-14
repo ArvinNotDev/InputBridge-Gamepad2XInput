@@ -1,38 +1,48 @@
 import configparser
 from pathlib import Path
 
+from core.utils.paths import ensure_user_file, resolve_data_path
+
+
 class SettingsManager:
     def __init__(self, path="config/settings.conf"):
-        self.path = Path(path)
+        self.path = resolve_data_path(path)
         self.config = configparser.ConfigParser()
 
         if not self.path.exists():
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.config["device"] = {
-                "polling_rate": "1.0",
-                "auto_reconnect": "true",
-                "dpad_as_mouse": "true",
-                "left_stick_deadzone": "0.000000",
-                "right_stick_deadzone": "0.000000",
-                "right_stick_invert_x": "false",
-                "right_stick_invert_y": "false",
-                "left_stick_invert_x": "false",
-                "left_stick_invert_y": "true",
-                "mouse_mode": "false",
-                "mouse_sensitivity": "1.0"
-            }
-            self.config["ui"] = {
-                "language": "eng",
-                "theme": "dark"
-            }
-            self.config["developer"] = {
-                "debug": "false",
-                "raw_hid_debug": "false",
-                "log_to_file": "false",
-                "log_file_path": "logs/mapper.log"
-            }
-            with self.path.open("w", encoding="utf-8") as f:
-                self.config.write(f)
+            default_config = ensure_user_file(
+                "config/settings.conf",
+                "config/settings.conf",
+            )
+            if default_config.exists():
+                self.path = default_config
+            else:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self.config["device"] = {
+                    "polling_rate": "1.0",
+                    "auto_reconnect": "true",
+                    "dpad_as_mouse": "true",
+                    "left_stick_deadzone": "0.000000",
+                    "right_stick_deadzone": "0.000000",
+                    "right_stick_invert_x": "false",
+                    "right_stick_invert_y": "false",
+                    "left_stick_invert_x": "false",
+                    "left_stick_invert_y": "true",
+                    "mouse_mode": "false",
+                    "mouse_sensitivity": "1.0"
+                }
+                self.config["ui"] = {
+                    "language": "eng",
+                    "theme": "dark"
+                }
+                self.config["developer"] = {
+                    "debug": "false",
+                    "raw_hid_debug": "false",
+                    "log_to_file": "false",
+                    "log_file_path": "logs/mapper.log"
+                }
+                with self.path.open("w", encoding="utf-8") as f:
+                    self.config.write(f)
 
         self.config.read(self.path)
 
