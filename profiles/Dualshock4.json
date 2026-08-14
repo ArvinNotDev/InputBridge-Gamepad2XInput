@@ -22,5 +22,9 @@
   "dpad_hat": {
     "byte": 5,
     "mask": "0x0F"
+  },
+  "battery_status": {
+    "percent": { "byte": 30, "mask": "0x0F" },
+    "charging": { "byte": 30, "mask": "0xF0" }
   }
 }

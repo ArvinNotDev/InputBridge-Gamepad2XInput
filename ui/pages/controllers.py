@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QDialog, QGridLayout, QFrame, QPushButton
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 
 from core import emulator
 
@@ -231,6 +231,8 @@ class X360MonitorDialog(QDialog):
             """)
 
 class ControllersPage(QWidget):
+    battery_updated = Signal(object, int, bool)  # path, percent, charging
+
     def __init__(self):
         super().__init__()
 
@@ -248,6 +250,8 @@ class ControllersPage(QWidget):
         layout.addWidget(self.list_widget)
 
         self.x360_instances = {}
+        self.battery_states = {}
+        self.battery_updated.connect(self._store_battery)
 
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_list)
@@ -260,19 +264,40 @@ class ControllersPage(QWidget):
             self.x360_instances[instance.device_path] = instance
         self.refresh_list()
 
+    def update_battery(self, device_path: str, percent: int, charging: bool) -> None:
+        self.battery_states[device_path] = (int(percent), bool(charging))
+        self.battery_updated.emit(device_path, int(percent), bool(charging))
+        self.refresh_list()
+
+    def _store_battery(self, device_path: str, percent: int, charging: bool) -> None:
+        self.battery_states[device_path] = (int(percent), bool(charging))
+        self.refresh_list()
+
+    def clear_battery(self, device_path) -> None:
+        self.battery_states.pop(device_path, None)
+        self.refresh_list()
+
     def refresh_list(self):
         self.list_widget.clear()
 
-        active_paths = emulator.ListOfAllControllers.controllers_path
+        with emulator.ListOfAllControllers.lock:
+            active_paths = list(emulator.ListOfAllControllers.controllers_path)
+            active_names = list(emulator.ListOfAllControllers.controllers_name)
 
         keys_to_remove = [path for path in self.x360_instances if path not in active_paths]
         for path in keys_to_remove:
             del self.x360_instances[path]
 
-        for i, name in enumerate(emulator.ListOfAllControllers.controllers_name):
+        for i, name in enumerate(active_names):
             item = QListWidgetItem(name)
             if i < len(active_paths):
-                item.setData(Qt.UserRole, active_paths[i])
+                path = active_paths[i]
+                item.setData(Qt.UserRole, path)
+                battery = self.battery_states.get(path)
+                if battery is not None:
+                    percent, charging = battery
+                    suffix = " (charging)" if charging else ""
+                    item.setText(f"{name} — Battery: {percent}%{suffix}")
             self.list_widget.addItem(item)
 
     def open_monitor(self, item):
