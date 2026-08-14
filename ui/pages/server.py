@@ -64,6 +64,7 @@ class ServerSignals(QObject):
     show_auth_code = Signal(tuple, str, int)    # addr, code, time_left
 
     trusted_client_added = Signal(str)          # name
+    remote_mapper_added = Signal(object)         # emulator instance
 
 
 class TrustedItemWidget(QWidget):
@@ -213,6 +214,10 @@ class ServerPage(QWidget):
         self.server_thread: Optional[threading.Thread] = None
         self.server_running = False
         self.stop_event = threading.Event()
+        self.client_threads: Dict[tuple, threading.Thread] = {}
+        self._state_lock = threading.RLock()
+        self.tray_status_callback = None
+        self._is_shutting_down = False
         self.signals = ServerSignals()
         self.settings = settings
         self.controllers_page = controllers_page
@@ -337,6 +342,7 @@ class ServerPage(QWidget):
         self.signals.client_uuid_updated.connect(self._on_client_uuid_updated_ui)
         self.signals.show_auth_code.connect(self._on_show_auth_code_ui)
         self.signals.trusted_client_added.connect(self._on_trusted_client_added_ui)
+        self.signals.remote_mapper_added.connect(self._on_remote_mapper_added_ui)
 
         # Populate trusted list
         self.refresh_trusted_ui()
@@ -380,6 +386,12 @@ class ServerPage(QWidget):
 
     def _on_trusted_client_added_ui(self, name: str):
         self.refresh_trusted_ui()
+
+    def _on_remote_mapper_added_ui(self, instance) -> None:
+        if self._is_shutting_down:
+            return
+        self.controllers_page.add_x360_instance(instance)
+        self.hotkey_page.add_x360_instance(instance)
 
     # ---------- Auth timer tick ----------
 
@@ -432,8 +444,9 @@ class ServerPage(QWidget):
         auth_code_generated: Optional[str] = None
         auth_time_left = 120  # seconds
 
-        self.clients[conn_key] = (conn, addr, uuid)
-        self.emulation_states.setdefault(conn_key, False)
+        with self._state_lock:
+            self.clients[conn_key] = (conn, addr, uuid)
+            self.emulation_states.setdefault(conn_key, False)
 
         # Initialize auth state
         self.auth_states[conn_key] = {
@@ -498,7 +511,8 @@ class ServerPage(QWidget):
                                 # Clear any auth code in UI
                                 self.signals.show_auth_code.emit(addr, "", 0)
 
-                                mapper = Phone_mapper(uuid, "x360", self.controllers_page,self.hotkey_page, self.settings)
+                                mapper = Phone_mapper(uuid, "x360", self.controllers_page, self.hotkey_page, self.settings)
+                                self.signals.remote_mapper_added.emit(mapper.emulator)
                             else:
                                 received_code = msg.get("auth_code")
                                 if received_code:
@@ -522,6 +536,7 @@ class ServerPage(QWidget):
                                         mapper = Phone_mapper(
                                             uuid, "x360", self.controllers_page, self.hotkey_page, self.settings
                                         )
+                                        self.signals.remote_mapper_added.emit(mapper.emulator)
                                     else:
                                         print(f"[{addr}] Invalid auth code: {received_code}")
                                 else:
@@ -567,17 +582,21 @@ class ServerPage(QWidget):
                         # Ignore malformed messages
                         continue
         finally:
+            if mapper is not None:
+                try:
+                    mapper.shutdown()
+                except Exception as exc:
+                    print(f"[Server] Failed to shutdown phone mapper: {exc}")
             try:
                 conn.close()
             except OSError:
                 pass
 
-            if conn_key in self.clients:
-                del self.clients[conn_key]
-            if conn_key in self.emulation_states:
-                del self.emulation_states[conn_key]
-            if conn_key in self.auth_states:
-                del self.auth_states[conn_key]
+            with self._state_lock:
+                self.clients.pop(conn_key, None)
+                self.emulation_states.pop(conn_key, None)
+                self.auth_states.pop(conn_key, None)
+                self.client_threads.pop(conn_key, None)
 
             self.signals.client_disconnected.emit(addr)
 
@@ -595,6 +614,8 @@ class ServerPage(QWidget):
                     t = threading.Thread(
                         target=self._handle_client, args=(conn, addr), daemon=True
                     )
+                    with self._state_lock:
+                        self.client_threads[addr] = t
                     t.start()
                 except socket.timeout:
                     continue
@@ -611,43 +632,75 @@ class ServerPage(QWidget):
 
     def toggle_server(self):
         if not self.server_running:
+            self._is_shutting_down = False
             self.stop_event.clear()
+            self.auth_timer.start(1000)
             self.server_thread = threading.Thread(
                 target=self._server_loop, daemon=True
             )
             self.server_thread.start()
-            self.server_running = True
-
-            self.button.setText("Stop Server")
-            self.button.setProperty("running", True)
-            self.button.style().unpolish(self.button)
-            self.button.style().polish(self.button)
+            self._set_server_button(True)
 
         else:
-            self.stop_event.set()
-            if self.server_socket:
-                try:
-                    self.server_socket.close()
-                except OSError:
-                    pass
+            self.shutdown()
 
-            for conn_key, (conn, addr, _) in list(self.clients.items()):
-                try:
-                    conn.close()
-                except OSError:
-                    pass
+    def _set_server_button(self, running: bool) -> None:
+        self.server_running = bool(running)
+        self.button.setText("Stop Server" if running else "Start Server")
+        self.button.setProperty("running", bool(running))
+        self.button.style().unpolish(self.button)
+        self.button.style().polish(self.button)
+        if self.tray_status_callback:
+            try:
+                self.tray_status_callback()
+            except Exception:
+                pass
 
+    def shutdown(self) -> None:
+        """Stop the listener and wait briefly for every client worker."""
+        self._is_shutting_down = True
+        self.stop_event.set()
+
+        server_socket = self.server_socket
+        if server_socket is not None:
+            try:
+                server_socket.close()
+            except OSError:
+                pass
+
+        with self._state_lock:
+            connections = list(self.clients.values())
+            server_thread = self.server_thread
+            client_threads = list(self.client_threads.values())
+
+        for conn, _, _ in connections:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                conn.close()
+            except OSError:
+                pass
+
+        current = threading.current_thread()
+        if server_thread and server_thread is not current:
+            server_thread.join(timeout=2.0)
+        for client_thread in client_threads:
+            if client_thread is not current:
+                client_thread.join(timeout=2.0)
+
+        with self._state_lock:
             self.clients.clear()
             self.emulation_states.clear()
             self.auth_states.clear()
-            self.clients_list.clear()
+            self.client_threads.clear()
 
-            self.server_running = False
-
-            self.button.setText("Start Server")
-            self.button.setProperty("running", False)
-            self.button.style().unpolish(self.button)
-            self.button.style().polish(self.button)
+        self.server_thread = None
+        self.server_socket = None
+        self.clients_list.clear()
+        self._set_server_button(False)
+        self.auth_timer.stop()
 
     # ---------- Client List UI Helpers ----------
 
@@ -720,16 +773,5 @@ class ServerPage(QWidget):
     # ---------- Window Closing ----------
 
     def closeEvent(self, event):
-        if self.server_running:
-            self.stop_event.set()
-            if self.server_socket:
-                try:
-                    self.server_socket.close()
-                except OSError:
-                    pass
-            for conn_key, (conn, _, _) in list(self.clients.items()):
-                try:
-                    conn.close()
-                except OSError:
-                    pass
+        self.shutdown()
         event.accept()
