@@ -261,10 +261,24 @@ class HidHideManager:
 
     @staticmethod
     def _norm(value: Any) -> str:
-        return str(value or "").strip().replace("/", "\\").lower()
+        """Normalize Windows HID identifiers.
+
+        hidapi returns some device paths as bytes while HidHideCLI returns
+        strings. Windows device identifiers are case-insensitive.
+        """
+        if value is None:
+            return ""
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="ignore")
+        return str(value).strip().replace("/", "\\").lower()
 
     @classmethod
-    def _device_matches_hidapi(cls, hid_device: dict[str, Any], hidhide_device: dict[str, Any]) -> bool:
+    def _device_matches_hidapi(
+        cls,
+        hid_device: dict[str, Any],
+        hidhide_device: dict[str, Any],
+    ) -> bool:
+        """Match one hidapi record to one HidHide record robustly."""
         hid_path = cls._norm(hid_device.get("path"))
         symbolic_link = cls._norm(hidhide_device.get("symbolicLink"))
         if hid_path and symbolic_link and hid_path == symbolic_link:
@@ -287,103 +301,265 @@ class HidHideManager:
 
         hid_serial = cls._norm(hid_device.get("serial_number"))
         hh_serial = cls._norm(hidhide_device.get("serialNumber"))
-        if hid_serial and hh_serial and hid_serial == hh_serial:
-            return True
-        if hid_serial and hh_serial and hid_serial != hh_serial:
-            return False
+        if hid_serial and hh_serial:
+            return hid_serial == hh_serial
 
         return True
 
-    def match_devices(self, hid_devices: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    def match_devices(
+        self,
+        hid_devices: Iterable[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return HidHide records corresponding to the supplied HIDAPI devices."""
         available = self.gaming_devices()
         matched: list[dict[str, Any]] = []
         seen: set[str] = set()
+
         for hid_device in hid_devices:
             for candidate in available:
                 if self._device_matches_hidapi(hid_device, candidate):
                     instance = str(candidate.get("deviceInstancePath") or "").strip()
-                    if instance and instance.lower() not in seen:
-                        seen.add(instance.lower())
+                    key = self._norm(instance)
+                    if key and key not in seen:
+                        seen.add(key)
                         matched.append(candidate)
                     break
+
         return matched
 
-    def hide_hid_devices(self, hid_devices: Iterable[dict[str, Any]]) -> list[str]:
-        targets = self.match_devices(hid_devices)
-        if not targets:
-            raise HidHideError(
-                "No compatible connected controller could be matched by HidHide. "
-                "Reconnect the controller and try again."
+    def _match_single_device(self, hid_device: dict[str, Any]) -> dict[str, Any]:
+        matches = self.match_devices([hid_device])
+        if not matches:
+            name = (
+                hid_device.get("product_string")
+                or hid_device.get("manufacturer_string")
+                or "controller"
             )
+            raise HidHideError(
+                f"HidHide could not match the connected device: {name}."
+            )
+        return matches[0]
+
+    def _blacklist_set(self) -> set[str]:
+        return {self._norm(path) for path in self.list_blacklisted() if path}
+
+    @staticmethod
+    def device_label(hid_device: dict[str, Any], hidhide_device: dict[str, Any] | None = None) -> str:
+        if hidhide_device:
+            return str(
+                hidhide_device.get("friendlyName")
+                or hidhide_device.get("product")
+                or hidhide_device.get("description")
+                or hid_device.get("product_string")
+                or "Controller"
+            )
+        return str(
+            hid_device.get("product_string")
+            or hid_device.get("manufacturer_string")
+            or "Controller"
+        )
+
+    def device_state(self, hid_device: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Resolve one HIDAPI device and return (HidHide record, hidden state)."""
+        target = self._match_single_device(hid_device)
+        instance = self._norm(target.get("deviceInstancePath"))
+        if not instance:
+            raise HidHideError("HidHide returned a controller without a device instance path.")
+        return target, instance in self._blacklist_set()
+
+    def controller_states(self, hid_devices: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Resolve supported HIDAPI devices into UI-friendly HidHide state records."""
+        devices = list(hid_devices)
+        if not devices:
+            return []
+
+        available = self.gaming_devices()
+        blacklisted = self._blacklist_set()
+        states: list[dict[str, Any]] = []
+        seen: set[str] = set()
+
+        for hid_device in devices:
+            for candidate in available:
+                if not self._device_matches_hidapi(hid_device, candidate):
+                    continue
+
+                instance = str(candidate.get("deviceInstancePath") or "").strip()
+                key = self._norm(instance)
+                if not key or key in seen:
+                    break
+                seen.add(key)
+
+                states.append(
+                    {
+                        "hid": hid_device,
+                        "hidhide": candidate,
+                        "hidden": key in blacklisted,
+                        "label": self.device_label(hid_device, candidate),
+                    }
+                )
+                break
+
+        return states
+
+    def _disable_owned_cloak_if_unused(self) -> None:
+        """Turn off cloak only when InputBridge owns it and no blacklist entries remain."""
+        if not self._enabled_by_inputbridge:
+            return
+        try:
+            if self.list_blacklisted():
+                return
+            if self.cloak_state():
+                self.run(["--cloak-off"])
+        finally:
+            self._enabled_by_inputbridge = False
+
+    def hide_hid_device(self, hid_device: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Hide exactly one controller.
+
+        Returns ``(target, added_by_inputbridge)``. If it was already hidden,
+        no duplicate rule is created and it is not marked as InputBridge-owned.
+        """
+        target = self._match_single_device(hid_device)
+        instance_path = str(target.get("deviceInstancePath") or "").strip()
+        normalized = self._norm(instance_path)
+        if not normalized:
+            raise HidHideError("HidHide returned a controller without a device instance path.")
 
         self.whitelist_application()
+        existing = self._blacklist_set()
+        added = False
 
-        added: list[str] = []
-        existing = {path.lower() for path in self.list_blacklisted()}
-        for target in targets:
-            instance_path = str(target.get("deviceInstancePath") or "").strip()
-            if not instance_path:
-                continue
-            if instance_path.lower() not in existing:
-                self.run(["--dev-hide", instance_path])
-                existing.add(instance_path.lower())
-                added.append(instance_path)
+        if normalized not in existing:
+            self.run(["--dev-hide", instance_path])
             self._added_device_paths.add(instance_path)
+            added = True
 
-        active_before = self.cloak_state()
-        if not active_before:
+        # InputBridge only owns the cloak if it had to enable it.
+        if not self.cloak_state() and self._added_device_paths:
             self.run(["--cloak-on"])
             self._enabled_by_inputbridge = True
+
+        return target, added
+
+    def unhide_hid_device(self, hid_device: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Unhide exactly one controller and return (target, was_hidden)."""
+        target = self._match_single_device(hid_device)
+        instance_path = str(target.get("deviceInstancePath") or "").strip()
+        normalized = self._norm(instance_path)
+        if not normalized:
+            raise HidHideError("HidHide returned a controller without a device instance path.")
+
+        existing = self._blacklist_set()
+        was_hidden = normalized in existing
+
+        if was_hidden:
+            self.run(["--dev-unhide", instance_path])
+
+        self._added_device_paths = {
+            path for path in self._added_device_paths
+            if self._norm(path) != normalized
+        }
+
+        if self._enabled_by_inputbridge and not self._added_device_paths:
+            self._disable_owned_cloak_if_unused()
+
+        return target, was_hidden
+
+    def hide_hid_devices(self, hid_devices: Iterable[dict[str, Any]]) -> list[str]:
+        """Hide all supplied controllers; returns only paths newly added by InputBridge."""
+        targets = list(hid_devices)
+        if not targets:
+            raise HidHideError("No supported controller is currently connected.")
+
+        added: list[str] = []
+        for device in targets:
+            _, was_added = self.hide_hid_device(device)
+            if was_added:
+                # Re-resolve to return the canonical HidHide instance path.
+                target = self._match_single_device(device)
+                instance = str(target.get("deviceInstancePath") or "").strip()
+                if instance:
+                    added.append(instance)
         return added
 
     def unhide_our_devices(self) -> list[str]:
+        """Restore only device rules created by this InputBridge session."""
         paths = list(self._added_device_paths)
         removed: list[str] = []
         for path in paths:
             try:
-                self.run(["--dev-unhide", path])
-                removed.append(path)
+                if self._norm(path) in self._blacklist_set():
+                    self.run(["--dev-unhide", path])
+                    removed.append(path)
             except HidHideError:
                 # Keep going; one stale device entry must not block others.
                 continue
+
         self._added_device_paths.clear()
 
-        # Do not disable a cloak that was already active before InputBridge
-        # touched HidHide.  Only restore the state we changed ourselves.
         if self._enabled_by_inputbridge:
+            self._disable_owned_cloak_if_unused()
+
+        return removed
+
+    def unhide_all_hid_devices(self, hid_devices: Iterable[dict[str, Any]]) -> list[str]:
+        """Explicit user action: unhide only the supported controllers currently detected by InputBridge."""
+        targets = self.match_devices(hid_devices)
+        removed: list[str] = []
+        blacklisted = self._blacklist_set()
+
+        for target in targets:
+            instance_path = str(target.get("deviceInstancePath") or "").strip()
+            normalized = self._norm(instance_path)
+            if not instance_path or normalized not in blacklisted:
+                continue
             try:
-                self.run(["--cloak-off"])
-            finally:
-                self._enabled_by_inputbridge = False
+                self.run(["--dev-unhide", instance_path])
+                removed.append(instance_path)
+            except HidHideError:
+                continue
+
+            self._added_device_paths = {
+                path for path in self._added_device_paths
+                if self._norm(path) != normalized
+            }
+
+        if self._enabled_by_inputbridge and not self._added_device_paths:
+            self._disable_owned_cloak_if_unused()
+
         return removed
 
     def current_state_for(self, hid_devices: Iterable[dict[str, Any]]) -> tuple[bool, int]:
         if not self.find_cli():
             return False, 0
         try:
-            active = self.cloak_state()
-            if not active:
+            if not self.cloak_state():
                 return False, 0
             matches = self.match_devices(hid_devices)
-            blacklisted = {path.lower() for path in self.list_blacklisted()}
+            blacklisted = self._blacklist_set()
             hidden_count = sum(
                 1
                 for device in matches
-                if str(device.get("deviceInstancePath") or "").lower() in blacklisted
+                if self._norm(device.get("deviceInstancePath")) in blacklisted
             )
             return hidden_count > 0, hidden_count
         except HidHideError:
             return False, 0
 
-    def toggle_for_hid_devices(self, hid_devices: Iterable[dict[str, Any]]) -> tuple[bool, int]:
+    def toggle_for_hid_devices(
+        self,
+        hid_devices: Iterable[dict[str, Any]],
+    ) -> tuple[bool, int]:
+        """Backward-compatible bulk toggle used by older callers."""
         devices = list(hid_devices)
         if not devices:
             raise HidHideError("No supported controller is currently connected.")
 
-        enabled, hidden_count = self.current_state_for(devices)
-        if enabled:
-            self.unhide_our_devices()
+        current, count = self.current_state_for(devices)
+        if current:
+            for device in devices:
+                self.unhide_hid_device(device)
             return False, 0
 
-        self.hide_hid_devices(devices)
-        return True, len(self._added_device_paths)
+        added = self.hide_hid_devices(devices)
+        return True, len(added)

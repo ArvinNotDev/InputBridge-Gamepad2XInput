@@ -19,19 +19,44 @@ from core.hidhide import HIDHIDE_RELEASES_URL, HidHideError, HidHideManager
 class HidHideWorker(QObject):
     finished = Signal(object)
 
-    def __init__(self, manager: HidHideManager, action: str, devices: list[dict]):
+    def __init__(self, manager: HidHideManager, action: str, devices: list[dict] | None = None):
         super().__init__()
         self.manager = manager
         self.action = action
-        self.devices = devices
+        self.devices = devices or []
 
     def run(self):
         try:
             if self.action == "detect":
                 result = ("detect", self.manager.detect())
-            elif self.action == "enable":
-                added = self.manager.hide_hid_devices(self.devices)
-                result = ("enable", {"added": added})
+            elif self.action == "states":
+                result = ("states", self.manager.controller_states(self.devices))
+            elif self.action == "hide":
+                device = self.devices[0]
+                target, added = self.manager.hide_hid_device(device)
+                result = ("device", {
+                    "operation": "hide",
+                    "hid": device,
+                    "target": target,
+                    "added": added,
+                    "hidden": True,
+                })
+            elif self.action == "unhide":
+                device = self.devices[0]
+                target, removed = self.manager.unhide_hid_device(device)
+                result = ("device", {
+                    "operation": "unhide",
+                    "hid": device,
+                    "target": target,
+                    "removed": removed,
+                    "hidden": False,
+                })
+            elif self.action == "unhide_all":
+                removed = self.manager.unhide_all_hid_devices(self.devices)
+                result = ("unhide_all", {"removed": removed})
+            elif self.action == "cleanup":
+                removed = self.manager.unhide_our_devices()
+                result = ("cleanup", {"removed": removed})
             else:
                 result = ("error", "Unknown HidHide operation.")
         except HidHideError as exc:
@@ -41,8 +66,77 @@ class HidHideWorker(QObject):
         self.finished.emit(result)
 
 
+class HidHideDeviceRow(QFrame):
+    toggle_requested = Signal(object)
+
+    def __init__(self, state: dict, parent=None):
+        super().__init__(parent)
+        self.state = state
+        self.hid_device = state["hid"]
+        self.hidden = bool(state.get("hidden", False))
+
+        self.setObjectName("hidhideDeviceRow")
+        root = QHBoxLayout(self)
+        root.setContentsMargins(10, 8, 10, 8)
+        root.setSpacing(10)
+
+        text_box = QVBoxLayout()
+        text_box.setSpacing(2)
+
+        self.name = QLabel(str(state.get("label") or "Controller"))
+        self.name.setObjectName("hidhideDeviceName")
+        self.name.setWordWrap(True)
+        text_box.addWidget(self.name)
+
+        vendor = self.hid_device.get("manufacturer_string") or "Unknown"
+        vid = self.hid_device.get("vendor_id")
+        pid = self.hid_device.get("product_id")
+        try:
+            identity = f"{vendor} • VID {int(vid):04X} / PID {int(pid):04X}"
+        except (TypeError, ValueError):
+            identity = str(vendor)
+        self.meta = QLabel(identity)
+        self.meta.setObjectName("hidhideDeviceMeta")
+        text_box.addWidget(self.meta)
+        root.addLayout(text_box, 1)
+
+        self.state_label = QLabel()
+        self.state_label.setObjectName("hidhideDeviceState")
+        root.addWidget(self.state_label)
+
+        self.button = QPushButton()
+        self.button.setObjectName("hidhideDeviceButton")
+        self.button.setMinimumHeight(32)
+        self.button.clicked.connect(self._request_toggle)
+        root.addWidget(self.button)
+
+        self.set_state(self.hidden)
+
+    def set_state(self, hidden: bool):
+        self.hidden = bool(hidden)
+        if self.hidden:
+            self.state_label.setText("Hidden")
+            self.state_label.setProperty("state", "hidden")
+            self.button.setText("Unhide")
+            self.button.setToolTip("Remove this controller from the HidHide blacklist")
+        else:
+            self.state_label.setText("Visible")
+            self.state_label.setProperty("state", "visible")
+            self.button.setText("Hide")
+            self.button.setToolTip("Hide this controller from other applications")
+        self.state_label.style().unpolish(self.state_label)
+        self.state_label.style().polish(self.state_label)
+
+    def set_busy(self, busy: bool):
+        self.button.setEnabled(not busy)
+
+    def _request_toggle(self):
+        self.set_busy(True)
+        self.toggle_requested.emit(self.hid_device)
+
+
 class HidHideCard(QFrame):
-    """Self-contained HidHide control card with asynchronous detection."""
+    """Professional HidHide control with per-controller hide/unhide state."""
 
     def __init__(self, parent: "ControllerEmulation"):
         super().__init__(parent)
@@ -55,10 +149,12 @@ class HidHideCard(QFrame):
         self._loader_timer.timeout.connect(self._animate_loader)
         self._loader_index = 0
         self._busy = False
+        self._rows: dict[str, HidHideDeviceRow] = {}
+        self._states: list[dict] = []
 
         self.setObjectName("hidhideCard")
         self.setFrameShape(QFrame.StyledPanel)
-        self.setMinimumHeight(118)
+        self.setMinimumHeight(156)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 14)
@@ -78,7 +174,7 @@ class HidHideCard(QFrame):
         root.addLayout(header)
 
         self.detail = QLabel(
-            "Hide supported physical controllers from other applications while InputBridge remains allowed to read them."
+            "Hide each physical controller independently. InputBridge stays whitelisted so it can continue reading hidden controllers."
         )
         self.detail.setObjectName("hidhideDetail")
         self.detail.setWordWrap(True)
@@ -93,6 +189,13 @@ class HidHideCard(QFrame):
         self.detect_button.clicked.connect(self.start_detection)
         actions.addWidget(self.detect_button)
 
+        self.unhide_all_button = QPushButton("Unhide All")
+        self.unhide_all_button.setObjectName("hidhideSecondary")
+        self.unhide_all_button.setMinimumHeight(36)
+        self.unhide_all_button.setVisible(False)
+        self.unhide_all_button.clicked.connect(self._unhide_all)
+        actions.addWidget(self.unhide_all_button)
+
         self.open_link_button = QPushButton("Open Link")
         self.open_link_button.setObjectName("hidhideSecondary")
         self.open_link_button.setMinimumHeight(36)
@@ -103,6 +206,12 @@ class HidHideCard(QFrame):
         actions.addWidget(self.open_link_button)
         actions.addStretch(1)
         root.addLayout(actions)
+
+        self.devices_container = QWidget(self)
+        self.devices_layout = QVBoxLayout(self.devices_container)
+        self.devices_layout.setContentsMargins(0, 2, 0, 0)
+        self.devices_layout.setSpacing(6)
+        root.addWidget(self.devices_container)
 
         self._apply_style()
 
@@ -125,6 +234,33 @@ class HidHideCard(QFrame):
             QLabel#hidhideDetail {
                 font-size: 11px;
             }
+            QFrame#hidhideDeviceRow {
+                background: rgba(255, 255, 255, 7%);
+                border: 1px solid rgba(255, 255, 255, 12%);
+                border-radius: 9px;
+            }
+            QLabel#hidhideDeviceName {
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QLabel#hidhideDeviceMeta {
+                font-size: 10px;
+                color: rgba(255, 255, 255, 62%);
+            }
+            QLabel#hidhideDeviceState {
+                font-size: 10px;
+                font-weight: 700;
+                padding: 4px 7px;
+                border-radius: 7px;
+            }
+            QLabel#hidhideDeviceState[state="hidden"] {
+                color: #a7f3d0;
+                background: rgba(16, 185, 129, 18%);
+            }
+            QLabel#hidhideDeviceState[state="visible"] {
+                color: #cbd5e1;
+                background: rgba(148, 163, 184, 16%);
+            }
             QPushButton#hidhidePrimary {
                 background: #5390ff;
                 color: white;
@@ -133,26 +269,26 @@ class HidHideCard(QFrame):
                 padding: 7px 18px;
                 font-weight: 700;
             }
-            QPushButton#hidhidePrimary:hover {
-                background: #6aa0ff;
-            }
-            QPushButton#hidhidePrimary:pressed {
-                background: #3d7ce6;
-            }
+            QPushButton#hidhidePrimary:hover { background: #6aa0ff; }
+            QPushButton#hidhidePrimary:pressed { background: #3d7ce6; }
             QPushButton#hidhidePrimary:disabled {
                 background: #666a73;
                 color: #d5d7dc;
             }
-            QPushButton#hidhideSecondary {
+            QPushButton#hidhideSecondary, QPushButton#hidhideDeviceButton {
                 background: transparent;
                 color: #85c1ff;
                 border: 1px solid rgba(133, 193, 255, 55%);
                 border-radius: 8px;
-                padding: 7px 16px;
+                padding: 7px 14px;
                 font-weight: 600;
             }
-            QPushButton#hidhideSecondary:hover {
+            QPushButton#hidhideSecondary:hover, QPushButton#hidhideDeviceButton:hover {
                 background: rgba(133, 193, 255, 10%);
+            }
+            QPushButton#hidhideSecondary:disabled, QPushButton#hidhideDeviceButton:disabled {
+                color: #777b84;
+                border-color: rgba(255, 255, 255, 12%);
             }
             """
         )
@@ -166,17 +302,59 @@ class HidHideCard(QFrame):
         self.detect_button.setText(f"Detecting HidHide {glyph}")
         self._loader_index += 1
 
-    def _start_worker(self, action: str, devices: list[dict]):
+    def _clear_rows(self):
+        self._rows.clear()
+        while self.devices_layout.count():
+            item = self.devices_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    @staticmethod
+    def _device_key(device: dict) -> str:
+        path = device.get("path")
+        if isinstance(path, bytes):
+            path = path.decode("utf-8", errors="ignore")
+        return str(path or id(device)).strip().lower()
+
+    def _populate_devices(self, states: list[dict]):
+        self._clear_rows()
+        self._states = states
+
+        for state in states:
+            key = self._device_key(state["hid"])
+            row = HidHideDeviceRow(state, self)
+            row.toggle_requested.connect(self._toggle_device)
+            self.devices_layout.addWidget(row)
+            self._rows[key] = row
+
+        self.unhide_all_button.setVisible(bool(states))
+        if states:
+            hidden = sum(bool(state.get("hidden")) for state in states)
+            self._set_status(
+                f"HidHide ready • {len(states)} controller(s) detected • {hidden} hidden."
+            )
+            self.detail.setText(
+                "Use each controller's button to hide or unhide it independently. Unhide All only removes HidHide rules for the currently connected controllers."
+            )
+        else:
+            self._set_status("HidHide detected, but no supported controller is connected.")
+            self.detail.setText(
+                "Connect a DualShock 4, DualSense, or UnoJoy controller and click HidHide again."
+            )
+
+    def _start_worker(self, action: str, devices: list[dict] | None = None):
         if self._busy:
             return
         self._busy = True
         self.open_link_button.setVisible(False)
         self.detect_button.setEnabled(False)
+        self.unhide_all_button.setEnabled(False)
         self._loader_index = 0
         self._loader_timer.start()
 
         self._thread = QThread(self)
-        self._worker = HidHideWorker(self.manager, action, devices)
+        self._worker = HidHideWorker(self.manager, action, devices or [])
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._on_worker_finished)
@@ -196,25 +374,41 @@ class HidHideCard(QFrame):
         self._busy = False
         self._loader_timer.stop()
         self.detect_button.setEnabled(True)
+        self.unhide_all_button.setEnabled(bool(self._states))
+        for row in self._rows.values():
+            row.set_busy(False)
 
-    def _run_enable(self, devices: list[dict]):
+    def _toggle_device(self, device: dict):
         if self._busy:
             return
-        self._busy = True
-        self.detect_button.setEnabled(False)
-        self._loader_index = 0
-        self._loader_timer.start()
-        self._thread = QThread(self)
-        self._worker = HidHideWorker(self.manager, "enable", devices)
-        self._worker.moveToThread(self._thread)
-        self._thread.started.connect(self._worker.run)
-        self._worker.finished.connect(self._on_worker_finished)
-        self._worker.finished.connect(self._thread.quit)
-        self._worker.finished.connect(self._worker.deleteLater)
-        thread = self._thread
-        self._thread.finished.connect(self._thread.deleteLater)
-        self._thread.finished.connect(lambda t=thread: self._clear_thread_refs(t))
-        self._thread.start()
+        key = self._device_key(device)
+        row = self._rows.get(key)
+        if row:
+            row.set_busy(True)
+        action = "unhide" if row and row.hidden else "hide"
+        self._start_worker(action, [device])
+
+    def _unhide_all(self):
+        if self._busy:
+            return
+        devices = self.page._get_hidhide_devices()
+        if not devices:
+            self._refresh_states()
+            return
+        self._start_worker("unhide_all", devices)
+
+    def _refresh_states(self):
+        devices = self.page._get_hidhide_devices()
+        if not devices:
+            self._clear_rows()
+            self._states = []
+            self.unhide_all_button.setVisible(False)
+            self._set_status("HidHide detected, but no supported controller is connected.")
+            self.detail.setText(
+                "Connect a DualShock 4, DualSense, or UnoJoy controller and click HidHide again."
+            )
+            return
+        self._start_worker("states", devices)
 
     def _on_worker_finished(self, result):
         self._finish_busy()
@@ -223,6 +417,8 @@ class HidHideCard(QFrame):
         if action == "detect":
             detection = payload
             if not detection.installed:
+                self._clear_rows()
+                self.unhide_all_button.setVisible(False)
                 self._set_status("HidHide not found on this PC.")
                 self.detail.setText(
                     "Install HidHide from the official Nefarius releases. After installation, click HidHide again to detect it."
@@ -237,45 +433,57 @@ class HidHideCard(QFrame):
                 self.detail.setText(detection.message)
                 self.detect_button.setText("HidHide")
                 return
+
             version = f" • {detection.version}" if detection.version else ""
-            self._set_status(f"HidHide detected{version}.")
+            self._set_status(f"HidHide detected{version} • reading connected controllers…")
             self.detail.setText(
-                "Preparing the controller firewall. InputBridge will be added to HidHide's application whitelist before cloaking."
+                "Reading the current HidHide blacklist and resolving each connected controller."
             )
-
-            devices = self.page._get_hidhide_devices()
-            if not devices:
-                self._set_status("HidHide detected, but no supported controller is connected.")
-                self.detail.setText(
-                    "Connect a DualShock 4, DualSense, or UnoJoy controller and click HidHide again."
-                )
-                self.detect_button.setText("HidHide")
-                return
-
-            self._run_enable(devices)
+            self._refresh_states()
             return
 
-        if action == "enable":
-            added = payload.get("added", []) if isinstance(payload, dict) else []
-            hidden_count = len(added)
-            if hidden_count:
-                self._set_status(
-                    f"HidHide active • {hidden_count} controller interface(s) hidden."
-                )
+        if action == "states":
+            states = payload if isinstance(payload, list) else []
+            self._populate_devices(states)
+            self.detect_button.setText("Refresh HidHide")
+            return
+
+        if action == "device":
+            if not isinstance(payload, dict):
+                self._set_status("HidHide operation completed, but the device state could not be refreshed.")
+                return
+            operation = payload.get("operation")
+            target = payload.get("target") or {}
+            label = str(target.get("friendlyName") or target.get("product") or "Controller")
+            if operation == "hide":
+                self._set_status(f"Hidden • {label}")
                 self.detail.setText(
-                    "The physical controller is hidden from non-whitelisted applications. InputBridge remains whitelisted."
+                    "This controller is now hidden from non-whitelisted applications. InputBridge remains allowed to access it."
                 )
             else:
-                self._set_status("HidHide is already active for the detected controller.")
+                self._set_status(f"Visible • {label}")
                 self.detail.setText(
-                    "The current HidHide blacklist already contains the controller; no duplicate rule was added."
+                    "This controller has been removed from the HidHide blacklist."
                 )
-            self.detect_button.setText("HidHide • Active")
+            self._refresh_states()
             return
 
-        self._set_status("HidHide configuration failed.")
-        self.detail.setText(str(payload))
-        self.detect_button.setText("HidHide")
+        if action == "unhide_all":
+            removed = payload.get("removed", []) if isinstance(payload, dict) else []
+            self._set_status(f"Unhidden {len(removed)} controller rule(s).")
+            self.detail.setText(
+                "HidHide rules for the currently connected supported controllers were removed."
+            )
+            self._refresh_states()
+            return
+
+        if action == "cleanup":
+            return
+
+        if action == "error":
+            self._set_status("HidHide configuration failed.")
+            self.detail.setText(str(payload))
+            self.detect_button.setText("HidHide")
 
     def start_detection(self):
         if self._busy:
@@ -284,7 +492,17 @@ class HidHideCard(QFrame):
         self.detail.setText(
             "Checking the official HidHide installation and configuration interface."
         )
-        self._start_worker("detect", [])
+        self._start_worker("detect")
+
+    def shutdown(self):
+        """Remove only the device rules created by this InputBridge session."""
+        self._loader_timer.stop()
+        try:
+            self.manager.unhide_our_devices()
+        except HidHideError as exc:
+            print(f"[HidHide] Cleanup failed: {exc}")
+        except Exception as exc:
+            print(f"[HidHide] Unexpected cleanup error: {exc}")
 
 
 class EmuListItemWidget(QWidget):
@@ -833,6 +1051,10 @@ class ControllerEmulation(QWidget):
         self._path_records.clear()
         self._reconnect_timer.stop()
         self._reconnect_timer_active = False
+        try:
+            self.hidhide_card.shutdown()
+        except Exception as exc:
+            print(f"[ControllerEmulation] HidHide cleanup failed: {exc}")
         try:
             hid.hid_manager.stop_all()
         except Exception:
