@@ -456,3 +456,17 @@ https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases
   <strong>InputBridge-Gamepad2XInput</strong><br>
   Physical controller → virtual XInput, keyboard, and mouse input.
 </p>
+
+## HidHide integration
+
+InputBridge includes an optional HidHide integration on Windows. From the Controller Emulation page, the HidHide control:
+
+- detects the installed HidHide configuration CLI without requiring a hard-coded install path;
+- opens the official Nefarius release page when HidHide is not installed;
+- registers the running InputBridge executable in HidHide's application whitelist;
+- matches connected supported controllers against HidHide's own `symbolicLink` / `deviceInstancePath` data;
+- adds only missing controller blacklist entries and enables HidHide's cloak;
+- keeps configuration changes idempotent and does not disable or overwrite an already-active HidHide cloak owned by another application.
+
+The official HidHide releases are available at:
+https://github.com/nefarius/HidHide/releases

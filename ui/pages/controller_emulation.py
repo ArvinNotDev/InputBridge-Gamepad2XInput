@@ -2,15 +2,290 @@ from typing import Optional, Tuple
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QListWidget, QPushButton,
-    QDialog, QListWidgetItem, QSizePolicy, QMessageBox
+    QDialog, QListWidgetItem, QSizePolicy, QMessageBox, QFrame
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QThread, QObject, QUrl
+from PySide6.QtGui import QDesktopServices
 
 from ui.pages.modal.add_controller import AddControllerDialog
 from core.mapper import Mapper
 from core.settings import SettingsManager
 from core.hid import HIDManager
 from core import hid
+
+from core.hidhide import HIDHIDE_RELEASES_URL, HidHideError, HidHideManager
+
+
+class HidHideWorker(QObject):
+    finished = Signal(object)
+
+    def __init__(self, manager: HidHideManager, action: str, devices: list[dict]):
+        super().__init__()
+        self.manager = manager
+        self.action = action
+        self.devices = devices
+
+    def run(self):
+        try:
+            if self.action == "detect":
+                result = ("detect", self.manager.detect())
+            elif self.action == "enable":
+                added = self.manager.hide_hid_devices(self.devices)
+                result = ("enable", {"added": added})
+            else:
+                result = ("error", "Unknown HidHide operation.")
+        except HidHideError as exc:
+            result = ("error", str(exc))
+        except Exception as exc:
+            result = ("error", f"Unexpected HidHide error: {exc}")
+        self.finished.emit(result)
+
+
+class HidHideCard(QFrame):
+    """Self-contained HidHide control card with asynchronous detection."""
+
+    def __init__(self, parent: "ControllerEmulation"):
+        super().__init__(parent)
+        self.page = parent
+        self.manager = HidHideManager()
+        self._thread: QThread | None = None
+        self._worker: HidHideWorker | None = None
+        self._loader_timer = QTimer(self)
+        self._loader_timer.setInterval(180)
+        self._loader_timer.timeout.connect(self._animate_loader)
+        self._loader_index = 0
+        self._busy = False
+
+        self.setObjectName("hidhideCard")
+        self.setFrameShape(QFrame.StyledPanel)
+        self.setMinimumHeight(118)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(16, 14, 16, 14)
+        root.setSpacing(8)
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+
+        title = QLabel("HidHide")
+        title.setObjectName("hidhideTitle")
+        header.addWidget(title)
+
+        self.status = QLabel("Click HidHide to detect the driver.")
+        self.status.setObjectName("hidhideStatus")
+        self.status.setWordWrap(True)
+        header.addWidget(self.status, 1)
+        root.addLayout(header)
+
+        self.detail = QLabel(
+            "Hide supported physical controllers from other applications while InputBridge remains allowed to read them."
+        )
+        self.detail.setObjectName("hidhideDetail")
+        self.detail.setWordWrap(True)
+        root.addWidget(self.detail)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+
+        self.detect_button = QPushButton("HidHide")
+        self.detect_button.setObjectName("hidhidePrimary")
+        self.detect_button.setMinimumHeight(36)
+        self.detect_button.clicked.connect(self.start_detection)
+        actions.addWidget(self.detect_button)
+
+        self.open_link_button = QPushButton("Open Link")
+        self.open_link_button.setObjectName("hidhideSecondary")
+        self.open_link_button.setMinimumHeight(36)
+        self.open_link_button.setVisible(False)
+        self.open_link_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(HIDHIDE_RELEASES_URL))
+        )
+        actions.addWidget(self.open_link_button)
+        actions.addStretch(1)
+        root.addLayout(actions)
+
+        self._apply_style()
+
+    def _apply_style(self):
+        self.setStyleSheet(
+            """
+            QFrame#hidhideCard {
+                background: rgba(255, 255, 255, 12%);
+                border: 1px solid rgba(255, 255, 255, 20%);
+                border-radius: 12px;
+            }
+            QLabel#hidhideTitle {
+                font-size: 15px;
+                font-weight: 700;
+            }
+            QLabel#hidhideStatus {
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QLabel#hidhideDetail {
+                font-size: 11px;
+            }
+            QPushButton#hidhidePrimary {
+                background: #5390ff;
+                color: white;
+                border: 0;
+                border-radius: 8px;
+                padding: 7px 18px;
+                font-weight: 700;
+            }
+            QPushButton#hidhidePrimary:hover {
+                background: #6aa0ff;
+            }
+            QPushButton#hidhidePrimary:pressed {
+                background: #3d7ce6;
+            }
+            QPushButton#hidhidePrimary:disabled {
+                background: #666a73;
+                color: #d5d7dc;
+            }
+            QPushButton#hidhideSecondary {
+                background: transparent;
+                color: #85c1ff;
+                border: 1px solid rgba(133, 193, 255, 55%);
+                border-radius: 8px;
+                padding: 7px 16px;
+                font-weight: 600;
+            }
+            QPushButton#hidhideSecondary:hover {
+                background: rgba(133, 193, 255, 10%);
+            }
+            """
+        )
+
+    def _set_status(self, text: str):
+        self.status.setText(text)
+
+    def _animate_loader(self):
+        spinner = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        glyph = spinner[self._loader_index % len(spinner)]
+        self.detect_button.setText(f"Detecting HidHide {glyph}")
+        self._loader_index += 1
+
+    def _start_worker(self, action: str, devices: list[dict]):
+        if self._busy:
+            return
+        self._busy = True
+        self.open_link_button.setVisible(False)
+        self.detect_button.setEnabled(False)
+        self._loader_index = 0
+        self._loader_timer.start()
+
+        self._thread = QThread(self)
+        self._worker = HidHideWorker(self.manager, action, devices)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_worker_finished)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        thread = self._thread
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(lambda t=thread: self._clear_thread_refs(t))
+        self._thread.start()
+
+    def _clear_thread_refs(self, thread):
+        if self._thread is thread:
+            self._worker = None
+            self._thread = None
+
+    def _finish_busy(self):
+        self._busy = False
+        self._loader_timer.stop()
+        self.detect_button.setEnabled(True)
+
+    def _run_enable(self, devices: list[dict]):
+        if self._busy:
+            return
+        self._busy = True
+        self.detect_button.setEnabled(False)
+        self._loader_index = 0
+        self._loader_timer.start()
+        self._thread = QThread(self)
+        self._worker = HidHideWorker(self.manager, "enable", devices)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.finished.connect(self._on_worker_finished)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        thread = self._thread
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(lambda t=thread: self._clear_thread_refs(t))
+        self._thread.start()
+
+    def _on_worker_finished(self, result):
+        self._finish_busy()
+        action, payload = result
+
+        if action == "detect":
+            detection = payload
+            if not detection.installed:
+                self._set_status("HidHide not found on this PC.")
+                self.detail.setText(
+                    "Install HidHide from the official Nefarius releases. After installation, click HidHide again to detect it."
+                )
+                self.open_link_button.setVisible(True)
+                self.detect_button.setText("HidHide")
+                return
+
+            self.open_link_button.setVisible(False)
+            if detection.message and detection.message != "HidHide detected.":
+                self._set_status("HidHide detected, but the configuration interface is unavailable.")
+                self.detail.setText(detection.message)
+                self.detect_button.setText("HidHide")
+                return
+            version = f" • {detection.version}" if detection.version else ""
+            self._set_status(f"HidHide detected{version}.")
+            self.detail.setText(
+                "Preparing the controller firewall. InputBridge will be added to HidHide's application whitelist before cloaking."
+            )
+
+            devices = self.page._get_hidhide_devices()
+            if not devices:
+                self._set_status("HidHide detected, but no supported controller is connected.")
+                self.detail.setText(
+                    "Connect a DualShock 4, DualSense, or UnoJoy controller and click HidHide again."
+                )
+                self.detect_button.setText("HidHide")
+                return
+
+            self._run_enable(devices)
+            return
+
+        if action == "enable":
+            added = payload.get("added", []) if isinstance(payload, dict) else []
+            hidden_count = len(added)
+            if hidden_count:
+                self._set_status(
+                    f"HidHide active • {hidden_count} controller interface(s) hidden."
+                )
+                self.detail.setText(
+                    "The physical controller is hidden from non-whitelisted applications. InputBridge remains whitelisted."
+                )
+            else:
+                self._set_status("HidHide is already active for the detected controller.")
+                self.detail.setText(
+                    "The current HidHide blacklist already contains the controller; no duplicate rule was added."
+                )
+            self.detect_button.setText("HidHide • Active")
+            return
+
+        self._set_status("HidHide configuration failed.")
+        self.detail.setText(str(payload))
+        self.detect_button.setText("HidHide")
+
+    def start_detection(self):
+        if self._busy:
+            return
+        self._set_status("Detecting HidHide…")
+        self.detail.setText(
+            "Checking the official HidHide installation and configuration interface."
+        )
+        self._start_worker("detect", [])
+
 
 class EmuListItemWidget(QWidget):
     emulate_requested = Signal(str, str, object)
@@ -126,6 +401,9 @@ class ControllerEmulation(QWidget):
                 background-color: transparent;
         }
                                     """)
+
+        self.hidhide_card = HidHideCard(self)
+
         add_btn = QPushButton("Add Controller")
         add_btn.clicked.connect(self.open_add_controller_dialog)
         add_btn.setStyleSheet("""
@@ -148,7 +426,30 @@ class ControllerEmulation(QWidget):
         layout_dashboard.addWidget(lbl_dashboard)
         layout_dashboard.addWidget(emu_label)
         layout_dashboard.addWidget(self.emu_list)
+        layout_dashboard.addWidget(self.hidhide_card)
         layout_dashboard.addWidget(add_btn)
+
+    def _get_hidhide_devices(self) -> list[dict]:
+        """Return supported connected HID devices for HidHide integration."""
+        devices = hid.hid_manager.scan_devices() or []
+        supported = []
+        seen_paths = set()
+
+        for device in devices:
+            vid = self._device_id(device.get("vendor_id"))
+            pid = self._device_id(device.get("product_id"))
+            is_supported = (
+                (vid == 0x054C and pid in (0x05C4, 0x09CC, 0x0CE6))
+                or (vid == 0x10C4 and pid == 0x82C0)
+            )
+            if not is_supported:
+                continue
+            path = str(device.get("path") or "")
+            if path and path not in seen_paths:
+                seen_paths.add(path)
+                supported.append(device)
+
+        return supported
 
     def open_add_controller_dialog(self):
         dialog = AddControllerDialog(self)
