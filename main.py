@@ -4,7 +4,7 @@ from ui.main_window import MainWindow
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("Universal Remapper")
+    app.setApplicationName("InputBridge-Gamepad2XInput")
     window = MainWindow(app)
     window.show()
 

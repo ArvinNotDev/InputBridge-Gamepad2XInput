@@ -216,3 +216,9 @@ buttons.txt
 last_ip.txt
 trusted_clients.json
 hotkeys.json
+
+# User profiles (runtime data)
+profiles/user/
+
+# Freebuff
+.freebuff/

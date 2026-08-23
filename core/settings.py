@@ -175,6 +175,15 @@ class SettingsManager:
             self.config.add_section("developer")
         self.config.set("developer", "log_file_path", str(path))
 
+    # -------- profile --------
+    def get_active_profile(self) -> str:
+        return self.config.get("profile", "active", fallback="")
+
+    def set_active_profile(self, name: str):
+        if not self.config.has_section("profile"):
+            self.config.add_section("profile")
+        self.config.set("profile", "active", str(name))
+
     # -------- save/load --------
     def save(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
