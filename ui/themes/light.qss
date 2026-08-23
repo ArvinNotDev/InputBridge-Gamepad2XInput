@@ -126,3 +126,82 @@ QComboBox QAbstractItemView::item:selected {
     );
     color: #ffffff;
 }
+
+/* ===================== Profiles Page ===================== */
+QGroupBox {
+    border: 1px solid #ccccdd;
+    border-radius: 6px;
+    margin-top: 8px;
+    padding: 12px 8px 8px 8px;
+    font-weight: 600;
+    color: #444455;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    color: #666677;
+}
+
+QPushButton#profiles_activate_btn {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #85c1ff, stop:1 #5390ff
+    );
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+QPushButton#profiles_activate_btn:hover {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #a0d4ff, stop:1 #70b0ff
+    );
+}
+
+QPushButton#profiles_new_btn {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #85c1ff, stop:1 #5390ff
+    );
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+QPushButton#profiles_new_btn:hover {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #a0d4ff, stop:1 #70b0ff
+    );
+}
+
+QPushButton#profiles_delete_btn {
+    background-color: #fff0f0;
+    color: #cc3333;
+    border: 1px solid #ddaaaa;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+QPushButton#profiles_delete_btn:hover {
+    background-color: #ffe0e0;
+    border-color: #cc3333;
+}
+
+QSplitter::handle {
+    background-color: #ccccdd;
+    width: 2px;
+    margin: 8px 4px;
+    border-radius: 1px;
+}

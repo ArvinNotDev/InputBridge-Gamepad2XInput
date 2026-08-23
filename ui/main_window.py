@@ -20,7 +20,9 @@ from ui.pages.controllers import ControllersPage
 from ui.pages.settings import SettingsPage
 from ui.pages.server import ServerPage
 from ui.pages.hotkey import HotkeyPage
+from ui.pages.profiles import ProfilesPage
 from core.settings import SettingsManager
+from core.profile_manager import ProfileManager
 
 from core.utils.hotkeys import Hotkey
 from core.utils.paths import data_path, resource_path
@@ -35,9 +37,10 @@ class MainWindow(QMainWindow):
     IDX_CONTROLLER_EMULATION = 0
     IDX_REMOTE_GAMEPAD = 1
     IDX_HOTKEY = 2
-    IDX_TEST_XINPUT = 3
-    IDX_SETTINGS = 4
-    IDX_QUIT = 5
+    IDX_PROFILES = 3
+    IDX_TEST_XINPUT = 4
+    IDX_SETTINGS = 5
+    IDX_QUIT = 6
 
     def __init__(self, app: QApplication) -> None:
         super().__init__()
@@ -55,6 +58,8 @@ class MainWindow(QMainWindow):
             }
         self.hotkey = Hotkey(str(data_path("hotkeys.json")))
         self.settings = SettingsManager()
+        self.profile_manager = ProfileManager(self.settings)
+        self.profile_manager.create_default_profile()
 
         # quitting flag
         self._is_quitting = False
@@ -87,9 +92,10 @@ class MainWindow(QMainWindow):
         self.menu.addItem(QListWidgetItem("Controller Emulation"))  # 0
         self.menu.addItem(QListWidgetItem("Remote Gamepad"))        # 1
         self.menu.addItem(QListWidgetItem("Hotkeys"))               # 2
-        self.menu.addItem(QListWidgetItem("Test XInput"))           # 3
-        self.menu.addItem(QListWidgetItem("Settings"))              # 4
-        self.menu.addItem(QListWidgetItem("Quit"))                  # 5
+        self.menu.addItem(QListWidgetItem("Profiles"))              # 3
+        self.menu.addItem(QListWidgetItem("Test XInput"))           # 4
+        self.menu.addItem(QListWidgetItem("Settings"))              # 5
+        self.menu.addItem(QListWidgetItem("Quit"))                  # 6
 
         # Force menu to fit all items
         item_height = self.menu.sizeHintForRow(0)
@@ -106,7 +112,7 @@ class MainWindow(QMainWindow):
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
-        # The order here must match indices 0..4
+        # The order here must match indices 0..5
         # 0: Controller Emulation
         self.controller_emulation_page = ControllerEmulation(
             self.settings, controllers_page, hotkey_page
@@ -117,9 +123,13 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.server_page)
         # 2: Hotkeys page
         self.pages.addWidget(hotkey_page)
-        # 3: Test XInput
+        # 3: Profiles
+        self.profiles_page = ProfilesPage(self.profile_manager, self.settings)
+        self.profiles_page.profile_loaded.connect(self._on_profile_loaded)
+        self.pages.addWidget(self.profiles_page)
+        # 4: Test XInput
         self.pages.addWidget(controllers_page)
-        # 4: Settings
+        # 5: Settings
         self.settings_page = SettingsPage(self.theme_manager, self.settings)
         self.pages.addWidget(self.settings_page)
 
@@ -147,7 +157,7 @@ class MainWindow(QMainWindow):
             QApplication.quit()
             return
 
-        # For all other indices, show corresponding page (indices 0..4)
+        # For all other indices, show corresponding page (indices 0..5)
         if 0 <= index < self.pages.count():
             self.pages.setCurrentIndex(index)
 
@@ -210,6 +220,7 @@ class MainWindow(QMainWindow):
             ("Controller emulation", self.IDX_CONTROLLER_EMULATION),
             ("Remote gamepad", self.IDX_REMOTE_GAMEPAD),
             ("Hotkeys", self.IDX_HOTKEY),
+            ("Profiles", self.IDX_PROFILES),
             ("Settings", self.IDX_SETTINGS),
         ):
             action = QAction(label, menu)
@@ -246,6 +257,15 @@ class MainWindow(QMainWindow):
     def _toggle_server_from_tray(self) -> None:
         self.server_page.toggle_server()
         self._refresh_tray_menu()
+
+    def _on_profile_loaded(self, profile_name: str) -> None:
+        """Called when a profile is activated from the Profiles page."""
+        # Reload theme in case it changed
+        try:
+            theme = self.settings.get_ui_theme()
+            self.theme_manager.apply_theme(theme)
+        except Exception:
+            pass
 
     def _show_page_from_tray(self, index: int) -> None:
         self.menu.setCurrentRow(index)
