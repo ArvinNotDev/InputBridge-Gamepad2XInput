@@ -20,7 +20,9 @@ from ui.pages.controllers import ControllersPage
 from ui.pages.settings import SettingsPage
 from ui.pages.server import ServerPage
 from ui.pages.hotkey import HotkeyPage
+from ui.pages.profiles import ProfilesPage
 from core.settings import SettingsManager
+from core.profile_manager import ProfileManager
 
 from core.utils.hotkeys import Hotkey
 from core.utils.paths import data_path, resource_path
@@ -34,10 +36,11 @@ class MainWindow(QMainWindow):
     # Menu indices (must match the order items are added to self.menu)
     IDX_CONTROLLER_EMULATION = 0
     IDX_REMOTE_GAMEPAD = 1
-    IDX_HOTKEY = 2
-    IDX_TEST_XINPUT = 3
-    IDX_SETTINGS = 4
-    IDX_QUIT = 5
+    IDX_PROFILES = 2
+    IDX_HOTKEY = 3
+    IDX_TEST_XINPUT = 4
+    IDX_SETTINGS = 5
+    IDX_QUIT = 6
 
     def __init__(self, app: QApplication) -> None:
         super().__init__()
@@ -55,6 +58,12 @@ class MainWindow(QMainWindow):
             }
         self.hotkey = Hotkey(str(data_path("hotkeys.json")))
         self.settings = SettingsManager()
+
+        # Profile manager — handles saving/loading named profiles
+        self.profile_manager = ProfileManager()
+
+        # Auto-load last-used profile on startup
+        self._restore_active_profile()
 
         # quitting flag
         self._is_quitting = False
@@ -86,10 +95,11 @@ class MainWindow(QMainWindow):
         # Menu items (order must match the constants above)
         self.menu.addItem(QListWidgetItem("Controller Emulation"))  # 0
         self.menu.addItem(QListWidgetItem("Remote Gamepad"))        # 1
-        self.menu.addItem(QListWidgetItem("Hotkeys"))               # 2
-        self.menu.addItem(QListWidgetItem("Test XInput"))           # 3
-        self.menu.addItem(QListWidgetItem("Settings"))              # 4
-        self.menu.addItem(QListWidgetItem("Quit"))                  # 5
+        self.menu.addItem(QListWidgetItem("Profiles"))              # 2
+        self.menu.addItem(QListWidgetItem("Hotkeys"))               # 3
+        self.menu.addItem(QListWidgetItem("Test XInput"))           # 4
+        self.menu.addItem(QListWidgetItem("Settings"))              # 5
+        self.menu.addItem(QListWidgetItem("Quit"))                  # 6
 
         # Force menu to fit all items
         item_height = self.menu.sizeHintForRow(0)
@@ -106,7 +116,7 @@ class MainWindow(QMainWindow):
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
-        # The order here must match indices 0..4
+        # The order here must match indices 0..5
         # 0: Controller Emulation
         self.controller_emulation_page = ControllerEmulation(
             self.settings, controllers_page, hotkey_page
@@ -115,11 +125,17 @@ class MainWindow(QMainWindow):
         # 1: Remote Gamepad (server page)
         self.server_page = ServerPage(self.settings, controllers_page, hotkey_page)
         self.pages.addWidget(self.server_page)
-        # 2: Hotkeys page
+        # 2: Profiles
+        self.profiles_page = ProfilesPage(
+            self.profile_manager, self.settings, self.theme_manager
+        )
+        self.profiles_page.profile_loaded.connect(self._on_profile_loaded)
+        self.pages.addWidget(self.profiles_page)
+        # 3: Hotkeys page
         self.pages.addWidget(hotkey_page)
-        # 3: Test XInput
+        # 4: Test XInput
         self.pages.addWidget(controllers_page)
-        # 4: Settings
+        # 5: Settings
         self.settings_page = SettingsPage(self.theme_manager, self.settings)
         self.pages.addWidget(self.settings_page)
 
@@ -137,6 +153,43 @@ class MainWindow(QMainWindow):
         app.aboutToQuit.connect(self.shutdown)
 
     # --------------------
+    # Profile helpers
+    # --------------------
+
+    def _restore_active_profile(self):
+        """Load the previously active profile (if any) at startup."""
+        active_name = self.profile_manager.get_active_profile()
+        if active_name:
+            data = self.profile_manager.load_profile(active_name)
+            if data is not None:
+                try:
+                    ProfileManager._apply_to_settings(data, self.settings)
+                    self.settings.save()
+                except Exception as exc:
+                    print(f"[MainWindow] Failed to restore profile '{active_name}': {exc}")
+
+    def _on_profile_loaded(self, profile_name: str):
+        """Handle a profile being loaded from the Profiles page."""
+        # Re-apply the theme from the newly loaded profile
+        try:
+            if hasattr(self.theme_manager, "apply_theme"):
+                self.theme_manager.apply_theme(self.settings.get_ui_theme())
+        except Exception:
+            pass
+        # Rebuild the settings page so it reflects the new values
+        self._rebuild_settings_page()
+
+    def _rebuild_settings_page(self):
+        """Replace the settings page widget so it picks up current values."""
+        old_index = self.pages.indexOf(self.settings_page)
+        if old_index == -1:
+            return
+        self.pages.removeWidget(self.settings_page)
+        self.settings_page.deleteLater()
+        self.settings_page = SettingsPage(self.theme_manager, self.settings)
+        self.pages.insertWidget(old_index, self.settings_page)
+
+    # --------------------
     # Menu
     # --------------------
 
@@ -147,7 +200,7 @@ class MainWindow(QMainWindow):
             QApplication.quit()
             return
 
-        # For all other indices, show corresponding page (indices 0..4)
+        # For all other indices, show corresponding page (indices 0..5)
         if 0 <= index < self.pages.count():
             self.pages.setCurrentIndex(index)
 
@@ -209,6 +262,7 @@ class MainWindow(QMainWindow):
         for label, index in (
             ("Controller emulation", self.IDX_CONTROLLER_EMULATION),
             ("Remote gamepad", self.IDX_REMOTE_GAMEPAD),
+            ("Profiles", self.IDX_PROFILES),
             ("Hotkeys", self.IDX_HOTKEY),
             ("Settings", self.IDX_SETTINGS),
         ):
@@ -326,4 +380,3 @@ class MainWindow(QMainWindow):
         else:
             self.shutdown()
             super().closeEvent(event)
-
