@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QFont, QPixmap, QPainter, QBrush, QPen, QColor, QIcon
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont, QPixmap, QPainter, QBrush, QPen, QColor
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -253,6 +253,7 @@ class ProfilesPage(QWidget):
         self.detail_desc.setPlaceholderText("Add a description for this profile…")
         self.detail_desc.setFixedHeight(70)
         self.detail_desc.setStyleSheet("font-size:13px;")
+        self.detail_desc.textChanged.connect(self._on_desc_text_changed)
         desc_outer.addWidget(self.detail_desc)
 
         desc_btn_row = QHBoxLayout()
@@ -327,6 +328,12 @@ class ProfilesPage(QWidget):
         self.btn_set_image.clicked.connect(self._on_set_image)
         self.btn_remove_image.clicked.connect(self._on_remove_image)
         self.btn_save_desc.clicked.connect(self._on_save_description)
+
+    def _on_desc_text_changed(self) -> None:
+        """Enable the save-description button when text changes."""
+        name = self._selected_profile_name()
+        if name is not None:
+            self.btn_save_desc.setEnabled(True)
 
     # ------------------------------------------------------------------
     # Refresh / Selection

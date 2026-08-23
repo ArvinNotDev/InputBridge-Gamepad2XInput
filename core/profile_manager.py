@@ -9,13 +9,12 @@ in the user-writable profiles directory.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.utils.paths import data_path, resolve_data_path
+from core.utils.paths import data_path
 
 
 class ProfileManager:
@@ -26,8 +25,6 @@ class ProfileManager:
     snapshot of all settings sections (device, ui, developer) plus metadata
     (name, created timestamp, description, image).
     """
-
-    PROFILES_DIR = "profiles" / Path("user")
 
     def __init__(self, settings_manager) -> None:
         """
@@ -41,7 +38,6 @@ class ProfileManager:
         self._profiles_dir.mkdir(parents=True, exist_ok=True)
         self._images_dir = self._profiles_dir / "_images"
         self._images_dir.mkdir(parents=True, exist_ok=True)
-        self._meta_path = self._profiles_dir / "_index.json"
 
     # ------------------------------------------------------------------
     # Public API

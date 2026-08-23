@@ -432,8 +432,6 @@ class _SidebarAvatar(QLabel):
         self.update()
 
     def paintEvent(self, event) -> None:
-        from pathlib import Path as _P
-
         s = self._size
         if self._pixmap is None or self._pixmap.isNull():
             painter = QPainter(self)
