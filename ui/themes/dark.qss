@@ -253,3 +253,81 @@ QPushButton#settings_save_profile:hover {
     background: #444455;
     margin: 4px 8px;
 }
+
+/* Sidebar avatar */
+#sidebar_avatar_container {
+    background-color: #252530;
+    border-radius: 10px;
+    border: 1px solid #333345;
+}
+
+#sidebar_profile_name {
+    color: #eeeeff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Profile image buttons */
+QPushButton#profiles_set_image_btn {
+    background-color: #2c2c3a;
+    color: #aaaacc;
+    border: 1px solid #444466;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+QPushButton#profiles_set_image_btn:hover {
+    background-color: #3a3a5a;
+    color: #ddddff;
+    border-color: #5a5af0;
+}
+
+QPushButton#profiles_remove_image_btn {
+    background-color: #3a2028;
+    color: #ff6b6b;
+    border: 1px solid #5a2030;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QPushButton#profiles_remove_image_btn:hover {
+    background-color: #5a2030;
+    border-color: #ff6b6b;
+}
+
+QPushButton#profiles_remove_image_btn:disabled {
+    background-color: #2c2c38;
+    color: #555566;
+    border-color: #3a3a4a;
+}
+
+QPushButton#profiles_save_desc_btn {
+    background-color: #2c2c3a;
+    color: #aaaacc;
+    border: 1px solid #444466;
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 11px;
+}
+
+QPushButton#profiles_save_desc_btn:hover {
+    background-color: #3a3a5a;
+    color: #ddddff;
+    border-color: #5a5af0;
+}
+
+QPushButton#profiles_save_desc_btn:disabled {
+    background-color: #252530;
+    color: #555566;
+    border-color: #333345;
+}
+
+QTextEdit {
+    background-color: #252530;
+    color: #dddddd;
+    border: 1px solid #3a3a4a;
+    border-radius: 4px;
+    padding: 6px;
+}

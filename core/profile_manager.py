@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -23,7 +24,7 @@ class ProfileManager:
 
     Each profile is a JSON file stored in ``profiles/user/`` containing a
     snapshot of all settings sections (device, ui, developer) plus metadata
-    (name, created timestamp, description).
+    (name, created timestamp, description, image).
     """
 
     PROFILES_DIR = "profiles" / Path("user")
@@ -38,6 +39,8 @@ class ProfileManager:
         self.settings = settings_manager
         self._profiles_dir = data_path("profiles", "user")
         self._profiles_dir.mkdir(parents=True, exist_ok=True)
+        self._images_dir = self._profiles_dir / "_images"
+        self._images_dir.mkdir(parents=True, exist_ok=True)
         self._meta_path = self._profiles_dir / "_index.json"
 
     # ------------------------------------------------------------------
@@ -52,6 +55,7 @@ class ProfileManager:
             - ``name``: Profile display name
             - ``filename``: JSON filename on disk
             - ``description``: User-provided description (may be empty)
+            - ``image``: Path to profile image, or empty string
             - ``created``: ISO-8601 creation timestamp
             - ``modified``: ISO-8601 last-modified timestamp
         """
@@ -111,12 +115,16 @@ class ProfileManager:
             return False
 
         snapshot = self._snapshot_settings()
+
+        # Preserve existing image and timestamps when overwriting
+        existing_meta = self._read_profile_meta(path) if path.exists() else None
         snapshot["_meta"] = {
             "name": name,
             "description": description,
+            "image": existing_meta.get("image", "") if existing_meta else "",
             "created": (
-                self._read_profile_meta(path, "created")
-                if path.exists()
+                existing_meta.get("created", self._now_iso())
+                if existing_meta
                 else self._now_iso()
             ),
             "modified": self._now_iso(),
@@ -130,12 +138,155 @@ class ProfileManager:
         except OSError:
             return False
 
+    def update_profile_description(self, name: str, description: str) -> bool:
+        """
+        Update only the description of an existing profile.
+
+        :return: ``True`` on success.
+        """
+        data = self.get_profile(name)
+        if data is None:
+            return False
+
+        if "_meta" not in data:
+            data["_meta"] = {"name": name}
+        data["_meta"]["description"] = description
+        data["_meta"]["modified"] = self._now_iso()
+
+        path = self._profile_path(name)
+        if path is None:
+            return False
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except OSError:
+            return False
+
+    def set_profile_image(self, name: str, image_path: str) -> bool:
+        """
+        Set or replace the image for a profile.
+
+        The image is copied into the profiles/_images/ directory and
+        the path is stored in the profile metadata.
+
+        :param name: Profile name.
+        :param image_path: Absolute path to the source image file.
+        :return: ``True`` on success.
+        """
+        data = self.get_profile(name)
+        if data is None:
+            return False
+
+        src = Path(image_path)
+        if not src.is_file():
+            return False
+
+        # Build a stable destination filename from the profile name
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in name)
+        safe_name = safe_name.strip().replace(" ", "_")
+        ext = src.suffix.lower()
+        if ext not in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
+            ext = ".png"
+        dest = self._images_dir / f"{safe_name}{ext}"
+
+        # Remove old image if it exists
+        old_image = data.get("_meta", {}).get("image", "")
+        if old_image:
+            old_path = Path(old_image)
+            if old_path.is_file() and old_path != dest:
+                try:
+                    old_path.unlink()
+                except OSError:
+                    pass
+
+        try:
+            shutil.copy2(src, dest)
+        except OSError:
+            return False
+
+        if "_meta" not in data:
+            data["_meta"] = {"name": name}
+        data["_meta"]["image"] = str(dest)
+        data["_meta"]["modified"] = self._now_iso()
+
+        path = self._profile_path(name)
+        if path is None:
+            return False
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except OSError:
+            return False
+
+    def remove_profile_image(self, name: str) -> bool:
+        """
+        Remove the image from a profile.
+
+        :return: ``True`` on success.
+        """
+        data = self.get_profile(name)
+        if data is None:
+            return False
+
+        old_image = data.get("_meta", {}).get("image", "")
+        if old_image:
+            old_path = Path(old_image)
+            if old_path.is_file():
+                try:
+                    old_path.unlink()
+                except OSError:
+                    pass
+
+        if "_meta" not in data:
+            data["_meta"] = {"name": name}
+        data["_meta"]["image"] = ""
+        data["_meta"]["modified"] = self._now_iso()
+
+        path = self._profile_path(name)
+        if path is None:
+            return False
+
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            return True
+        except OSError:
+            return False
+
+    def get_profile_image_path(self, name: str) -> Optional[str]:
+        """
+        Return the filesystem path to a profile's image, or ``None``.
+        """
+        data = self.get_profile(name)
+        if data is None:
+            return None
+        img = data.get("_meta", {}).get("image", "")
+        if img and Path(img).is_file():
+            return img
+        return None
+
     def delete_profile(self, name: str) -> bool:
         """
         Delete a profile by name.
 
+        Also removes any associated image file.
+
         :return: ``True`` if the file was removed, ``False`` otherwise.
         """
+        # Clean up image first
+        data = self.get_profile(name)
+        if data:
+            img = data.get("_meta", {}).get("image", "")
+            if img:
+                try:
+                    Path(img).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
         path = self._profile_path(name)
         if path is None or not path.exists():
             return False
@@ -204,6 +355,21 @@ class ProfileManager:
             if "_meta" in data:
                 data["_meta"]["name"] = new_name
                 data["_meta"]["modified"] = self._now_iso()
+                # Rename image file if present
+                old_img = data["_meta"].get("image", "")
+                if old_img:
+                    old_img_path = Path(old_img)
+                    if old_img_path.is_file():
+                        ext = old_img_path.suffix
+                        safe_new = "".join(
+                            c if c.isalnum() or c in " -_" else "_" for c in new_name
+                        ).strip().replace(" ", "_")
+                        new_img = self._images_dir / f"{safe_new}{ext}"
+                        try:
+                            shutil.move(str(old_img_path), str(new_img))
+                            data["_meta"]["image"] = str(new_img)
+                        except OSError:
+                            pass
             new_path.write_text(
                 json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
             )
@@ -243,6 +409,7 @@ class ProfileManager:
         source_data["_meta"] = {
             "name": new_name,
             "description": source_data.get("_meta", {}).get("description", ""),
+            "image": "",  # Don't share images between profiles
             "created": self._now_iso(),
             "modified": self._now_iso(),
         }
@@ -311,6 +478,7 @@ class ProfileManager:
                     "name": path.stem.replace("_", " ").title(),
                     "filename": path.name,
                     "description": "",
+                    "image": "",
                     "created": "",
                     "modified": "",
                 }
