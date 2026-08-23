@@ -29,7 +29,7 @@ from core.utils.paths import data_path, resource_path
 
 class MainWindow(QMainWindow):
 
-    WINDOW_TITLE = "Universal Remapper"
+    WINDOW_TITLE = "InputBridge-Gamepad2XInput"
     WINDOW_WIDTH = 1100
     WINDOW_HEIGHT = 700
 
@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
         # 4: Test XInput
         self.pages.addWidget(controllers_page)
         # 5: Settings
-        self.settings_page = SettingsPage(self.theme_manager, self.settings)
+        self.settings_page = SettingsPage(self.theme_manager, self.settings, self.profile_manager)
         self.pages.addWidget(self.settings_page)
 
         main_layout.addLayout(left_column)

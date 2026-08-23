@@ -3,28 +3,32 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QLabel, QPushButton, QSlider, QFrame, QListWidget, QStackedWidget,
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
-    QSizePolicy, QSpacerItem, QDoubleSpinBox
+    QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter
 )
 from PySide6.QtCore import Qt
 
 
 class SettingsPage(QWidget):
-    def __init__(self, theme_manager, settings: object):
+    def __init__(self, theme_manager, settings: object, profile_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
         self.settings = settings
+        self.profile_manager = profile_manager
 
         # Make sure config is normalized (all keys exist / sane) before we read anything
         if hasattr(self.settings, "normalize"):
             try:
                 self.settings.normalize()
             except Exception:
-                # If normalize fails for any reason, we still continue with fallbacks
                 pass
 
-        root = QHBoxLayout(self)
+        root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(18)
+        root.setSpacing(0)
+
+        # ====== Top area: menu + pages (splitter) ======
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
 
         # ====== Left menu ======
         self.menu = QListWidget()
@@ -33,11 +37,13 @@ class SettingsPage(QWidget):
         self.menu.addItem("Developer")
         self.menu.setFixedWidth(160)
         self.menu.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        root.addWidget(self.menu)
+        splitter.addWidget(self.menu)
 
         # ====== Pages stack ======
         self.pages = QStackedWidget()
-        root.addWidget(self.pages, 1)
+        splitter.addWidget(self.pages)
+
+        root.addWidget(splitter, 1)
 
         # ==========================================================
         # DEVICE PAGE
@@ -290,6 +296,32 @@ class SettingsPage(QWidget):
         self.pages.addWidget(dev_page)
 
         # ==========================================================
+        # SHARED BOTTOM BAR – Save to Profile
+        # ==========================================================
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("QFrame { color: #444455; margin: 4px 0; }")
+        root.addWidget(separator)
+
+        bottom_bar = QHBoxLayout()
+        bottom_bar.setContentsMargins(0, 6, 0, 0)
+        bottom_bar.setSpacing(8)
+
+        self.lbl_profile_status = QLabel("")
+        self.lbl_profile_status.setStyleSheet("font-size:12px; color:#888899;")
+        bottom_bar.addWidget(self.lbl_profile_status)
+        bottom_bar.addStretch()
+
+        self.btn_save_to_profile = QPushButton("  Save Settings to Profile  ")
+        self.btn_save_to_profile.setObjectName("settings_save_profile")
+        self.btn_save_to_profile.setProperty("class", "primary")
+        self.btn_save_to_profile.setFixedHeight(36)
+        bottom_bar.addWidget(self.btn_save_to_profile)
+
+        root.addLayout(bottom_bar)
+
+        # ==========================================================
         # MENU → STACK CONNECTION
         # ==========================================================
         self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -394,6 +426,9 @@ class SettingsPage(QWidget):
         except Exception:
             pass
 
+        # Update active profile label
+        self._update_profile_label()
+
         # ==========================================================
         # SIGNALS
         # ==========================================================
@@ -412,6 +447,153 @@ class SettingsPage(QWidget):
 
         self.dev_restore2.clicked.connect(self.restore_dev_defaults)
         self.dev_apply2.clicked.connect(self.apply_dev)
+
+        self.btn_save_to_profile.clicked.connect(self._on_save_to_profile)
+
+    # ==========================================================
+    # PROFILE HELPERS
+    # ==========================================================
+
+    def set_profile_manager(self, profile_manager):
+        """Set or update the profile manager reference (called after init)."""
+        self.profile_manager = profile_manager
+        self._update_profile_label()
+
+    def _update_profile_label(self):
+        """Refresh the status label showing the active profile name."""
+        if self.profile_manager is None:
+            self.lbl_profile_status.setText("")
+            return
+        name = self.profile_manager.get_active_profile_name()
+        if name:
+            self.lbl_profile_status.setText(f"Active profile: {name}")
+        else:
+            self.lbl_profile_status.setText("No profile active")
+
+    def _apply_all_current_values(self):
+        """
+        Push every visible UI control value into the SettingsManager
+        (without writing to disk — the caller decides when to save).
+        """
+        # Device
+        self.settings.set_polling_rate(self.spin_poll.value())
+        self.settings.set_auto_reconnect(self.chk_reconnect.isChecked())
+        self.settings.set_dpad_as_mouse(self.chk_dpad_mouse.isChecked())
+        self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
+        self.settings.set_mouse_sensitivity(self.spin_mouse_sens.value())
+
+        left = self.left_slider.value() / 1000.0
+        right = self.right_slider.value() / 1000.0
+        self.settings.set_deadzones(left, right)
+
+        left_inv = (self.chk_left_invert_x.isChecked(), self.chk_left_invert_y.isChecked())
+        right_inv = (self.chk_right_invert_x.isChecked(), self.chk_right_invert_y.isChecked())
+        self.settings.set_joystick_invertion(left_inv, right_inv)
+        self.settings.set_button_invertion(self.chk_button_invert.isChecked())
+
+        # UI
+        self.settings.set_ui_language(self.combo_lang.currentText())
+        self.settings.set_ui_theme(self.combo_theme.currentText())
+
+        # Developer
+        self.settings.set_developer_debug(self.chk_debug.isChecked())
+        self.settings.set_raw_hid_debug(self.chk_raw_hid.isChecked())
+        self.settings.set_log_to_file(self.chk_log_to_file.isChecked())
+        self.settings.set_log_file_path(self.edit_log_path.text() or "logs/mapper.log")
+
+    def _on_save_to_profile(self):
+        """Apply current UI values, then let the user pick or create a profile to save to."""
+        if self.profile_manager is None:
+            QMessageBox.information(
+                self,
+                "Profiles Not Available",
+                "Profile manager is not initialized.",
+            )
+            return
+
+        # First apply all current values into the settings config
+        self._apply_all_current_values()
+        self.settings.save()
+
+        # Build choice list: existing profiles + "Create new…"
+        profiles = self.profile_manager.list_profiles()
+        active = self.profile_manager.get_active_profile_name()
+        items = [p.get("name", "Unknown") for p in profiles]
+
+        # Ask user what to do
+        from PySide6.QtWidgets import QMenu, QPushButton
+
+        # Show a context-menu style picker anchored to the button
+        menu = QMenu(self)
+        menu.setObjectName("settings_profile_menu")
+
+        if items:
+            for name in items:
+                label = f"  {name}  (overwrite)" if name == active else f"  {name}"
+                action = menu.addAction(label)
+                action.setData(name)
+            menu.addSeparator()
+
+        new_action = menu.addAction("  ＋ Save as new profile…")
+        new_action.setData("__new__")
+
+        chosen = menu.exec(self.btn_save_to_profile.mapToGlobal(
+            self.btn_save_to_profile.rect().bottomLeft()
+        ))
+
+        if chosen is None:
+            return
+
+        target = chosen.data()
+
+        if target == "__new__":
+            name, ok = QInputDialog.getText(
+                self,
+                "New Profile",
+                "Profile name:",
+                QLineEdit.Normal,
+            )
+            if not ok or not name.strip():
+                return
+            name = name.strip()
+
+            if self.profile_manager.get_profile(name) is not None:
+                reply = QMessageBox.question(
+                    self,
+                    "Overwrite Profile?",
+                    f'A profile named "{name}" already exists.\nOverwrite it?',
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    return
+
+            if self.profile_manager.save_profile(name, description="", overwrite=True):
+                self.profile_manager.activate_profile(name)
+                self._update_profile_label()
+                QMessageBox.information(
+                    self,
+                    "Profile Saved",
+                    f'Settings saved to profile "{name}".',
+                )
+            else:
+                QMessageBox.critical(
+                    self, "Error", f'Failed to save profile "{name}".'
+                )
+        else:
+            # Overwrite existing
+            if self.profile_manager.save_profile(target, description="", overwrite=True):
+                self.profile_manager.activate_profile(target)
+                self._update_profile_label()
+                QMessageBox.information(
+                    self,
+                    "Profile Updated",
+                    f'Settings saved to profile "{target}".',
+                )
+            else:
+                QMessageBox.critical(
+                    self, "Error", f'Failed to update profile "{target}".'
+                )
 
     # ==========================================================
     # DEVICE ACTIONS
@@ -468,7 +650,6 @@ class SettingsPage(QWidget):
     # ==========================================================
     def restore_ui_defaults(self):
         self.combo_lang.setCurrentText("eng")
-        # choose "dark" if available, else first item
         if "dark" in [self.combo_theme.itemText(i) for i in range(self.combo_theme.count())]:
             self.combo_theme.setCurrentText("dark")
         else:

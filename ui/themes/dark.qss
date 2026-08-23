@@ -205,3 +205,51 @@ QSplitter::handle {
     margin: 8px 4px;
     border-radius: 1px;
 }
+
+QPushButton#settings_save_profile {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #4ecdc4, stop:1 #2eaa9b
+    );
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+QPushButton#settings_save_profile:hover {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #6ee0d8, stop:1 #4ecdc4
+    );
+}
+
+#settings_profile_menu {
+    background-color: #2c2c38;
+    border: 2px solid #444455;
+    border-radius: 8px;
+    padding: 6px;
+    color: #dddddd;
+}
+
+#settings_profile_menu QMenu::item {
+    padding: 8px 24px;
+    border-radius: 4px;
+    color: #dddddd;
+}
+
+#settings_profile_menu QMenu::item:selected {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #5a5af0, stop:1 #3f3fd0
+    );
+    color: #ffffff;
+}
+
+#settings_profile_menu QMenu::separator {
+    height: 1px;
+    background: #444455;
+    margin: 4px 8px;
+}

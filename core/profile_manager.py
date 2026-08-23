@@ -1,5 +1,5 @@
 """
-Profile Manager for Universal Remapper.
+Profile Manager for InputBridge-Gamepad2XInput.
 
 Manages user-created settings profiles. Each profile is a snapshot of the
 application's device, UI, and developer settings, stored as a JSON file

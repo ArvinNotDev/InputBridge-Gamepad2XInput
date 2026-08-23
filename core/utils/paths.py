@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-APP_NAME = "Universal Remapper"
+APP_NAME = "InputBridge-Gamepad2XInput"
 
 
 def _source_root() -> Path:
