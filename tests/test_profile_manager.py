@@ -154,10 +154,31 @@ class TestProfileManager:
     def test_settings_round_trip(self):
         """Activating a profile should update the settings config."""
         self.settings.config.set("device", "polling_rate", "5.0")
+        self.settings.config["profile"] = {"active": "personal"}
         self.pm.save_profile("Custom")
         self.settings.config.set("device", "polling_rate", "1.0")
         self.pm.activate_profile("Custom")
         assert self.settings.config.get("device", "polling_rate") == "5.0"
+        assert self.settings.config.get("profile", "active") == "Custom"
+
+    def test_profile_image_metadata_is_portable_and_cleanup_is_scoped(self):
+        self.pm.save_profile("With Image")
+        source = Path(self.tmpdir) / "source.png"
+        source.write_bytes(b"not-a-real-image")
+
+        assert self.pm.set_profile_image("With Image", str(source))
+        profile_data = self.pm.get_profile("With Image")
+        metadata = profile_data["_meta"]
+        assert metadata["image"] == "With_Image.png"
+        assert self.pm.get_profile_image_path("With Image") is not None
+
+        outside = Path(self.tmpdir) / "outside.txt"
+        outside.write_text("keep me", encoding="utf-8")
+        metadata["image"] = str(outside)
+        profile_path = Path(self.tmpdir) / "profiles" / "user" / "With_Image.json"
+        profile_path.write_text(json.dumps(profile_data), encoding="utf-8")
+        assert self.pm.remove_profile_image("With Image")
+        assert outside.exists()
 
     # -- Default profile --
 

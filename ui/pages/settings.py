@@ -511,10 +511,6 @@ class SettingsPage(QWidget):
             )
             return
 
-        # First apply all current values into the settings config
-        self._apply_all_current_values()
-        self.settings.save()
-
         # Build choice list: existing profiles + "Create new…"
         profiles = self.profile_manager.list_profiles()
         active = self.profile_manager.get_active_profile_name()
@@ -568,7 +564,10 @@ class SettingsPage(QWidget):
                 if reply != QMessageBox.Yes:
                     return
 
-            if self.profile_manager.save_profile(name, description="", overwrite=True):
+            self._apply_all_current_values()
+            existing = self.profile_manager.get_profile(name)
+            description = existing.get("_meta", {}).get("description", "") if existing else ""
+            if self.profile_manager.save_profile(name, description=description, overwrite=True):
                 self.profile_manager.activate_profile(name)
                 self._update_profile_label()
                 QMessageBox.information(
@@ -582,7 +581,10 @@ class SettingsPage(QWidget):
                 )
         else:
             # Overwrite existing
-            if self.profile_manager.save_profile(target, description="", overwrite=True):
+            self._apply_all_current_values()
+            existing = self.profile_manager.get_profile(target)
+            description = existing.get("_meta", {}).get("description", "") if existing else ""
+            if self.profile_manager.save_profile(target, description=description, overwrite=True):
                 self.profile_manager.activate_profile(target)
                 self._update_profile_label()
                 QMessageBox.information(

@@ -358,6 +358,11 @@ class ProfilesPage(QWidget):
 
             self.profile_list.addItem(item)
 
+        if self.profile_list.count():
+            self._select_profile(active if active else profiles[0].get("name", ""))
+        else:
+            self._clear_detail()
+
     def _on_selection_changed(self, row: int) -> None:
         item = self.profile_list.item(row)
         if item is None:

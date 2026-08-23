@@ -128,8 +128,7 @@ class ProfileManager:
 
         try:
             self._profiles_dir.mkdir(parents=True, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(snapshot, f, indent=2, ensure_ascii=False)
+            self._write_json(path, snapshot)
             return True
         except OSError:
             return False
@@ -154,8 +153,7 @@ class ProfileManager:
             return False
 
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            self._write_json(path, data)
             return True
         except OSError:
             return False
@@ -180,8 +178,7 @@ class ProfileManager:
             return False
 
         # Build a stable destination filename from the profile name
-        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in name)
-        safe_name = safe_name.strip().replace(" ", "_")
+        safe_name = self._safe_stem(name)
         ext = src.suffix.lower()
         if ext not in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
             ext = ".png"
@@ -189,9 +186,8 @@ class ProfileManager:
 
         # Remove old image if it exists
         old_image = data.get("_meta", {}).get("image", "")
-        if old_image:
-            old_path = Path(old_image)
-            if old_path.is_file() and old_path != dest:
+        old_path = self._stored_image_path(old_image)
+        if old_path and old_path.is_file() and old_path != dest:
                 try:
                     old_path.unlink()
                 except OSError:
@@ -204,7 +200,7 @@ class ProfileManager:
 
         if "_meta" not in data:
             data["_meta"] = {"name": name}
-        data["_meta"]["image"] = str(dest)
+        data["_meta"]["image"] = dest.name
         data["_meta"]["modified"] = self._now_iso()
 
         path = self._profile_path(name)
@@ -212,8 +208,7 @@ class ProfileManager:
             return False
 
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            self._write_json(path, data)
             return True
         except OSError:
             return False
@@ -229,13 +224,12 @@ class ProfileManager:
             return False
 
         old_image = data.get("_meta", {}).get("image", "")
-        if old_image:
-            old_path = Path(old_image)
-            if old_path.is_file():
-                try:
-                    old_path.unlink()
-                except OSError:
-                    pass
+        old_path = self._stored_image_path(old_image)
+        if old_path and old_path.is_file():
+            try:
+                old_path.unlink()
+            except OSError:
+                pass
 
         if "_meta" not in data:
             data["_meta"] = {"name": name}
@@ -247,8 +241,7 @@ class ProfileManager:
             return False
 
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            self._write_json(path, data)
             return True
         except OSError:
             return False
@@ -261,8 +254,9 @@ class ProfileManager:
         if data is None:
             return None
         img = data.get("_meta", {}).get("image", "")
-        if img and Path(img).is_file():
-            return img
+        image_path = self._stored_image_path(img)
+        if image_path and image_path.is_file():
+            return str(image_path)
         return None
 
     def delete_profile(self, name: str) -> bool:
@@ -277,9 +271,10 @@ class ProfileManager:
         data = self.get_profile(name)
         if data:
             img = data.get("_meta", {}).get("image", "")
-            if img:
+            image_path = self._stored_image_path(img)
+            if image_path:
                 try:
-                    Path(img).unlink(missing_ok=True)
+                    image_path.unlink(missing_ok=True)
                 except OSError:
                     pass
 
@@ -353,22 +348,17 @@ class ProfileManager:
                 data["_meta"]["modified"] = self._now_iso()
                 # Rename image file if present
                 old_img = data["_meta"].get("image", "")
-                if old_img:
-                    old_img_path = Path(old_img)
-                    if old_img_path.is_file():
-                        ext = old_img_path.suffix
-                        safe_new = "".join(
-                            c if c.isalnum() or c in " -_" else "_" for c in new_name
-                        ).strip().replace(" ", "_")
-                        new_img = self._images_dir / f"{safe_new}{ext}"
-                        try:
-                            shutil.move(str(old_img_path), str(new_img))
-                            data["_meta"]["image"] = str(new_img)
-                        except OSError:
-                            pass
-            new_path.write_text(
-                json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
-            )
+                old_img_path = self._stored_image_path(old_img)
+                if old_img_path and old_img_path.is_file():
+                    ext = old_img_path.suffix
+                    safe_new = self._safe_stem(new_name)
+                    new_img = self._images_dir / f"{safe_new}{ext}"
+                    try:
+                        shutil.move(str(old_img_path), str(new_img))
+                        data["_meta"]["image"] = new_img.name
+                    except OSError:
+                        pass
+            self._write_json(new_path, data)
             old_path.unlink()
 
             # Update active profile reference if needed
@@ -411,8 +401,7 @@ class ProfileManager:
         }
 
         try:
-            with open(new_path, "w", encoding="utf-8") as f:
-                json.dump(source_data, f, indent=2, ensure_ascii=False)
+            self._write_json(new_path, source_data)
             return True
         except OSError:
             return False
@@ -423,8 +412,7 @@ class ProfileManager:
 
     def _profile_path(self, name: str) -> Optional[Path]:
         """Build the filesystem path for a profile name."""
-        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in name)
-        safe = safe.strip().replace(" ", "_")
+        safe = self._safe_stem(name)
         if not safe:
             return None
         return self._profiles_dir / f"{safe}.json"
@@ -435,6 +423,8 @@ class ProfileManager:
         cfg = self.settings.config
 
         for section in cfg.sections():
+            if section == "profile":
+                continue
             snap[section] = dict(cfg[section])
 
         return snap
@@ -445,7 +435,7 @@ class ProfileManager:
         """
         cfg = self.settings.config
         for section, values in data.items():
-            if section.startswith("_"):
+            if section.startswith("_") or section == "profile":
                 continue
             if not isinstance(values, dict):
                 continue
@@ -459,6 +449,35 @@ class ProfileManager:
     def _now_iso() -> str:
         """Return an ISO-8601 timestamp string."""
         return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
+
+    @staticmethod
+    def _safe_stem(name: str) -> str:
+        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in name)
+        return safe.strip().replace(" ", "_") or "profile"
+
+    def _stored_image_path(self, value: Any) -> Optional[Path]:
+        """Resolve image metadata while keeping cleanup inside the image dir."""
+        if not value:
+            return None
+        candidate = Path(str(value))
+        if not candidate.is_absolute():
+            candidate = self._images_dir / candidate.name
+        try:
+            candidate = candidate.resolve()
+            candidate.relative_to(self._images_dir.resolve())
+        except (OSError, ValueError):
+            return None
+        return candidate
+
+    @staticmethod
+    def _write_json(path: Path, data: Dict[str, Any]) -> None:
+        """Write JSON atomically to avoid leaving a truncated profile."""
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
 
     def _read_profile_meta(
         self, path: Path, key: Optional[str] = None

@@ -49,7 +49,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="UniversalRemapper",
+    name="InputBridge-Gamepad2XInput",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
