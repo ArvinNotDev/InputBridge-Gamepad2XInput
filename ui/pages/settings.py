@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 
 class SettingsPage(QWidget):
@@ -14,6 +14,10 @@ class SettingsPage(QWidget):
         self.theme_manager = theme_manager
         self.settings = settings
         self.profile_manager = profile_manager
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(350)
+        self._autosave_timer.timeout.connect(self._save_current_values)
 
         # Make sure config is normalized (all keys exist / sane) before we read anything
         if hasattr(self.settings, "normalize"):
@@ -170,11 +174,11 @@ class SettingsPage(QWidget):
         # Device bottom buttons
         device_buttons = QHBoxLayout()
         device_buttons.addItem(QSpacerItem(20, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.dev_restore = QPushButton("Restore Default")
+        self.dev_restore = QPushButton("Reset")
         self.dev_restore.setObjectName("secondary")
         self.dev_restore.setProperty("class", "secondary")
         self.dev_restore.setFixedWidth(140)
-        self.dev_apply = QPushButton("Apply")
+        self.dev_apply = QPushButton("Apply Now")
         self.dev_apply.setObjectName("primary")
         self.dev_apply.setFixedWidth(110)
         device_buttons.addWidget(self.dev_restore)
@@ -231,10 +235,10 @@ class SettingsPage(QWidget):
 
         ui_buttons = QHBoxLayout()
         ui_buttons.addItem(QSpacerItem(20, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.ui_restore = QPushButton("Restore Default")
+        self.ui_restore = QPushButton("Reset")
         self.ui_restore.setObjectName("secondary")
         self.ui_restore.setFixedWidth(140)
-        self.ui_apply = QPushButton("Apply")
+        self.ui_apply = QPushButton("Apply Now")
         self.ui_apply.setObjectName("primary")
         self.ui_apply.setFixedWidth(110)
         ui_buttons.addWidget(self.ui_restore)
@@ -283,10 +287,10 @@ class SettingsPage(QWidget):
 
         dev_buttons = QHBoxLayout()
         dev_buttons.addItem(QSpacerItem(20, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.dev_restore2 = QPushButton("Restore Default")
+        self.dev_restore2 = QPushButton("Reset")
         self.dev_restore2.setObjectName("secondary")
         self.dev_restore2.setFixedWidth(140)
-        self.dev_apply2 = QPushButton("Apply")
+        self.dev_apply2 = QPushButton("Apply Now")
         self.dev_apply2.setObjectName("primary")
         self.dev_apply2.setFixedWidth(110)
         dev_buttons.addWidget(self.dev_restore2)
@@ -311,6 +315,9 @@ class SettingsPage(QWidget):
         self.lbl_profile_status = QLabel("")
         self.lbl_profile_status.setStyleSheet("font-size:12px; color:#888899;")
         bottom_bar.addWidget(self.lbl_profile_status)
+        self.lbl_autosave_status = QLabel("Auto-save is on")
+        self.lbl_autosave_status.setObjectName("settings_autosave_status")
+        bottom_bar.addWidget(self.lbl_autosave_status)
         bottom_bar.addStretch()
 
         self.btn_save_to_profile = QPushButton("  Save Settings to Profile  ")
@@ -433,11 +440,32 @@ class SettingsPage(QWidget):
         # SIGNALS
         # ==========================================================
         self.left_slider.valueChanged.connect(
-            lambda v: self.left_val.setText(f"{v/1000:.2f}")
+            lambda v: (self.left_val.setText(f"{v/1000:.2f}"), self._schedule_autosave())
         )
         self.right_slider.valueChanged.connect(
-            lambda v: self.right_val.setText(f"{v/1000:.2f}")
+            lambda v: (self.right_val.setText(f"{v/1000:.2f}"), self._schedule_autosave())
         )
+
+        # Settings are persisted automatically whenever a control changes.
+        for widget, signal_name in (
+            (self.spin_poll, "valueChanged"),
+            (self.chk_reconnect, "toggled"),
+            (self.chk_dpad_mouse, "toggled"),
+            (self.chk_mouse_mode, "toggled"),
+            (self.spin_mouse_sens, "valueChanged"),
+            (self.chk_left_invert_x, "toggled"),
+            (self.chk_left_invert_y, "toggled"),
+            (self.chk_right_invert_x, "toggled"),
+            (self.chk_right_invert_y, "toggled"),
+            (self.chk_button_invert, "toggled"),
+            (self.combo_lang, "currentTextChanged"),
+            (self.combo_theme, "currentTextChanged"),
+            (self.chk_debug, "toggled"),
+            (self.chk_raw_hid, "toggled"),
+            (self.chk_log_to_file, "toggled"),
+            (self.edit_log_path, "textChanged"),
+        ):
+            getattr(getattr(widget, signal_name), "connect")(self._schedule_autosave)
 
         self.dev_restore.clicked.connect(self.restore_device_defaults)
         self.dev_apply.clicked.connect(self.apply_device)
@@ -500,6 +528,23 @@ class SettingsPage(QWidget):
         self.settings.set_raw_hid_debug(self.chk_raw_hid.isChecked())
         self.settings.set_log_to_file(self.chk_log_to_file.isChecked())
         self.settings.set_log_file_path(self.edit_log_path.text() or "logs/mapper.log")
+
+    def _schedule_autosave(self, *_args) -> None:
+        """Debounce writes while keeping settings persistently up to date."""
+        self._autosave_timer.start()
+
+    def _save_current_values(self) -> None:
+        """Write the current controls to disk and refresh the save indicator."""
+        self._apply_all_current_values()
+        self.settings.save()
+        self.lbl_autosave_status.setText("✓ Auto-saved")
+        if self.combo_theme.currentText() != getattr(
+            self.theme_manager, "current_theme", ""
+        ):
+            try:
+                self.theme_manager.apply_theme(self.combo_theme.currentText())
+            except Exception:
+                pass
 
     def _on_save_to_profile(self):
         """Apply current UI values, then let the user pick or create a profile to save to."""
@@ -615,6 +660,7 @@ class SettingsPage(QWidget):
         self.chk_right_invert_x.setChecked(False)
         self.chk_right_invert_y.setChecked(False)
         self.chk_button_invert.setChecked(False)
+        self._save_current_values()
 
     def apply_device(self):
         old_polling = self.settings.get_polling_rate()
@@ -657,6 +703,7 @@ class SettingsPage(QWidget):
         else:
             if self.combo_theme.count() > 0:
                 self.combo_theme.setCurrentIndex(0)
+        self._save_current_values()
 
     def apply_ui(self):
         self.settings.set_ui_language(self.combo_lang.currentText())
@@ -677,6 +724,7 @@ class SettingsPage(QWidget):
         self.chk_raw_hid.setChecked(False)
         self.chk_log_to_file.setChecked(False)
         self.edit_log_path.setText("logs/mapper.log")
+        self._save_current_values()
 
     def apply_dev(self):
         self.settings.set_developer_debug(self.chk_debug.isChecked())
