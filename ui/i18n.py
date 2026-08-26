@@ -1,0 +1,242 @@
+"""Small runtime translation layer for the desktop UI."""
+
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QAbstractButton,
+    QComboBox,
+    QGroupBox,
+    QLabel,
+    QListWidget,
+    QWidget,
+)
+
+
+LANGUAGE_NAMES = {
+    "eng": "English",
+    "fa": "فارسی",
+    "es": "Español",
+}
+
+_TRANSLATIONS = {
+    "fa": {
+        "Controller Emulation": "🎮 شبیه‌سازی دسته",
+        "Remote Gamepad": "📱 دستهٔ راه دور",
+        "Hotkeys": "⌨️ میانبرها",
+        "Profiles": "🗂️ پروفایل‌ها",
+        "Test XInput": "🧪 تست XInput",
+        "Settings": "⚙️ تنظیمات",
+        "Quit": "🚪 خروج",
+        "No profile active": "پروفایل فعالی وجود ندارد",
+        "Active profile": "پروفایل فعال",
+        "Open ArvinNotDev on GitHub": "باز کردن صفحهٔ ArvinNotDev در گیت‌هاب",
+        "Device": "دستگاه",
+        "UI": "رابط کاربری",
+        "Developer": "توسعه‌دهنده",
+        "Device Settings": "تنظیمات دستگاه",
+        "UI Settings": "تنظیمات رابط کاربری",
+        "Developer Settings": "تنظیمات توسعه‌دهنده",
+        "Polling rate (Hz)": "نرخ نمونه‌برداری (هرتز)",
+        "Auto reconnect": "اتصال مجدد خودکار",
+        "D-Pad as mouse": "تبدیل D-Pad به ماوس",
+        "Mouse mode": "حالت ماوس",
+        "Mouse sensitivity": "حساسیت ماوس",
+        "Left joystick deadzone": "ناحیهٔ مردهٔ جوی‌استیک چپ",
+        "Right joystick deadzone": "ناحیهٔ مردهٔ جوی‌استیک راست",
+        "Axis inversion": "معکوس‌سازی محورها",
+        "Left": "چپ",
+        "Right": "راست",
+        "Invert X joystick": "معکوس‌سازی محور X",
+        "Invert Y joystick": "معکوس‌سازی محور Y",
+        "Invert buttons": "معکوس‌سازی دکمه‌ها",
+        "Language": "زبان",
+        "Theme": "پوسته",
+        "Debug": "اشکال‌زدایی",
+        "Raw HID debug": "اشکال‌زدایی HID خام",
+        "Log to file": "ثبت گزارش در فایل",
+        "Log file path": "مسیر فایل گزارش",
+        "Reset": "بازنشانی",
+        "Apply Now": "اعمال فوری",
+        "Auto-save is on": "ذخیرهٔ خودکار فعال است",
+        "✓ Auto-saved": "✓ ذخیرهٔ خودکار انجام شد",
+        "Save Settings to Profile": "ذخیرهٔ تنظیمات در پروفایل",
+        "Profiles Not Available": "پروفایل‌ها در دسترس نیستند",
+        "Profile manager is not initialized.": "مدیر پروفایل آماده نشده است.",
+        "New Profile": "پروفایل جدید",
+        "Profile name:": "نام پروفایل:",
+        "Overwrite Profile?": "بازنویسی پروفایل؟",
+        "Profile Saved": "پروفایل ذخیره شد",
+        "Profile Updated": "پروفایل به‌روزرسانی شد",
+        "Profiles": "پروفایل‌ها",
+        "Manage your application settings profiles": "پروفایل‌های تنظیمات برنامه را مدیریت کنید",
+        "Select a profile": "یک پروفایل انتخاب کنید",
+        "Description": "توضیحات",
+        "Add a description for this profile…": "برای این پروفایل توضیحی بنویسید…",
+        "Save Description": "ذخیرهٔ توضیحات",
+        "Metadata": "اطلاعات",
+        "Created: —": "ساخته‌شده: —",
+        "Modified: —": "آخرین تغییر: —",
+        "Settings Summary": "خلاصهٔ تنظیمات",
+        "Activate Profile": "فعال‌سازی پروفایل",
+        "✓ Active": "✓ فعال",
+        "＋ New": "＋ جدید",
+        "⧉ Copy": "⧉ کپی",
+        "✎ Rename": "✎ تغییر نام",
+        "🗑 Delete": "🗑 حذف",
+        "📷 Set Image": "📷 انتخاب تصویر",
+        "Remove profile image": "حذف تصویر پروفایل",
+        "Save as new profile…": "ذخیره به‌عنوان پروفایل جدید…",
+        "Overwrite": "بازنویسی",
+        "Emulated Devices": "دستگاه‌های شبیه‌سازی‌شده",
+        "Battery": "باتری",
+        "Connected Clients": "کلاینت‌های متصل",
+        "Trusted Platforms": "دستگاه‌های مورد اعتماد",
+        "Start Server": "شروع سرور",
+        "Stop Server": "توقف سرور",
+        "Remove": "حذف",
+        "Disconnect": "قطع اتصال",
+        "Emulate": "شبیه‌سازی",
+        "Stop": "توقف",
+        "Choose a controller to define hotkeys on.\n(Hotkeys will be applied to all controllers.)":
+            "دسته‌ای را برای تعریف میانبر انتخاب کنید.\n(میانبرها روی همهٔ دسته‌ها اعمال می‌شوند.)",
+        "Add Hotkey": "افزودن میانبر",
+        "Delete Hotkey": "حذف میانبر",
+        "Redo": "دوباره",
+        "Apply": "اعمال",
+        "Current Hotkeys": "میانبرهای فعلی",
+        "Hotkey Settings": "تنظیمات میانبر",
+        "Xbox 360 Controller Monitor": "مانیتور دستهٔ Xbox 360",
+        "Buttons": "دکمه‌ها",
+        "No buttons pressed": "هیچ دکمه‌ای فشرده نشده است",
+        "Controller": "دسته",
+        "HidHide": "HidHide",
+        "Unhide All": "نمایش همه",
+        "Open Link": "باز کردن لینک",
+        "Hide": "مخفی کردن",
+        "Unhide": "نمایش",
+        "Hidden": "مخفی",
+        "Visible": "قابل مشاهده",
+        "Unknown": "ناشناخته",
+        "English": "انگلیسی",
+        "فارسی": "فارسی",
+        "Español": "اسپانیایی",
+    },
+    "es": {
+        "Controller Emulation": "🎮 Emulación de mandos",
+        "Remote Gamepad": "📱 Gamepad remoto",
+        "Hotkeys": "⌨️ Atajos",
+        "Profiles": "🗂️ Perfiles",
+        "Test XInput": "🧪 Probar XInput",
+        "Settings": "⚙️ Ajustes",
+        "Quit": "🚪 Salir",
+        "No profile active": "No hay perfil activo",
+        "Active profile": "Perfil activo",
+        "Device": "Dispositivo",
+        "UI": "Interfaz",
+        "Developer": "Desarrollador",
+        "Device Settings": "Ajustes del dispositivo",
+        "UI Settings": "Ajustes de la interfaz",
+        "Developer Settings": "Ajustes del desarrollador",
+        "Auto reconnect": "Reconexión automática",
+        "D-Pad as mouse": "D-Pad como ratón",
+        "Mouse mode": "Modo ratón",
+        "Mouse sensitivity": "Sensibilidad del ratón",
+        "Axis inversion": "Inversión de ejes",
+        "Language": "Idioma",
+        "Theme": "Tema",
+        "Reset": "Restablecer",
+        "Apply Now": "Aplicar ahora",
+        "Auto-save is on": "Guardado automático activo",
+        "Save Settings to Profile": "Guardar ajustes en el perfil",
+        "Profiles": "Perfiles",
+        "Manage your application settings profiles": "Gestiona tus perfiles de configuración",
+        "Select a profile": "Selecciona un perfil",
+        "Description": "Descripción",
+        "Save Description": "Guardar descripción",
+        "Metadata": "Metadatos",
+        "Settings Summary": "Resumen de ajustes",
+        "Activate Profile": "Activar perfil",
+        "＋ New": "＋ Nuevo",
+        "⧉ Copy": "⧉ Copiar",
+        "✎ Rename": "✎ Renombrar",
+        "🗑 Delete": "🗑 Eliminar",
+        "📷 Set Image": "📷 Elegir imagen",
+        "Emulated Devices": "Dispositivos emulados",
+        "Connected Clients": "Clientes conectados",
+        "Trusted Platforms": "Plataformas de confianza",
+        "Start Server": "Iniciar servidor",
+        "Stop Server": "Detener servidor",
+        "Remove": "Eliminar",
+        "Disconnect": "Desconectar",
+        "Emulate": "Emular",
+        "Stop": "Detener",
+        "Redo": "Rehacer",
+        "Apply": "Aplicar",
+        "Current Hotkeys": "Atajos actuales",
+        "HidHide": "HidHide",
+        "Unhide All": "Mostrar todos",
+        "Open Link": "Abrir enlace",
+        "Hide": "Ocultar",
+        "Unhide": "Mostrar",
+        "Hidden": "Oculto",
+        "Visible": "Visible",
+        "Unknown": "Desconocido",
+        "English": "Inglés",
+        "فارسی": "Persa",
+        "Español": "Español",
+    },
+}
+
+
+def tr(text: str, language: str = "eng") -> str:
+    """Translate a source string, leaving unknown/dynamic text untouched."""
+    if not text or language == "eng":
+        return text
+    return _TRANSLATIONS.get(language, {}).get(text, text)
+
+
+def _translate_widget(widget: QWidget, language: str) -> None:
+    source = widget.property("_i18n_source")
+    if source is None:
+        if isinstance(widget, QGroupBox):
+            source = widget.title()
+        elif isinstance(widget, QAbstractButton):
+            source = widget.text()
+        elif isinstance(widget, QLabel):
+            source = widget.text()
+        else:
+            source = widget.windowTitle()
+        widget.setProperty("_i18n_source", source)
+
+    if isinstance(widget, QGroupBox):
+        widget.setTitle(tr(source, language))
+    elif isinstance(widget, QAbstractButton):
+        widget.setText(tr(source, language))
+    elif isinstance(widget, QLabel):
+        widget.setText(tr(source, language))
+    elif source:
+        widget.setWindowTitle(tr(source, language))
+
+    if isinstance(widget, QComboBox):
+        for index in range(widget.count()):
+            item_source = widget.itemData(index, Qt.UserRole + 1000)
+            if item_source is None:
+                item_source = widget.itemText(index)
+                widget.setItemData(index, item_source, Qt.UserRole + 1000)
+            widget.setItemText(index, tr(item_source, language))
+
+    if isinstance(widget, QListWidget):
+        for index in range(widget.count()):
+            item = widget.item(index)
+            item_source = item.data(Qt.UserRole + 1000)
+            if item_source is None:
+                item_source = item.text()
+                item.setData(Qt.UserRole + 1000, item_source)
+            item.setText(tr(item_source, language))
+
+
+def apply_translations(root: QWidget, language: str) -> None:
+    """Translate all static widgets below ``root`` without changing layout."""
+    for widget in [root, *root.findChildren(QWidget)]:
+        _translate_widget(widget, language)

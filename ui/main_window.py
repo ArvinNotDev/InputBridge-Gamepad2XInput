@@ -31,6 +31,7 @@ from core.profile_manager import ProfileManager
 
 from core.utils.hotkeys import Hotkey
 from core.utils.paths import data_path, resource_path
+from ui.i18n import apply_translations
 
 class MainWindow(QMainWindow):
 
@@ -65,6 +66,7 @@ class MainWindow(QMainWindow):
         self.settings = SettingsManager()
         self.profile_manager = ProfileManager(self.settings)
         self.profile_manager.create_default_profile()
+        self._applying_language = False
 
         # quitting flag
         self._is_quitting = False
@@ -184,6 +186,9 @@ class MainWindow(QMainWindow):
         # 5: Settings
         self.settings_page = SettingsPage(self.theme_manager, self.settings, self.profile_manager)
         self.pages.addWidget(self.settings_page)
+        self.settings_page.combo_lang.currentIndexChanged.connect(
+            lambda _index: self._apply_language()
+        )
 
         main_layout.addLayout(left_column)
         main_layout.addWidget(self.pages, 1)
@@ -193,6 +198,7 @@ class MainWindow(QMainWindow):
 
         # Initialize sidebar avatar
         self._refresh_sidebar_avatar()
+        self._apply_language()
 
         # Tray
         self.tray_icon: QSystemTrayIcon | None = None
@@ -341,6 +347,28 @@ class MainWindow(QMainWindow):
             self._sidebar_profile_label.setStyleSheet(
                 "font-size:10px; color:#666677;"
             )
+
+    def _apply_language(self) -> None:
+        """Apply the selected UI language without changing layout direction."""
+        if self._applying_language:
+            return
+        self._applying_language = True
+        try:
+            language = self.settings_page.combo_lang.currentData()
+            if language not in ("eng", "fa", "es"):
+                language = self.settings.get_ui_language()
+            self.settings.set_ui_language(language or "eng")
+            self.settings.save()
+        except Exception:
+            language = "eng"
+        try:
+            apply_translations(self, language)
+            self._sidebar_profile_label.setText(
+                "Active profile" if self.profile_manager.get_active_profile_name()
+                else "No profile active"
+            )
+        finally:
+            self._applying_language = False
 
     def _show_page_from_tray(self, index: int) -> None:
         self.menu.setCurrentRow(index)

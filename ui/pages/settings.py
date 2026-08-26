@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter
 )
 from PySide6.QtCore import Qt, QTimer
+from ui.i18n import LANGUAGE_NAMES
 
 
 class SettingsPage(QWidget):
@@ -207,7 +208,8 @@ class SettingsPage(QWidget):
         ui_form.setVerticalSpacing(12)
 
         self.combo_lang = QComboBox()
-        self.combo_lang.addItems(["eng", "fa", "es"])
+        for code, name in LANGUAGE_NAMES.items():
+            self.combo_lang.addItem(name, code)
         self.combo_lang.setMinimumWidth(120)
         self.combo_lang.view().setMinimumWidth(140)
         ui_form.addRow("Language", self.combo_lang)
@@ -391,9 +393,12 @@ class SettingsPage(QWidget):
             lang = self.settings.get_ui_language()
         except Exception:
             lang = "eng"
-        if lang not in [self.combo_lang.itemText(i) for i in range(self.combo_lang.count())]:
+        language_codes = [
+            self.combo_lang.itemData(i) for i in range(self.combo_lang.count())
+        ]
+        if lang not in language_codes:
             lang = "eng"
-        self.combo_lang.setCurrentText(lang)
+        self.combo_lang.setCurrentIndex(language_codes.index(lang))
 
         try:
             current_theme = self.settings.get_ui_theme()
@@ -520,7 +525,7 @@ class SettingsPage(QWidget):
         self.settings.set_button_invertion(self.chk_button_invert.isChecked())
 
         # UI
-        self.settings.set_ui_language(self.combo_lang.currentText())
+        self.settings.set_ui_language(self.combo_lang.currentData() or "eng")
         self.settings.set_ui_theme(self.combo_theme.currentText())
 
         # Developer
@@ -697,7 +702,11 @@ class SettingsPage(QWidget):
     # UI ACTIONS
     # ==========================================================
     def restore_ui_defaults(self):
-        self.combo_lang.setCurrentText("eng")
+        language_codes = [
+            self.combo_lang.itemData(i) for i in range(self.combo_lang.count())
+        ]
+        if "eng" in language_codes:
+            self.combo_lang.setCurrentIndex(language_codes.index("eng"))
         if "dark" in [self.combo_theme.itemText(i) for i in range(self.combo_theme.count())]:
             self.combo_theme.setCurrentText("dark")
         else:
@@ -706,7 +715,7 @@ class SettingsPage(QWidget):
         self._save_current_values()
 
     def apply_ui(self):
-        self.settings.set_ui_language(self.combo_lang.currentText())
+        self.settings.set_ui_language(self.combo_lang.currentData() or "eng")
         theme = self.combo_theme.currentText()
         self.settings.set_ui_theme(theme)
         self.settings.save()
