@@ -250,10 +250,12 @@ class ProfilesPage(QWidget):
         title_col.setAlignment(Qt.AlignTop)
 
         self.detail_title = QLabel("Select a profile")
+        self.detail_title.setProperty("_i18n_dynamic", True)
         self.detail_title.setStyleSheet("font-size:18px; font-weight:700;")
         title_col.addWidget(self.detail_title)
 
         self.detail_status = QLabel("")
+        self.detail_status.setProperty("_i18n_dynamic", True)
         self.detail_status.setStyleSheet("font-size:12px; color:#888899;")
         title_col.addWidget(self.detail_status)
 
@@ -288,10 +290,12 @@ class ProfilesPage(QWidget):
         meta_layout = QVBoxLayout(meta_group)
 
         self.detail_created = QLabel("Created: —")
+        self.detail_created.setProperty("_i18n_dynamic", True)
         self.detail_created.setStyleSheet("font-size:13px;")
         meta_layout.addWidget(self.detail_created)
 
         self.detail_modified = QLabel("Modified: —")
+        self.detail_modified.setProperty("_i18n_dynamic", True)
         self.detail_modified.setStyleSheet("font-size:13px;")
         meta_layout.addWidget(self.detail_modified)
 
@@ -439,12 +443,12 @@ class ProfilesPage(QWidget):
         )
 
     def _clear_detail(self) -> None:
-        self.detail_title.setText("Select a profile")
+        self.detail_title.setText(self._t("Select a profile"))
         self.detail_status.setText("")
         self.detail_desc.setPlainText("")
         self.btn_save_desc.setEnabled(False)
-        self.detail_created.setText("Created: —")
-        self.detail_modified.setText("Modified: —")
+        self.detail_created.setText(f"{self._t('Created')}: —")
+        self.detail_modified.setText(f"{self._t('Modified')}: —")
         self.detail_summary.clear()
         self.btn_load.setEnabled(False)
         self.btn_load.setText(self._t("Activate Profile"))

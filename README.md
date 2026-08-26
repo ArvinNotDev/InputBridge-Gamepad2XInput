@@ -47,6 +47,10 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * System-tray integration
 * Dark and light themes
 * Persistent application settings
+* Automatic settings save with per-section reset controls
+* English, فارسی, and Español UI languages
+* Portable profile export/import (`.ibprofile`) with avatar support
+* In-app About page with developer and project links
 * Portable/self-contained Windows executable
 * Separate writable user configuration from bundled application resources
 
@@ -139,6 +143,21 @@ A profile can define:
 * Other controller-specific configuration
 
 Profiles are stored separately from the application binaries so they can be modified without rebuilding the application.
+
+Profiles can be exported as portable `.ibprofile` files. An exported profile
+contains its settings snapshot and optional avatar image, making it easy to
+back up configurations or move them to another installation. JSON profile files
+from older versions can also be imported.
+
+Application settings are saved automatically after changes. Each Settings
+section also includes a Reset control for quickly returning that section to
+its defaults.
+
+## Languages
+
+The interface is available in English, فارسی, and Español. Change the language
+from **Settings → UI**; the layout direction remains unchanged for a familiar
+desktop experience.
 
 ## Mouse Mode
 

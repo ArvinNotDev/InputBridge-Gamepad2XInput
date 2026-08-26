@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter
 )
 from PySide6.QtCore import Qt, QTimer
-from ui.i18n import LANGUAGE_NAMES
+from ui.i18n import LANGUAGE_NAMES, tr
 
 
 class SettingsPage(QWidget):
@@ -315,9 +315,11 @@ class SettingsPage(QWidget):
         bottom_bar.setSpacing(8)
 
         self.lbl_profile_status = QLabel("")
+        self.lbl_profile_status.setProperty("_i18n_dynamic", True)
         self.lbl_profile_status.setStyleSheet("font-size:12px; color:#888899;")
         bottom_bar.addWidget(self.lbl_profile_status)
         self.lbl_autosave_status = QLabel("Auto-save is on")
+        self.lbl_autosave_status.setProperty("_i18n_dynamic", True)
         self.lbl_autosave_status.setObjectName("settings_autosave_status")
         bottom_bar.addWidget(self.lbl_autosave_status)
         bottom_bar.addStretch()
@@ -498,10 +500,11 @@ class SettingsPage(QWidget):
             self.lbl_profile_status.setText("")
             return
         name = self.profile_manager.get_active_profile_name()
+        language = self.settings.get_ui_language()
         if name:
-            self.lbl_profile_status.setText(f"Active profile: {name}")
+            self.lbl_profile_status.setText(f"{tr('Active profile', language)}: {name}")
         else:
-            self.lbl_profile_status.setText("No profile active")
+            self.lbl_profile_status.setText(tr("No profile active", language))
 
     def _apply_all_current_values(self):
         """
@@ -542,7 +545,9 @@ class SettingsPage(QWidget):
         """Write the current controls to disk and refresh the save indicator."""
         self._apply_all_current_values()
         self.settings.save()
-        self.lbl_autosave_status.setText("✓ Auto-saved")
+        self.lbl_autosave_status.setText(
+            tr("✓ Auto-saved", self.settings.get_ui_language())
+        )
         if self.combo_theme.currentText() != getattr(
             self.theme_manager, "current_theme", ""
         ):

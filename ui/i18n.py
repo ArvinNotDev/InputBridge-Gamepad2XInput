@@ -237,6 +237,8 @@ def tr(text: str, language: str = "eng") -> str:
 
 
 def _translate_widget(widget: QWidget, language: str) -> None:
+    if widget.property("_i18n_dynamic"):
+        return
     source = widget.property("_i18n_source")
     if source is None:
         if isinstance(widget, QGroupBox):
