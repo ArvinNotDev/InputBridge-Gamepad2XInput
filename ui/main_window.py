@@ -125,6 +125,7 @@ class MainWindow(QMainWindow):
         left_column.addWidget(_sep)
 
         self.menu = QListWidget()
+        self.menu.setObjectName("sidebar_menu")
         self.menu.setFixedWidth(200)
 
         # Disable scrolling completely
@@ -339,18 +340,22 @@ class MainWindow(QMainWindow):
     def _refresh_sidebar_avatar(self) -> None:
         """Update the sidebar avatar and profile name from the active profile."""
         name = self.profile_manager.get_active_profile_name()
+        try:
+            language = self.settings.get_ui_language()
+        except Exception:
+            language = "eng"
         if name:
             img_path = self.profile_manager.get_profile_image_path(name)
             self._sidebar_avatar.set_image(img_path)
             self._sidebar_profile_name.setText(name)
-            self._sidebar_profile_label.setText("Active profile")
+            self._sidebar_profile_label.setText(tr("Active profile", language))
             self._sidebar_profile_label.setStyleSheet(
                 "font-size:10px; color:#4ecdc4;"
             )
         else:
             self._sidebar_avatar.set_image(None)
             self._sidebar_profile_name.setText("")
-            self._sidebar_profile_label.setText("No profile active")
+            self._sidebar_profile_label.setText(tr("No profile active", language))
             self._sidebar_profile_label.setStyleSheet(
                 "font-size:10px; color:#666677;"
             )

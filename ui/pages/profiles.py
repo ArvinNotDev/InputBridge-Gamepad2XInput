@@ -372,10 +372,12 @@ class ProfilesPage(QWidget):
             item.setData(Qt.UserRole, name)
 
             if name == active:
-                item.setText(f"  ●  {name}  (active)")
+                item.setText(f"  ●  {name}  ({self._t('active')})")
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
+            else:
+                item.setText(name)
 
             self.profile_list.addItem(item)
 
@@ -433,7 +435,7 @@ class ProfilesPage(QWidget):
 
         self.btn_load.setEnabled(True)
         self.btn_load.setText(
-            "✓ Active" if name == active_name else "Activate Profile"
+            self._t("✓ Active") if name == active_name else self._t("Activate Profile")
         )
 
     def _clear_detail(self) -> None:
@@ -445,7 +447,7 @@ class ProfilesPage(QWidget):
         self.detail_modified.setText("Modified: —")
         self.detail_summary.clear()
         self.btn_load.setEnabled(False)
-        self.btn_load.setText("Activate Profile")
+        self.btn_load.setText(self._t("Activate Profile"))
         self.avatar.clear_image()
         self.btn_remove_image.setEnabled(False)
         self._current_image_path = ""

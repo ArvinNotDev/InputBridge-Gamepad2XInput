@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractButton,
     QComboBox,
@@ -31,6 +32,7 @@ _TRANSLATIONS = {
         "Quit": "🚪 خروج",
         "No profile active": "پروفایل فعالی وجود ندارد",
         "Active profile": "پروفایل فعال",
+        "active": "فعال",
         "Open ArvinNotDev on GitHub": "باز کردن صفحهٔ ArvinNotDev در گیت‌هاب",
         "Device": "دستگاه",
         "UI": "رابط کاربری",
@@ -131,6 +133,12 @@ _TRANSLATIONS = {
         "📦 Project Repository": "📦 مخزن پروژه",
         "💡 Tip: Create a profile for each game and switch between them in seconds.":
             "💡 نکته: برای هر بازی یک پروفایل بسازید و در چند ثانیه جابه‌جا شوید.",
+        "A modern bridge between your controllers, XInput, keyboard, and mouse.":
+            "پل مدرن بین دسته‌ها، XInput، صفحه‌کلید و ماوس شما.",
+        "InputBridge-Gamepad2XInput helps you connect physical HID controllers to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, remote gamepad support, and HidHide integration.":
+            "InputBridge-Gamepad2XInput دسته‌های HID فیزیکی را با پروفایل‌های "
+            "انعطاف‌پذیر، میانبرها، حالت ماوس، دستهٔ راه دور و HidHide به دستگاه‌های "
+            "مجازی Xbox 360 متصل می‌کند.",
         "English": "انگلیسی",
         "فارسی": "فارسی",
         "Español": "اسپانیایی",
@@ -146,6 +154,7 @@ _TRANSLATIONS = {
         "Quit": "🚪 Salir",
         "No profile active": "No hay perfil activo",
         "Active profile": "Perfil activo",
+        "active": "activo",
         "Device": "Dispositivo",
         "UI": "Interfaz",
         "Developer": "Desarrollador",
@@ -207,6 +216,12 @@ _TRANSLATIONS = {
         "📦 Project Repository": "📦 Repositorio del proyecto",
         "💡 Tip: Create a profile for each game and switch between them in seconds.":
             "💡 Consejo: crea un perfil para cada juego y cambia entre ellos en segundos.",
+        "A modern bridge between your controllers, XInput, keyboard, and mouse.":
+            "Un puente moderno entre tus mandos, XInput, teclado y ratón.",
+        "InputBridge-Gamepad2XInput helps you connect physical HID controllers to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, remote gamepad support, and HidHide integration.":
+            "InputBridge-Gamepad2XInput conecta mandos HID físicos con dispositivos "
+            "Xbox 360 virtuales mediante perfiles flexibles, atajos, modo ratón, "
+            "gamepad remoto e integración con HidHide.",
         "English": "Inglés",
         "فارسی": "Persa",
         "Español": "Español",
@@ -265,3 +280,9 @@ def apply_translations(root: QWidget, language: str) -> None:
     """Translate all static widgets below ``root`` without changing layout."""
     for widget in [root, *root.findChildren(QWidget)]:
         _translate_widget(widget, language)
+    for action in root.findChildren(QAction):
+        source = action.property("_i18n_source")
+        if source is None:
+            source = action.text()
+            action.setProperty("_i18n_source", source)
+        action.setText(tr(source, language))
