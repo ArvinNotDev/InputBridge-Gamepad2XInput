@@ -49,6 +49,28 @@ QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border-color: #6f7cff;
 }
 
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+    width: 22px;
+    background-color: #34344a;
+    border-left: 1px solid #4b4b65;
+}
+
+QAbstractSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    border-top-right-radius: 6px;
+}
+
+QAbstractSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    border-bottom-right-radius: 6px;
+}
+
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {
+    background-color: #505070;
+}
+
 QCheckBox {
     spacing: 8px;
     padding: 3px 0;

@@ -158,11 +158,6 @@ class ProfilesPage(QWidget):
         subtitle.setStyleSheet("font-size:12px; color:#888899; margin-bottom:4px;")
         left_layout.addWidget(subtitle)
 
-        self.profile_list = QListWidget()
-        self.profile_list.setObjectName("profiles_list")
-        self.profile_list.setFont(QFont("Segoe UI", 13))
-        left_layout.addWidget(self.profile_list, 1)
-
         # Action buttons row 1
         btn_row1 = QHBoxLayout()
         btn_row1.setSpacing(6)
@@ -209,6 +204,11 @@ class ProfilesPage(QWidget):
         io_row.addWidget(self.btn_import)
         io_row.addWidget(self.btn_export)
         left_layout.addLayout(io_row)
+
+        self.profile_list = QListWidget()
+        self.profile_list.setObjectName("profiles_list")
+        self.profile_list.setFont(QFont("Segoe UI", 13))
+        left_layout.addWidget(self.profile_list, 1)
 
         # ---- Right pane: details ----
         right = QWidget()

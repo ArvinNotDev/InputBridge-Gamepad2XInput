@@ -3,7 +3,8 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
     QLabel, QPushButton, QSlider, QFrame, QListWidget, QStackedWidget,
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
-    QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter
+    QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter,
+    QAbstractSpinBox
 )
 from PySide6.QtCore import Qt, QTimer
 from ui.i18n import LANGUAGE_NAMES, tr
@@ -75,6 +76,7 @@ class SettingsPage(QWidget):
         # Polling rate
         poll_row = QHBoxLayout()
         self.spin_poll = QSpinBox()
+        self.spin_poll.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
         self.spin_poll.setRange(0, 1000)
         self.spin_poll.setFixedWidth(110)
         poll_row.addWidget(self.spin_poll)
@@ -94,6 +96,7 @@ class SettingsPage(QWidget):
         # Mouse sensitivity
         sens_row = QHBoxLayout()
         self.spin_mouse_sens = QDoubleSpinBox()
+        self.spin_mouse_sens.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
         self.spin_mouse_sens.setRange(0.1, 10.0)
         self.spin_mouse_sens.setSingleStep(0.1)
         self.spin_mouse_sens.setDecimals(2)
