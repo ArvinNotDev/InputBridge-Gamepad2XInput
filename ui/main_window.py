@@ -12,9 +12,11 @@ from PySide6.QtWidgets import (
     QMenu,
     QApplication,
     QLabel,
+    QPushButton,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QColor, QFont
 
 from ui.theme_manager import ThemeManager
@@ -142,6 +144,17 @@ class MainWindow(QMainWindow):
 
         left_column.addWidget(self.menu)
         left_column.addStretch()
+
+        self.github_button = QPushButton("GitHub · ArvinNotDev")
+        self.github_button.setObjectName("github_button")
+        self.github_button.setToolTip("Open ArvinNotDev on GitHub")
+        self.github_button.setCursor(Qt.PointingHandCursor)
+        self.github_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(
+                QUrl("https://github.com/ArvinNotDev/")
+            )
+        )
+        left_column.addWidget(self.github_button)
 
         # Pages
         self.pages = QStackedWidget()

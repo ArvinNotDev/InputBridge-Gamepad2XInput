@@ -267,6 +267,21 @@ QPushButton#settings_save_profile:hover {
     font-weight: 600;
 }
 
+QPushButton#github_button {
+    background-color: #2c2c3a;
+    color: #aaaacc;
+    border: 1px solid #444466;
+    border-radius: 6px;
+    padding: 8px 6px;
+    font-size: 11px;
+}
+
+QPushButton#github_button:hover {
+    background-color: #3a3a50;
+    color: #ffffff;
+    border-color: #5a5af0;
+}
+
 /* Profile image buttons */
 QPushButton#profiles_set_image_btn {
     background-color: #2c2c3a;
