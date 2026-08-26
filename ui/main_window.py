@@ -26,16 +26,18 @@ from ui.pages.settings import SettingsPage
 from ui.pages.server import ServerPage
 from ui.pages.hotkey import HotkeyPage
 from ui.pages.profiles import ProfilesPage
+from ui.pages.about import AboutPage
 from core.settings import SettingsManager
 from core.profile_manager import ProfileManager
 
 from core.utils.hotkeys import Hotkey
 from core.utils.paths import data_path, resource_path
-from ui.i18n import apply_translations
+from ui.i18n import apply_translations, tr
+from core.version import APP_NAME
 
 class MainWindow(QMainWindow):
 
-    WINDOW_TITLE = "InputBridge-Gamepad2XInput"
+    WINDOW_TITLE = APP_NAME
     WINDOW_WIDTH = 1100
     WINDOW_HEIGHT = 700
 
@@ -46,7 +48,8 @@ class MainWindow(QMainWindow):
     IDX_PROFILES = 3
     IDX_TEST_XINPUT = 4
     IDX_SETTINGS = 5
-    IDX_QUIT = 6
+    IDX_ABOUT = 6
+    IDX_QUIT = 7
 
     def __init__(self, app: QApplication) -> None:
         super().__init__()
@@ -137,7 +140,8 @@ class MainWindow(QMainWindow):
         self.menu.addItem(QListWidgetItem("Profiles"))              # 3
         self.menu.addItem(QListWidgetItem("Test XInput"))           # 4
         self.menu.addItem(QListWidgetItem("Settings"))              # 5
-        self.menu.addItem(QListWidgetItem("Quit"))                  # 6
+        self.menu.addItem(QListWidgetItem("About"))                 # 6
+        self.menu.addItem(QListWidgetItem("Quit"))                  # 7
 
         # Force menu to fit all items
         item_height = self.menu.sizeHintForRow(0)
@@ -189,6 +193,8 @@ class MainWindow(QMainWindow):
         self.settings_page.combo_lang.currentIndexChanged.connect(
             lambda _index: self._apply_language()
         )
+        self.about_page = AboutPage()
+        self.pages.addWidget(self.about_page)
 
         main_layout.addLayout(left_column)
         main_layout.addWidget(self.pages, 1)
@@ -218,7 +224,7 @@ class MainWindow(QMainWindow):
             QApplication.quit()
             return
 
-        # For all other indices, show corresponding page (indices 0..5)
+        # For all other indices, show corresponding page (indices 0..6)
         if 0 <= index < self.pages.count():
             self.pages.setCurrentIndex(index)
 
@@ -283,6 +289,7 @@ class MainWindow(QMainWindow):
             ("Hotkeys", self.IDX_HOTKEY),
             ("Profiles", self.IDX_PROFILES),
             ("Settings", self.IDX_SETTINGS),
+            ("About", self.IDX_ABOUT),
         ):
             action = QAction(label, menu)
             action.triggered.connect(
@@ -363,9 +370,14 @@ class MainWindow(QMainWindow):
             language = "eng"
         try:
             apply_translations(self, language)
+            self.profiles_page.refresh_list()
             self._sidebar_profile_label.setText(
-                "Active profile" if self.profile_manager.get_active_profile_name()
-                else "No profile active"
+                tr(
+                    "Active profile"
+                    if self.profile_manager.get_active_profile_name()
+                    else "No profile active",
+                    language,
+                )
             )
         finally:
             self._applying_language = False

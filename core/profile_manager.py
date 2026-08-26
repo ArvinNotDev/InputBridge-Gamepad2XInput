@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import shutil
 import time
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -286,6 +287,121 @@ class ProfileManager:
             return True
         except OSError:
             return False
+
+    def export_profile(self, name: str, destination: str) -> bool:
+        """Export a profile and its optional avatar as a portable .ibprofile."""
+        data = self.get_profile(name)
+        if data is None:
+            return False
+
+        destination_path = Path(destination)
+        if destination_path.suffix.lower() != ".ibprofile":
+            destination_path = destination_path.with_suffix(".ibprofile")
+
+        image_name = data.get("_meta", {}).get("image", "")
+        image_path = self._stored_image_path(image_name)
+        try:
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(
+                destination_path, "w", compression=zipfile.ZIP_DEFLATED
+            ) as archive:
+                archive.writestr(
+                    "profile.json",
+                    json.dumps(data, indent=2, ensure_ascii=False),
+                )
+                if image_path and image_path.is_file():
+                    archive.write(image_path, f"image{image_path.suffix.lower()}")
+            return True
+        except (OSError, zipfile.BadZipFile):
+            return False
+
+    def import_profile(
+        self, source: str, *, overwrite: bool = False, name: str | None = None
+    ) -> Optional[str]:
+        """Import a .ibprofile archive (or legacy JSON) and return its name."""
+        source_path = Path(source)
+        try:
+            if source_path.suffix.lower() == ".json":
+                data = json.loads(source_path.read_text(encoding="utf-8"))
+                image_member = None
+            else:
+                with zipfile.ZipFile(source_path, "r") as archive:
+                    data = json.loads(archive.read("profile.json").decode("utf-8"))
+                    image_member = next(
+                        (
+                            item
+                            for item in archive.namelist()
+                            if item.startswith("image.")
+                        ),
+                        None,
+                    )
+                    image_bytes = (
+                        archive.read(image_member) if image_member else None
+                    )
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+            return None
+
+        if not isinstance(data, dict):
+            return None
+        meta = data.get("_meta")
+        if not isinstance(meta, dict):
+            meta = {}
+            data["_meta"] = meta
+
+        imported_name = (name or meta.get("name") or source_path.stem).strip()
+        if not imported_name:
+            return None
+        destination = self._profile_path(imported_name)
+        if destination is None or (destination.exists() and not overwrite):
+            return None
+
+        old_meta = self._read_profile_meta(destination) if destination.exists() else None
+        meta.update(
+            {
+                "name": imported_name,
+                "created": (
+                    old_meta.get("created", self._now_iso())
+                    if old_meta
+                    else meta.get("created", self._now_iso())
+                ),
+                "modified": self._now_iso(),
+                "image": "",
+            }
+        )
+
+        try:
+            old_image = (
+                old_meta.get("image", "") if old_meta else ""
+            )
+            old_image_path = self._stored_image_path(old_image)
+            if old_image_path and old_image_path.is_file():
+                old_image_path.unlink()
+            self._write_json(destination, data)
+            if image_member and image_bytes:
+                suffix = Path(image_member).suffix.lower()
+                if suffix not in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
+                    suffix = ".png"
+                image_destination = self._images_dir / f"{self._safe_stem(imported_name)}{suffix}"
+                image_destination.write_bytes(image_bytes)
+                meta["image"] = image_destination.name
+                self._write_json(destination, data)
+            return imported_name
+        except OSError:
+            return None
+
+    def get_import_profile_name(self, source: str) -> Optional[str]:
+        """Read the display name from an import file without writing it."""
+        source_path = Path(source)
+        try:
+            if source_path.suffix.lower() == ".json":
+                data = json.loads(source_path.read_text(encoding="utf-8"))
+            else:
+                with zipfile.ZipFile(source_path, "r") as archive:
+                    data = json.loads(archive.read("profile.json").decode("utf-8"))
+            name = data.get("_meta", {}).get("name") if isinstance(data, dict) else None
+            return str(name or source_path.stem).strip() or None
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+            return None
 
     def activate_profile(self, name: str) -> bool:
         """

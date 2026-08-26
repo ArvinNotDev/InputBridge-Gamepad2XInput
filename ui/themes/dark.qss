@@ -184,6 +184,43 @@ QPushButton#profiles_new_btn:hover {
     );
 }
 
+QPushButton#profiles_import_btn, QPushButton#profiles_export_btn {
+    background-color: #292938;
+    color: #b8b8d8;
+    border: 1px solid #45455f;
+    border-radius: 7px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QPushButton#profiles_import_btn:hover, QPushButton#profiles_export_btn:hover {
+    background-color: #35354c;
+    color: #ffffff;
+    border-color: #6c7cff;
+}
+
+QListWidget#profiles_list {
+    background-color: #252530;
+    border: 1px solid #3f3f55;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+QListWidget#profiles_list::item {
+    padding: 12px 10px;
+    margin: 3px 0;
+    border-radius: 8px;
+    background-color: transparent;
+}
+
+QListWidget#profiles_list::item:selected {
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #4545a9, stop:1 #303078
+    );
+}
+
 QPushButton#profiles_delete_btn {
     background-color: #3a2028;
     color: #ff6b6b;
@@ -253,6 +290,76 @@ QPushButton#settings_save_profile:hover {
     background: #444455;
     margin: 4px 8px;
 }
+
+QFrame#about_hero {
+    background-color: #292942;
+    border: 1px solid #484875;
+    border-radius: 18px;
+}
+
+QLabel#about_badge {
+    color: #8f9bff;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+QLabel#about_title {
+    color: #ffffff;
+    font-size: 25px;
+    font-weight: 800;
+}
+
+QLabel#about_version {
+    color: #a8f0df;
+    background: #234942;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-weight: 700;
+}
+
+QLabel#about_tagline, QLabel#about_body {
+    color: #b8b8cc;
+    font-size: 13px;
+}
+
+QFrame#about_info_card {
+    background-color: #252530;
+    border: 1px solid #3f3f55;
+    border-radius: 14px;
+}
+
+QLabel#about_section_title {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+QLabel#about_meta, QLabel#about_tip {
+    color: #9292ad;
+    font-size: 12px;
+}
+
+QPushButton#about_primary_btn, QPushButton#about_secondary_btn {
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 700;
+}
+
+QPushButton#about_primary_btn {
+    background-color: #5a5af0;
+    color: #ffffff;
+    border: 1px solid #7373ff;
+}
+
+QPushButton#about_primary_btn:hover { background-color: #7070ff; }
+
+QPushButton#about_secondary_btn {
+    background-color: transparent;
+    color: #a8b9ff;
+    border: 1px solid #555b8a;
+}
+
+QPushButton#about_secondary_btn:hover { background-color: #30304b; }
 
 /* Sidebar avatar */
 #sidebar_avatar_container {

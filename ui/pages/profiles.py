@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from ui.i18n import tr
 
 
 class CircularAvatar(QLabel):
@@ -125,6 +126,7 @@ class ProfilesPage(QWidget):
         self.pm = profile_manager
         self.settings = settings_manager
         self._current_image_path: str = ""
+        self._language = self.settings.get_ui_language()
 
         self._build_ui()
         self._connect_signals()
@@ -157,7 +159,8 @@ class ProfilesPage(QWidget):
         left_layout.addWidget(subtitle)
 
         self.profile_list = QListWidget()
-        self.profile_list.setStyleSheet("QListWidget { font-size:13px; }")
+        self.profile_list.setObjectName("profiles_list")
+        self.profile_list.setFont(QFont("Segoe UI", 13))
         left_layout.addWidget(self.profile_list, 1)
 
         # Action buttons row 1
@@ -193,6 +196,19 @@ class ProfilesPage(QWidget):
         btn_row2.addWidget(self.btn_delete)
 
         left_layout.addLayout(btn_row2)
+
+        # Portable profile actions
+        io_row = QHBoxLayout()
+        io_row.setSpacing(6)
+        self.btn_import = QPushButton("⬇ Import")
+        self.btn_import.setObjectName("profiles_import_btn")
+        self.btn_import.setFixedHeight(32)
+        self.btn_export = QPushButton("⬆ Export")
+        self.btn_export.setObjectName("profiles_export_btn")
+        self.btn_export.setFixedHeight(32)
+        io_row.addWidget(self.btn_import)
+        io_row.addWidget(self.btn_export)
+        left_layout.addLayout(io_row)
 
         # ---- Right pane: details ----
         right = QWidget()
@@ -314,6 +330,9 @@ class ProfilesPage(QWidget):
 
         root.addWidget(splitter)
 
+    def _t(self, text: str) -> str:
+        return tr(text, self.settings.get_ui_language())
+
     # ------------------------------------------------------------------
     # Signals
     # ------------------------------------------------------------------
@@ -324,6 +343,8 @@ class ProfilesPage(QWidget):
         self.btn_duplicate.clicked.connect(self._on_duplicate)
         self.btn_rename.clicked.connect(self._on_rename)
         self.btn_delete.clicked.connect(self._on_delete)
+        self.btn_import.clicked.connect(self._on_import)
+        self.btn_export.clicked.connect(self._on_export)
         self.btn_load.clicked.connect(self._on_activate)
         self.btn_set_image.clicked.connect(self._on_set_image)
         self.btn_remove_image.clicked.connect(self._on_remove_image)
@@ -381,7 +402,7 @@ class ProfilesPage(QWidget):
         self.detail_title.setText(name)
 
         if name == active_name:
-            self.detail_status.setText("●  Active profile")
+            self.detail_status.setText(f"●  {self._t('Active profile')}")
             self.detail_status.setStyleSheet(
                 "font-size:12px; color:#4ecdc4; font-weight:600;"
             )
@@ -395,10 +416,10 @@ class ProfilesPage(QWidget):
 
         # Timestamps
         self.detail_created.setText(
-            f"Created: {meta.get('created', '—') or '—'}"
+            f"{self._t('Created')}: {meta.get('created', '—') or '—'}"
         )
         self.detail_modified.setText(
-            f"Modified: {meta.get('modified', '—') or '—'}"
+            f"{self._t('Modified')}: {meta.get('modified', '—') or '—'}"
         )
 
         # Image
@@ -580,6 +601,76 @@ class ProfilesPage(QWidget):
             QMessageBox.critical(
                 self, "Error", f'Failed to delete profile "{name}".'
             )
+
+    def _on_export(self) -> None:
+        name = self._selected_profile_name()
+        if name is None:
+            QMessageBox.information(
+                self, "No Selection", "Select a profile to export first."
+            )
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Profile",
+            f"{name}.ibprofile",
+            "InputBridge Profile (*.ibprofile)",
+        )
+        if not path:
+            return
+
+        if self.pm.export_profile(name, path):
+            QMessageBox.information(
+                self,
+                "Profile Exported",
+                f'Profile "{name}" was exported successfully.',
+            )
+        else:
+            QMessageBox.critical(self, "Error", "Failed to export profile.")
+
+    def _on_import(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Profile",
+            "",
+            "InputBridge Profile (*.ibprofile *.json);;All Files (*)",
+        )
+        if not path:
+            return
+
+        imported_name = self.pm.import_profile(path)
+        if imported_name is None:
+            # A duplicate name is the common recoverable case.
+            source_name = self.pm.get_import_profile_name(path) or Path(path).stem
+            if self.pm.get_profile(source_name) is not None:
+                confirm = QMessageBox.question(
+                    self,
+                    "Profile Exists",
+                    f'A profile named "{source_name}" already exists. Overwrite it?',
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                if confirm == QMessageBox.Yes:
+                    imported_name = self.pm.import_profile(
+                        path, overwrite=True
+                    )
+
+        if imported_name is None:
+            QMessageBox.critical(
+                self,
+                "Import Failed",
+                "The profile file is invalid or could not be imported.",
+            )
+            return
+
+        self.refresh_list()
+        self._select_profile(imported_name)
+        self.profile_changed.emit()
+        QMessageBox.information(
+            self,
+            "Profile Imported",
+            f'Profile "{imported_name}" was imported successfully.',
+        )
 
     def _on_activate(self) -> None:
         name = self._selected_profile_name()
