@@ -17,6 +17,13 @@ class HIDWorker(QObject):
     def stop(self):
         self._running = False
 
+    def _is_dualsense(self) -> bool:
+        """Return True only for the supported Sony DualSense (PS5) HID device."""
+        return (
+            self.controller.vendor_id == 0x054C
+            and self.controller.product_id == 0x0CE6
+        )
+
     def run(self):
         ds = hid.device()
         try:
@@ -27,7 +34,11 @@ class HIDWorker(QObject):
             #         print(hex(rid), data)
             #     except Exception as e:
             #         print("fail", hex(rid), e)
-            ds.get_feature_report(0x05, 65)     # feature report to make the controller give more data
+            # This report enables additional reports (battery, etc.) on the
+            # DualSense. Sending it to a DualShock 4 can leave the controller
+            # stuck in its yellow light state, so keep it strictly PS5-only.
+            if self._is_dualsense():
+                ds.get_feature_report(0x05, 65)
         except Exception as e:
             self.error.emit(f"Failed to open {self.controller}: {e}")
             self.finished.emit()
