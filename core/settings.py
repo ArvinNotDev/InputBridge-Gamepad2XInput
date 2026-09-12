@@ -29,7 +29,8 @@ class SettingsManager:
                     "left_stick_invert_x": "false",
                     "left_stick_invert_y": "true",
                     "mouse_mode": "false",
-                    "mouse_sensitivity": "1.0"
+                    "mouse_sensitivity": "1.0",
+                    "vibration_enabled": "true"
                 }
                 self.config["ui"] = {
                     "language": "eng",
@@ -124,6 +125,14 @@ class SettingsManager:
         if not self.config.has_section("device"):
             self.config.add_section("device")
         self.config.set("device", "mouse_sensitivity", f"{float(sens):.6f}")
+
+    def get_vibration_enabled(self):
+        return self.config.getboolean("device", "vibration_enabled", fallback=True)
+
+    def set_vibration_enabled(self, enabled: bool):
+        if not self.config.has_section("device"):
+            self.config.add_section("device")
+        self.config.set("device", "vibration_enabled", "true" if enabled else "false")
 
     # -------- ui --------
     def get_ui_language(self):
@@ -242,6 +251,10 @@ class SettingsManager:
             self.set_mouse_sensitivity(sens)
         except Exception:
             self.set_mouse_sensitivity(1.0)
+        try:
+            self.set_vibration_enabled(self.get_vibration_enabled())
+        except Exception:
+            self.set_vibration_enabled(True)
 
         # UI defaults
         if not self.config.has_section("ui"):

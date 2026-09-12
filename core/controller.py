@@ -17,11 +17,12 @@ class Controller:
         cls.NUMBER_OF_CONTROLLERS += 1
         return super().__new__(cls)
 
-    def __init__(self, vendor_id, product_id, device_path, name=None):
+    def __init__(self, vendor_id, product_id, device_path, name=None, transport=None):
         self.vendor_id = vendor_id
         self.product_id = product_id
         self.device_path = device_path
         self.name = name or f"Controller-{Controller.NUMBER_OF_CONTROLLERS}"
+        self.transport = transport
 
     @property
     def unique_id(self):

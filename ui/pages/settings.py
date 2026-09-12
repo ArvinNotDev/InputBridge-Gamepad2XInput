@@ -6,11 +6,13 @@ from PySide6.QtWidgets import (
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter,
     QAbstractSpinBox
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from ui.i18n import LANGUAGE_NAMES, tr
 
 
 class SettingsPage(QWidget):
+    vibration_enabled_changed = Signal(bool)
+
     def __init__(self, theme_manager, settings: object, profile_manager=None):
         super().__init__()
         self.theme_manager = theme_manager
@@ -92,6 +94,12 @@ class SettingsPage(QWidget):
 
         self.chk_mouse_mode = QCheckBox("Mouse mode")
         device_form.addRow(self.chk_mouse_mode)
+
+        self.chk_vibration = QCheckBox("Enable controller vibration")
+        self.chk_vibration.setToolTip(
+            "Apply Xbox/XInput vibration to connected DualSense controllers immediately."
+        )
+        device_form.addRow(self.chk_vibration)
 
         # Mouse sensitivity
         sens_row = QHBoxLayout()
@@ -365,6 +373,11 @@ class SettingsPage(QWidget):
             self.chk_mouse_mode.setChecked(False)
 
         try:
+            self.chk_vibration.setChecked(self.settings.get_vibration_enabled())
+        except Exception:
+            self.chk_vibration.setChecked(True)
+
+        try:
             self.spin_mouse_sens.setValue(self.settings.get_mouse_sensitivity())
         except Exception:
             self.spin_mouse_sens.setValue(1.0)
@@ -462,6 +475,7 @@ class SettingsPage(QWidget):
             (self.chk_reconnect, "toggled"),
             (self.chk_dpad_mouse, "toggled"),
             (self.chk_mouse_mode, "toggled"),
+            (self.chk_vibration, "toggled"),
             (self.spin_mouse_sens, "valueChanged"),
             (self.chk_left_invert_x, "toggled"),
             (self.chk_left_invert_y, "toggled"),
@@ -476,6 +490,8 @@ class SettingsPage(QWidget):
             (self.edit_log_path, "textChanged"),
         ):
             getattr(getattr(widget, signal_name), "connect")(self._schedule_autosave)
+
+        self.chk_vibration.toggled.connect(self._on_vibration_toggled)
 
         self.dev_restore.clicked.connect(self.restore_device_defaults)
         self.dev_apply.clicked.connect(self.apply_device)
@@ -519,6 +535,7 @@ class SettingsPage(QWidget):
         self.settings.set_auto_reconnect(self.chk_reconnect.isChecked())
         self.settings.set_dpad_as_mouse(self.chk_dpad_mouse.isChecked())
         self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
+        self.settings.set_vibration_enabled(self.chk_vibration.isChecked())
         self.settings.set_mouse_sensitivity(self.spin_mouse_sens.value())
 
         left = self.left_slider.value() / 1000.0
@@ -543,6 +560,11 @@ class SettingsPage(QWidget):
     def _schedule_autosave(self, *_args) -> None:
         """Debounce writes while keeping settings persistently up to date."""
         self._autosave_timer.start()
+
+    def _on_vibration_toggled(self, enabled: bool) -> None:
+        """Apply the change to active controllers without a restart."""
+        self.settings.set_vibration_enabled(enabled)
+        self.vibration_enabled_changed.emit(bool(enabled))
 
     def _save_current_values(self) -> None:
         """Write the current controls to disk and refresh the save indicator."""
@@ -663,6 +685,7 @@ class SettingsPage(QWidget):
         self.chk_reconnect.setChecked(True)
         self.chk_dpad_mouse.setChecked(True)
         self.chk_mouse_mode.setChecked(False)
+        self.chk_vibration.setChecked(True)
         self.spin_mouse_sens.setValue(1.0)
         self.left_slider.setValue(100)
         self.right_slider.setValue(100)
@@ -682,6 +705,7 @@ class SettingsPage(QWidget):
         self.settings.set_auto_reconnect(self.chk_reconnect.isChecked())
         self.settings.set_dpad_as_mouse(self.chk_dpad_mouse.isChecked())
         self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
+        self.settings.set_vibration_enabled(self.chk_vibration.isChecked())
         self.settings.set_mouse_sensitivity(self.spin_mouse_sens.value())
 
         left = self.left_slider.value() / 1000.0
@@ -693,6 +717,7 @@ class SettingsPage(QWidget):
         self.settings.set_joystick_invertion(left_inv, right_inv)
 
         self.settings.set_button_invertion(self.chk_button_invert.isChecked())
+        self.vibration_enabled_changed.emit(self.chk_vibration.isChecked())
 
         self.settings.save()
 
