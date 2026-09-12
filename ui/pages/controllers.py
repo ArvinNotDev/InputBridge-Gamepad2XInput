@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-    QListWidgetItem, QDialog, QGridLayout, QFrame, QPushButton
+    QListWidgetItem, QDialog, QGridLayout, QFrame, QPushButton, QSpinBox
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 
@@ -230,6 +230,111 @@ class X360MonitorDialog(QDialog):
                 padding:4px 6px;
             """)
 
+
+class X360TestRow(QWidget):
+    """Per-controller XInput vibration controls for the test page."""
+
+    def __init__(self, instance, name: str, parent=None):
+        super().__init__(parent)
+        self.instance = instance
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 6, 8, 6)
+        root.setSpacing(5)
+
+        header = QHBoxLayout()
+        self.name_label = QLabel(name)
+        self.name_label.setStyleSheet("font-weight: bold;")
+        header.addWidget(self.name_label)
+
+        self.battery_label = QLabel("Battery: —")
+        self.battery_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        header.addWidget(self.battery_label)
+        root.addLayout(header)
+
+        motor_row = QHBoxLayout()
+        motor_row.setSpacing(6)
+
+        motor_row.addWidget(QLabel("Left Motor"))
+        self.left_spin = self._make_value_spin()
+        motor_row.addWidget(self.left_spin)
+        self.left_button = QPushButton("Test Left")
+        self.left_button.clicked.connect(self._test_left)
+        motor_row.addWidget(self.left_button)
+
+        motor_row.addSpacing(10)
+        motor_row.addWidget(QLabel("Right Motor"))
+        self.right_spin = self._make_value_spin()
+        motor_row.addWidget(self.right_spin)
+        self.right_button = QPushButton("Test Right")
+        self.right_button.clicked.connect(self._test_right)
+        motor_row.addWidget(self.right_button)
+        root.addLayout(motor_row)
+
+        action_row = QHBoxLayout()
+        self.both_button = QPushButton("Both Motors")
+        self.both_button.clicked.connect(self._test_both)
+        action_row.addWidget(self.both_button)
+
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self._stop)
+        action_row.addWidget(self.stop_button)
+        action_row.addStretch(1)
+        root.addLayout(action_row)
+
+        self.set_rumble_enabled(bool(getattr(instance, "supports_rumble", False)))
+
+    @staticmethod
+    def _make_value_spin() -> QSpinBox:
+        spin = QSpinBox()
+        spin.setRange(0, 0xFFFF)
+        spin.setSingleStep(4096)
+        spin.setValue(0xFFFF)
+        spin.setMaximumWidth(95)
+        return spin
+
+    def set_name(self, name: str) -> None:
+        self.name_label.setText(name)
+
+    def set_battery(self, percent: int | None, charging: bool = False) -> None:
+        if percent is None:
+            self.battery_label.setText("Battery: —")
+            return
+        suffix = " (charging)" if charging else ""
+        self.battery_label.setText(f"Battery: {percent}%{suffix}")
+
+    def set_rumble_enabled(self, enabled: bool) -> None:
+        for widget in (
+            self.left_spin,
+            self.right_spin,
+            self.left_button,
+            self.right_button,
+            self.both_button,
+            self.stop_button,
+        ):
+            widget.setEnabled(enabled)
+        if not enabled:
+            self.battery_label.setToolTip("Rumble output is available for DualSense controllers.")
+
+    def _send(self, left: int, right: int) -> None:
+        try:
+            self.instance.set_xinput_vibration(left, right)
+        except Exception as exc:
+            print(f"[ControllersPage] Vibration test failed: {exc}")
+
+    def _test_left(self) -> None:
+        self._send(self.left_spin.value(), 0)
+
+    def _test_right(self) -> None:
+        self._send(0, self.right_spin.value())
+
+    def _test_both(self) -> None:
+        self._send(self.left_spin.value(), self.right_spin.value())
+
+    def _stop(self) -> None:
+        self._send(0, 0)
+
+
 class ControllersPage(QWidget):
     battery_updated = Signal(object, int, bool)  # path, percent, charging
 
@@ -251,6 +356,8 @@ class ControllersPage(QWidget):
 
         self.x360_instances = {}
         self.battery_states = {}
+        self._items = {}
+        self._rows = {}
         self.battery_updated.connect(self._store_battery)
 
         self.refresh_timer = QTimer(self)
@@ -275,30 +382,59 @@ class ControllersPage(QWidget):
 
     def clear_battery(self, device_path) -> None:
         self.battery_states.pop(device_path, None)
+        row = self._rows.get(device_path)
+        if row is not None:
+            row.set_battery(None)
         self.refresh_list()
 
     def refresh_list(self):
-        self.list_widget.clear()
-
         with emulator.ListOfAllControllers.lock:
             active_paths = list(emulator.ListOfAllControllers.controllers_path)
             active_names = list(emulator.ListOfAllControllers.controllers_name)
 
-        keys_to_remove = [path for path in self.x360_instances if path not in active_paths]
-        for path in keys_to_remove:
+        active = {
+            path: active_names[index]
+            for index, path in enumerate(active_paths)
+            if index < len(active_names)
+        }
+
+        for path in set(self._items) - set(active):
+            item = self._items.pop(path)
+            self._rows.pop(path, None)
+            row = self.list_widget.row(item)
+            if row >= 0:
+                self.list_widget.takeItem(row)
+
+        for path in set(self.x360_instances) - set(active):
             del self.x360_instances[path]
 
-        for i, name in enumerate(active_names):
-            item = QListWidgetItem(name)
-            if i < len(active_paths):
-                path = active_paths[i]
+        for path, name in active.items():
+            instance = self.x360_instances.get(path)
+            if instance is None:
+                continue
+
+            item = self._items.get(path)
+            if item is None:
+                item = QListWidgetItem(name)
                 item.setData(Qt.UserRole, path)
-                battery = self.battery_states.get(path)
-                if battery is not None:
-                    percent, charging = battery
-                    suffix = " (charging)" if charging else ""
-                    item.setText(f"{name} — Battery: {percent}%{suffix}")
-            self.list_widget.addItem(item)
+                widget = X360TestRow(instance, name)
+                item.setSizeHint(widget.sizeHint())
+                self.list_widget.addItem(item)
+                self.list_widget.setItemWidget(item, widget)
+                self._items[path] = item
+                self._rows[path] = widget
+            else:
+                widget = self._rows[path]
+                widget.instance = instance
+                widget.set_name(name)
+                widget.set_rumble_enabled(bool(getattr(instance, "supports_rumble", False)))
+                item.setText(name)
+
+            battery = self.battery_states.get(path)
+            if battery is None:
+                widget.set_battery(None)
+            else:
+                widget.set_battery(*battery)
 
     def open_monitor(self, item):
         device_path = item.data(Qt.UserRole)

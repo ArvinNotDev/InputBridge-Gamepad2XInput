@@ -841,7 +841,10 @@ class ControllerEmulation(QWidget):
 
         try:
             controller = hid.hid_manager.start_polling(
-                device.get("vendor_id"), device.get("product_id"), path
+                device.get("vendor_id"),
+                device.get("product_id"),
+                path,
+                transport=device.get("transport") or device.get("bus_type"),
             )
             mapper = Mapper(
                 controller,

@@ -4,6 +4,7 @@ import threading
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkeys import Hotkey
 from core.utils.hotkey_commander import HotkeyCommander
+from core.dualsense_rumble import DualSenseRumble
 
 
 media_functions = {
@@ -22,7 +23,8 @@ class ListOfAllControllers:
     lock = threading.RLock()
 
 class EmulateX360:
-    def __init__(self, device_path, controller_name, hotkey):
+    def __init__(self, device_path, controller_name, hotkey, rumble_enabled=False,
+                 rumble_transport=None):
         self.device_path = device_path
         self.controller_name = controller_name
         self.hotkey = hotkey
@@ -32,6 +34,10 @@ class EmulateX360:
             ListOfAllControllers.controllers_name.append(controller_name)
         self.is_monitoring = False
         self.could_instantiate = False
+        self.rumble = (
+            DualSenseRumble(device_path, transport=rumble_transport)
+            if rumble_enabled else None
+        )
 
         # debounce state for hotkeys
         self._last_hotkey_func = None
@@ -45,9 +51,29 @@ class EmulateX360:
     def instantiate_vg(self):
         try:
             self.v_x360 = vg.VX360Gamepad()
+            if self.rumble is not None:
+                try:
+                    self.v_x360.register_notification(self._on_xinput_vibration)
+                except Exception as exc:
+                    print(f"[EmulateX360] Vibration callback unavailable: {exc}")
             self.could_instantiate = True
         except AssertionError as A:
             print(A)
+
+    @property
+    def supports_rumble(self):
+        return self.rumble is not None
+
+    def set_xinput_vibration(self, left_motor, right_motor):
+        """Queue independent Xbox left/right motor values without blocking input."""
+        if self.rumble is not None:
+            self.rumble.set_xinput_vibration(left_motor, right_motor)
+
+    def _on_xinput_vibration(self, client, target, large_motor, small_motor, led_number, user_data):
+        # vgamepad exposes the ViGEm motor bytes (0..255).  Convert them to
+        # the equivalent XInput 16-bit values before applying the common
+        # scaling path, preserving both channels and their intensities.
+        self.set_xinput_vibration(int(large_motor) * 257, int(small_motor) * 257)
 
     def _maybe_do_hotkey(self, ok, func):
         """
@@ -163,7 +189,13 @@ class EmulateX360:
             self.v_x360.press_button(vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT)
 
     def shutdown(self):
+        if self.rumble is not None:
+            self.rumble.stop()
+
         try:
+            unregister = getattr(self.v_x360, "unregister_notification", None)
+            if unregister is not None:
+                unregister()
             self.v_x360.reset()
             self.v_x360.update()
         except Exception as e:
