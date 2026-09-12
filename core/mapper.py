@@ -48,6 +48,7 @@ class Mapper:
                 hotkey_page.hotkey,
                 rumble_enabled=(controller_type == "Dualsense"),
                 rumble_transport=controller.transport,
+                vibration_enabled=settings.get_vibration_enabled(),
             )
             controllers_page.add_x360_instance(self.emulator)
             hotkey_page.add_x360_instance(self.emulator)

@@ -166,7 +166,7 @@ class MainWindow(QMainWindow):
         # Pages
         self.pages = QStackedWidget()
 
-        controllers_page = ControllersPage()
+        controllers_page = ControllersPage(self.settings)
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
@@ -193,6 +193,9 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.settings_page)
         self.settings_page.combo_lang.currentIndexChanged.connect(
             lambda _index: self._apply_language()
+        )
+        self.settings_page.vibration_enabled_changed.connect(
+            self.controllers_page.set_vibration_enabled
         )
         self.about_page = AboutPage()
         self.pages.addWidget(self.about_page)

@@ -24,7 +24,7 @@ class ListOfAllControllers:
 
 class EmulateX360:
     def __init__(self, device_path, controller_name, hotkey, rumble_enabled=False,
-                 rumble_transport=None):
+                 rumble_transport=None, vibration_enabled=True):
         self.device_path = device_path
         self.controller_name = controller_name
         self.hotkey = hotkey
@@ -38,6 +38,7 @@ class EmulateX360:
             DualSenseRumble(device_path, transport=rumble_transport)
             if rumble_enabled else None
         )
+        self._vibration_enabled = bool(vibration_enabled)
 
         # debounce state for hotkeys
         self._last_hotkey_func = None
@@ -64,9 +65,18 @@ class EmulateX360:
     def supports_rumble(self):
         return self.rumble is not None
 
+    @property
+    def vibration_enabled(self):
+        return self.supports_rumble and self._vibration_enabled
+
+    def set_vibration_enabled(self, enabled):
+        self._vibration_enabled = bool(enabled)
+        if not self._vibration_enabled and self.rumble is not None:
+            self.rumble.set_xinput_vibration(0, 0)
+
     def set_xinput_vibration(self, left_motor, right_motor):
         """Queue independent Xbox left/right motor values without blocking input."""
-        if self.rumble is not None:
+        if self.vibration_enabled:
             self.rumble.set_xinput_vibration(left_motor, right_motor)
 
     def _on_xinput_vibration(self, client, target, large_motor, small_motor, led_number, user_data):
@@ -120,7 +130,7 @@ class EmulateX360:
             self._last_monitor = data
             return data
         
-        binary, rt, lt, jlx, jly, jrx, jry = controllerMonitor.monitor(
+        data = controllerMonitor.monitor(
             a, b, y, x,
             start, back,
             r3, l3,
@@ -130,6 +140,8 @@ class EmulateX360:
             ljx, ljy,
             rjx, rjy
         )
+        self._last_monitor = data
+        binary, rt, lt, jlx, jly, jrx, jry = data
 
         ok, func, msg = self.hotkey.get_hotkey(binary)
 

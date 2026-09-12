@@ -77,3 +77,26 @@ def test_xinput_vibration_callback_keeps_motor_channels_separate():
 
     instance._on_xinput_vibration(None, None, 20, 180, None, None)
     assert received == [(20 * 257, 180 * 257)]
+
+
+def test_disabling_vibration_stops_current_rumble_and_blocks_new_requests():
+    from core.emulator import EmulateX360
+
+    class FakeRumble:
+        def __init__(self):
+            self.calls = []
+
+        def set_xinput_vibration(self, left, right):
+            self.calls.append((left, right))
+
+    instance = object.__new__(EmulateX360)
+    instance.rumble = FakeRumble()
+    instance._vibration_enabled = True
+
+    instance.set_vibration_enabled(False)
+    instance.set_xinput_vibration(65535, 32768)
+    assert instance.rumble.calls == [(0, 0)]
+
+    instance.set_vibration_enabled(True)
+    instance.set_xinput_vibration(65535, 32768)
+    assert instance.rumble.calls[-1] == (65535, 32768)
