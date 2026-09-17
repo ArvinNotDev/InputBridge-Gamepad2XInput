@@ -593,7 +593,7 @@ class ControllerEmulation(QWidget):
         super().__init__()
         layout_dashboard = QVBoxLayout(self)
         self.controllers_page = controllers_page
-        hid.hid_manager = HIDManager(settings.get_polling_rate() / 1000)
+        hid.hid_manager = HIDManager(settings.get_poll_interval_ms() / 1000.0)
         self.hotkey_page = hotkey_page
         self.mappers: dict = {}
         self._mapping_records: dict[int, dict] = {}
@@ -938,6 +938,8 @@ class ControllerEmulation(QWidget):
                 return
             if self._start_mapping(item, widget, device):
                 self._ensure_reconnect_timer()
+            else:
+                widget.set_running(False)
 
         else:
             record = self._mapping_records.pop(key, None)

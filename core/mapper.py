@@ -1,10 +1,11 @@
 import json
+import math
 import time
 from typing import Tuple
 
 from core.emulator import EmulateX360, EmulateKeyboard
 from core.emulator import media_functions, custom_commands
-from core.mouse import Mouse
+from core.mouse import Mouse, MouseMotion
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkey_commander import HotkeyCommander
 from core.utils.paths import resource_path
@@ -32,8 +33,10 @@ class Mapper:
         self.settings = settings
         self.controllers_page = controllers_page
 
-        self.mouse_mode = True
+        self.mouse_mode = False
         self.mouse_mode_hotkey = False
+        self._mouse_active = False
+        self._mouse_motion = MouseMotion(smoothing_ms=10.0)
 
         self._prev_back = False
         self._prev_r3 = False
@@ -92,6 +95,7 @@ class Mapper:
         if self._connected:
             print(f"[Mapper] Stopped mapping for {self.controller.name}")
         self._connected = False
+        self._mouse_motion.reset()
 
         clear_battery = getattr(self.controllers_page, "clear_battery", None)
         if clear_battery is not None:
@@ -146,6 +150,12 @@ class Mapper:
         normalized = -centered / 127.0 if invert_y else centered / 127.0
         scaled = int(round(normalized * 32767.0))
         return int(Mapper._clamp(scaled, -32768, 32767))
+
+    @staticmethod
+    def _mouse_response(value: float) -> float:
+        """Give fine stick movement precision while retaining full-speed travel."""
+        value = max(-1.0, min(1.0, float(value)))
+        return math.copysign(abs(value) ** 1.35, value)
 
     def _read_byte_safe(self, report: list[int], idx: int | None) -> int:
         """
@@ -319,25 +329,42 @@ class Mapper:
 
         self.mouse_mode = self.settings.get_mouse_mode()
 
-        if self.mouse_mode or self.mouse_mode_hotkey:
-            if not hasattr(self, "_mx"):
-                self._mx = 0.0
-                self._my = 0.0
+        mouse_active = bool(self.mouse_mode or self.mouse_mode_hotkey)
+        if mouse_active != self._mouse_active:
+            self._mouse_active = mouse_active
+            self._mouse_motion.reset()
+            if mouse_active:
+                self.emulator.reset_output()
+                # Do not turn the mode-switch button press into an accidental
+                # mouse click.
+                self._prev_a = a
+                self._prev_b = b
 
-            sensitivity = self.settings.get_mouse_sensitivity()
-            nx = ljx / 32768.0
-            ny = ljy / 32768.0
+        if mouse_active:
+            sensitivity = max(0.1, float(self.settings.get_mouse_sensitivity()))
+            nx = self._mouse_response(ljx / 32767.0)
+            ny = self._mouse_response(ljy / 32767.0)
 
-            speed = 35.0 * sensitivity
+            # Pixels per second. The time-based motion integrator below makes
+            # this independent of the HID report frequency.
+            speed = 850.0 * sensitivity
             target_dx = nx * speed
             target_dy = -ny * speed
 
-            alpha = 0.25
-            self._mx = self._mx * (1.0 - alpha) + target_dx * alpha
-            self._my = self._my * (1.0 - alpha) + target_dy * alpha
+            if self.settings.get_dpad_as_mouse():
+                dpad_x = int(bool(dpr)) - int(bool(dpl))
+                dpad_y = int(bool(dpd)) - int(bool(dpu))
+                dpad_length = math.hypot(dpad_x, dpad_y)
+                if dpad_length:
+                    dpad_speed = 650.0 * sensitivity
+                    target_dx += dpad_x / dpad_length * dpad_speed
+                    target_dy += dpad_y / dpad_length * dpad_speed
+
+            dx, dy = self._mouse_motion.update(target_dx, target_dy)
 
             try:
-                Mouse.moveRel(self._mx, self._my, duration=0)
+                if dx or dy:
+                    Mouse.moveRel(dx, dy, duration=0)
                 if a and not self._prev_a:
                     Mouse.leftClick()
                 if b and not self._prev_b:

@@ -5,6 +5,9 @@ from core.utils.paths import ensure_user_file, resolve_data_path
 
 
 class SettingsManager:
+    POLL_INTERVAL_MIN_MS = 1.0
+    POLL_INTERVAL_MAX_MS = 1000.0
+
     def __init__(self, path="config/settings.conf"):
         self.path = resolve_data_path(path)
         self.config = configparser.ConfigParser()
@@ -19,7 +22,7 @@ class SettingsManager:
             else:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
                 self.config["device"] = {
-                    "polling_rate": "1.0",
+                    "poll_interval_ms": "1.0",
                     "auto_reconnect": "true",
                     "dpad_as_mouse": "true",
                     "left_stick_deadzone": "0.000000",
@@ -48,13 +51,36 @@ class SettingsManager:
         self.config.read(self.path)
 
     # -------- device --------
-    def get_polling_rate(self):
-        return self.config.getfloat("device", "polling_rate", fallback=1.0)
+    def get_poll_interval_ms(self) -> float:
+        """Return the HID polling sleep interval in milliseconds.
 
-    def set_polling_rate(self, v: float):
+        ``polling_rate`` was the old, misleading name. Keep reading it as a
+        compatibility fallback so existing settings and profiles continue to
+        work, but normalize new writes to the explicit interval name.
+        """
+        try:
+            if self.config.has_option("device", "poll_interval_ms"):
+                value = self.config.getfloat("device", "poll_interval_ms")
+            else:
+                value = self.config.getfloat("device", "polling_rate", fallback=1.0)
+        except (ValueError, TypeError):
+            value = 1.0
+
+        return max(self.POLL_INTERVAL_MIN_MS, min(self.POLL_INTERVAL_MAX_MS, float(value)))
+
+    def set_poll_interval_ms(self, v: float):
         if not self.config.has_section("device"):
             self.config.add_section("device")
-        self.config.set("device", "polling_rate", str(float(v)))
+        value = max(self.POLL_INTERVAL_MIN_MS, min(self.POLL_INTERVAL_MAX_MS, float(v)))
+        self.config.set("device", "poll_interval_ms", f"{value:.3f}")
+        self.config.remove_option("device", "polling_rate")
+
+    # Backward-compatible API for older callers.
+    def get_polling_rate(self):
+        return self.get_poll_interval_ms()
+
+    def set_polling_rate(self, v: float):
+        self.set_poll_interval_ms(v)
 
     def get_auto_reconnect(self):
         return self.config.getboolean("device", "auto_reconnect", fallback=True)
@@ -210,9 +236,9 @@ class SettingsManager:
             self.config.add_section("device")
         # polling rate
         try:
-            _ = self.get_polling_rate()
+            self.set_poll_interval_ms(self.get_poll_interval_ms())
         except Exception:
-            self.set_polling_rate(1.0)
+            self.set_poll_interval_ms(1.0)
         # auto reconnect
         try:
             _ = self.get_auto_reconnect()

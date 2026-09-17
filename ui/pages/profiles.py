@@ -766,7 +766,8 @@ class ProfilesPage(QWidget):
         }
 
         label_map = {
-            "polling_rate": "Polling Rate",
+            "poll_interval_ms": "Input Poll Interval (ms)",
+            "polling_rate": "Input Poll Interval (ms)",
             "auto_reconnect": "Auto Reconnect",
             "dpad_as_mouse": "D-Pad as Mouse",
             "mouse_mode": "Mouse Mode",

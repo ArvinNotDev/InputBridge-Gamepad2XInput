@@ -41,7 +41,7 @@ _TRANSLATIONS = {
         "Device Settings": "تنظیمات دستگاه",
         "UI Settings": "تنظیمات رابط کاربری",
         "Developer Settings": "تنظیمات توسعه‌دهنده",
-        "Polling rate (Hz)": "نرخ نمونه‌برداری (هرتز)",
+        "Input poll interval (ms)": "فاصله خواندن ورودی (میلی‌ثانیه)",
         "Auto reconnect": "اتصال مجدد خودکار",
         "D-Pad as mouse": "تبدیل D-Pad به ماوس",
         "Mouse mode": "حالت ماوس",

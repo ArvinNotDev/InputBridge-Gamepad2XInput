@@ -3,7 +3,7 @@ import socket
 import json
 import threading
 import hashlib
-import random
+import secrets
 import os
 from typing import Optional, Dict, Tuple
 from core.settings import SettingsManager
@@ -460,6 +460,7 @@ class ServerPage(QWidget):
         self.signals.client_connected.emit(addr)
 
         mapper: Optional[Phone_mapper] = None
+        auth_failures = 0
 
         try:
             while not self.stop_event.is_set():
@@ -478,6 +479,8 @@ class ServerPage(QWidget):
                     break
 
                 buffer += data.decode("utf-8", errors="replace")
+                if len(buffer) > 64 * 1024:
+                    break
 
                 while "\n" in buffer:
                     line, buffer = buffer.split("\n", 1)
@@ -539,13 +542,15 @@ class ServerPage(QWidget):
                                         )
                                         self.signals.remote_mapper_added.emit(mapper.emulator)
                                     else:
+                                        auth_failures += 1
                                         print(f"[{addr}] Invalid auth code: {received_code}")
+                                        if auth_failures >= 5:
+                                            self.auth_states[conn_key]["expired"] = True
+                                            break
                                 else:
                                     # No auth_code received yet: generate once and show
                                     if not auth_code_generated:
-                                        auth_code_generated = str(
-                                            random.randint(1000, 9999)
-                                        )
+                                        auth_code_generated = str(secrets.randbelow(9000) + 1000)
                                         auth_time_left = 120
                                         st = self.auth_states.get(conn_key, {})
                                         st["code"] = auth_code_generated

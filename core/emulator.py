@@ -29,9 +29,6 @@ class EmulateX360:
         self.controller_name = controller_name
         self.hotkey = hotkey
         self.hotkey_commander = HotkeyCommander(media_functions, custom_commands)
-        with ListOfAllControllers.lock:
-            ListOfAllControllers.controllers_path.append(device_path)
-            ListOfAllControllers.controllers_name.append(controller_name)
         self.is_monitoring = False
         self.could_instantiate = False
         self.rumble = (
@@ -45,9 +42,17 @@ class EmulateX360:
         self._last_hotkey_time = 0.0
         self._hotkey_interval = 0.1  # 200 ms
 
-        while self.could_instantiate is False:
-            self.instantiate_vg()
-            time.sleep(0.2)
+        if not self.instantiate_vg():
+            if self.rumble is not None:
+                self.rumble.stop()
+            raise RuntimeError(
+                "ViGEmBus is unavailable. Install/start the ViGEmBus driver "
+                "before starting XInput emulation."
+            )
+
+        with ListOfAllControllers.lock:
+            ListOfAllControllers.controllers_path.append(device_path)
+            ListOfAllControllers.controllers_name.append(controller_name)
 
     def instantiate_vg(self):
         try:
@@ -58,8 +63,11 @@ class EmulateX360:
                 except Exception as exc:
                     print(f"[EmulateX360] Vibration callback unavailable: {exc}")
             self.could_instantiate = True
-        except AssertionError as A:
-            print(A)
+            return True
+        except Exception as exc:
+            print(f"[EmulateX360] Could not create virtual Xbox controller: {exc}")
+            self.could_instantiate = False
+            return False
 
     @property
     def supports_rumble(self):
@@ -78,6 +86,14 @@ class EmulateX360:
         """Queue independent Xbox left/right motor values without blocking input."""
         if self.vibration_enabled:
             self.rumble.set_xinput_vibration(left_motor, right_motor)
+
+    def reset_output(self) -> None:
+        """Release every virtual control when switching output modes."""
+        try:
+            self.v_x360.reset()
+            self.v_x360.update()
+        except Exception as exc:
+            print(f"[EmulateX360] Could not reset virtual controller: {exc}")
 
     def _on_xinput_vibration(self, client, target, large_motor, small_motor, led_number, user_data):
         # vgamepad exposes the ViGEm motor bytes (0..255).  Convert them to
@@ -205,11 +221,13 @@ class EmulateX360:
             self.rumble.stop()
 
         try:
-            unregister = getattr(self.v_x360, "unregister_notification", None)
-            if unregister is not None:
-                unregister()
-            self.v_x360.reset()
-            self.v_x360.update()
+            virtual = getattr(self, "v_x360", None)
+            if virtual is not None:
+                unregister = getattr(virtual, "unregister_notification", None)
+                if unregister is not None:
+                    unregister()
+                virtual.reset()
+                virtual.update()
         except Exception as e:
             print(f"[EmulateX360] Error on shutdown: {e}")
 
@@ -218,7 +236,8 @@ class EmulateX360:
             with ListOfAllControllers.lock:
                 idx = ListOfAllControllers.controllers_path.index(self.device_path)
                 ListOfAllControllers.controllers_path.pop(idx)
-                ListOfAllControllers.controllers_name.pop(idx)
+                if idx < len(ListOfAllControllers.controllers_name):
+                    ListOfAllControllers.controllers_name.pop(idx)
         except ValueError:
             pass
         

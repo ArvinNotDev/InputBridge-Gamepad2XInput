@@ -333,6 +333,7 @@ class MainWindow(QMainWindow):
     def _on_profile_loaded(self, profile_name: str) -> None:
         """Called when a profile is activated from the Profiles page."""
         self._refresh_sidebar_avatar()
+        self.settings_page.reload_from_settings()
         # Reload theme in case it changed
         try:
             theme = self.settings.get_ui_theme()

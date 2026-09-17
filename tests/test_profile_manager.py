@@ -153,13 +153,18 @@ class TestProfileManager:
 
     def test_settings_round_trip(self):
         """Activating a profile should update the settings config."""
-        self.settings.config.set("device", "polling_rate", "5.0")
+        self.settings.config.set("device", "poll_interval_ms", "5.0")
         self.settings.config["profile"] = {"active": "personal"}
         self.pm.save_profile("Custom")
-        self.settings.config.set("device", "polling_rate", "1.0")
+        self.settings.config.set("device", "poll_interval_ms", "1.0")
         self.pm.activate_profile("Custom")
-        assert self.settings.config.get("device", "polling_rate") == "5.0"
+        assert self.settings.config.get("device", "poll_interval_ms") == "5.0"
         assert self.settings.config.get("profile", "active") == "Custom"
+
+    def test_malformed_profile_root_is_ignored(self):
+        bad_path = Path(self.tmpdir) / "profiles" / "user" / "Malformed.json"
+        bad_path.write_text("[]", encoding="utf-8")
+        assert self.pm.list_profiles() == []
 
     def test_profile_image_metadata_is_portable_and_cleanup_is_scoped(self):
         self.pm.save_profile("With Image")

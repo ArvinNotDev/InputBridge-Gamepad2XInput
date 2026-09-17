@@ -641,6 +641,7 @@ class AppState:
         self._send_lock = threading.Lock()
         self._rx_stop = threading.Event()
         self._rx_thread = None
+        self._connection_generation = 0
 
         self.buttons = {
             "A": 0,
@@ -724,6 +725,8 @@ class AppState:
 
         self.device_name = name
         self.authenticating = True
+        self._connection_generation += 1
+        generation = self._connection_generation
 
         Clock.schedule_once(
             lambda dt: self._ui_authenticating(),
@@ -732,11 +735,11 @@ class AppState:
 
         threading.Thread(
             target=self._connect_thread,
-            args=(ip, port),
+            args=(ip, port, generation),
             daemon=True,
         ).start()
 
-    def _connect_thread(self, ip, port):
+    def _connect_thread(self, ip, port, generation):
         try:
             s = socket.socket(
                 socket.AF_INET,
@@ -748,6 +751,10 @@ class AppState:
             s.connect(
                 (ip, port)
             )
+
+            if generation != self._connection_generation:
+                s.close()
+                return
 
             s.settimeout(1.0)
 
@@ -764,6 +771,7 @@ class AppState:
 
             self._rx_thread = threading.Thread(
                 target=self._rx_loop,
+                args=(generation,),
                 daemon=True,
             )
 
@@ -835,7 +843,7 @@ class AppState:
             0,
         )
 
-    def _rx_loop(self):
+    def _rx_loop(self, generation):
         try:
             while (
                 not self._rx_stop.is_set()
@@ -855,9 +863,13 @@ class AppState:
 
         finally:
             Clock.schedule_once(
-                lambda dt: self.disconnect(),
+                lambda dt, g=generation: self._disconnect_if_current(g),
                 0,
             )
+
+    def _disconnect_if_current(self, generation):
+        if generation == self._connection_generation:
+            self.disconnect()
 
     def on_submit_code(self, code):
         code = (code or "").strip()
@@ -896,6 +908,7 @@ class AppState:
             self.connect_screen.clear_pair_status()
 
     def disconnect(self):
+        self._connection_generation += 1
         self._rx_stop.set()
 
         self.connected = False

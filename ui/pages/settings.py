@@ -75,15 +75,15 @@ class SettingsPage(QWidget):
         device_form.setHorizontalSpacing(18)
         device_form.setVerticalSpacing(12)
 
-        # Polling rate
+        # Input poll interval
         poll_row = QHBoxLayout()
         self.spin_poll = QSpinBox()
         self.spin_poll.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
-        self.spin_poll.setRange(0, 1000)
+        self.spin_poll.setRange(1, 1000)
         self.spin_poll.setFixedWidth(110)
         poll_row.addWidget(self.spin_poll)
         poll_row.addStretch()
-        device_form.addRow("Polling rate (Hz)", poll_row)
+        device_form.addRow("Input poll interval (ms)", poll_row)
 
         # Checkboxes
         self.chk_reconnect = QCheckBox("Auto reconnect")
@@ -352,9 +352,10 @@ class SettingsPage(QWidget):
         # INITIAL LOAD FROM SETTINGS
         # ==========================================================
         try:
-            polling = int(self.settings.get_polling_rate())
+            polling = int(self.settings.get_poll_interval_ms())
         except Exception:
             polling = 1
+        self.spin_poll.setRange(1, 1000)
         self.spin_poll.setValue(polling)
 
         try:
@@ -525,13 +526,63 @@ class SettingsPage(QWidget):
         else:
             self.lbl_profile_status.setText(tr("No profile active", language))
 
+    def reload_from_settings(self) -> None:
+        """Refresh every control after a profile changes the live settings."""
+        self._autosave_timer.stop()
+        widgets = [
+            self.spin_poll, self.chk_reconnect, self.chk_dpad_mouse,
+            self.chk_mouse_mode, self.chk_vibration, self.spin_mouse_sens,
+            self.left_slider, self.right_slider, self.chk_left_invert_x,
+            self.chk_left_invert_y, self.chk_right_invert_x,
+            self.chk_right_invert_y, self.chk_button_invert, self.combo_lang,
+            self.combo_theme, self.chk_debug, self.chk_raw_hid,
+            self.chk_log_to_file, self.edit_log_path,
+        ]
+        states = [widget.blockSignals(True) for widget in widgets]
+        try:
+            self.spin_poll.setValue(int(round(self.settings.get_poll_interval_ms())))
+            self.chk_reconnect.setChecked(self.settings.get_auto_reconnect())
+            self.chk_dpad_mouse.setChecked(self.settings.get_dpad_as_mouse())
+            self.chk_mouse_mode.setChecked(self.settings.get_mouse_mode())
+            self.chk_vibration.setChecked(self.settings.get_vibration_enabled())
+            self.spin_mouse_sens.setValue(self.settings.get_mouse_sensitivity())
+
+            left_dz, right_dz = self.settings.get_deadzones()
+            self.left_slider.setValue(int(left_dz * 1000))
+            self.right_slider.setValue(int(right_dz * 1000))
+            self.left_val.setText(f"{left_dz:.2f}")
+            self.right_val.setText(f"{right_dz:.2f}")
+
+            left_inv, right_inv = self.settings.get_joystick_invertion()
+            self.chk_left_invert_x.setChecked(bool(left_inv[0]))
+            self.chk_left_invert_y.setChecked(bool(left_inv[1]))
+            self.chk_right_invert_x.setChecked(bool(right_inv[0]))
+            self.chk_right_invert_y.setChecked(bool(right_inv[1]))
+            self.chk_button_invert.setChecked(self.settings.get_button_invertion())
+
+            language = self.settings.get_ui_language()
+            language_codes = [self.combo_lang.itemData(i) for i in range(self.combo_lang.count())]
+            if language in language_codes:
+                self.combo_lang.setCurrentIndex(language_codes.index(language))
+            self.combo_theme.setCurrentText(self.settings.get_ui_theme())
+            self.chk_debug.setChecked(self.settings.get_developer_debug())
+            self.chk_raw_hid.setChecked(self.settings.get_raw_hid_debug())
+            self.chk_log_to_file.setChecked(self.settings.get_log_to_file())
+            self.edit_log_path.setText(self.settings.get_log_file_path())
+        finally:
+            for widget, state in zip(widgets, states):
+                widget.blockSignals(state)
+
+        self._update_profile_label()
+        self.vibration_enabled_changed.emit(self.settings.get_vibration_enabled())
+
     def _apply_all_current_values(self):
         """
         Push every visible UI control value into the SettingsManager
         (without writing to disk — the caller decides when to save).
         """
         # Device
-        self.settings.set_polling_rate(self.spin_poll.value())
+        self.settings.set_poll_interval_ms(self.spin_poll.value())
         self.settings.set_auto_reconnect(self.chk_reconnect.isChecked())
         self.settings.set_dpad_as_mouse(self.chk_dpad_mouse.isChecked())
         self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
@@ -681,7 +732,7 @@ class SettingsPage(QWidget):
     # DEVICE ACTIONS
     # ==========================================================
     def restore_device_defaults(self):
-        self.spin_poll.setValue(0)
+        self.spin_poll.setValue(1)
         self.chk_reconnect.setChecked(True)
         self.chk_dpad_mouse.setChecked(True)
         self.chk_mouse_mode.setChecked(False)
@@ -699,9 +750,9 @@ class SettingsPage(QWidget):
         self._save_current_values()
 
     def apply_device(self):
-        old_polling = self.settings.get_polling_rate()
+        old_polling = self.settings.get_poll_interval_ms()
         polling = self.spin_poll.value()
-        self.settings.set_polling_rate(polling)
+        self.settings.set_poll_interval_ms(polling)
         self.settings.set_auto_reconnect(self.chk_reconnect.isChecked())
         self.settings.set_dpad_as_mouse(self.chk_dpad_mouse.isChecked())
         self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
@@ -726,7 +777,7 @@ class SettingsPage(QWidget):
             msg.setIcon(QMessageBox.Information)
             msg.setWindowTitle("Restart Required")
             msg.setText(
-                "Polling rate has changed. Please restart the application for the changes to take effect."
+                "Input poll interval has changed. Please restart the application for the changes to take effect."
             )
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec()

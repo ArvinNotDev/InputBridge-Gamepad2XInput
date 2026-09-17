@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, QThread, Signal
 import hid
-import time
+import threading
 
 
 class HIDWorker(QObject):
@@ -11,11 +11,19 @@ class HIDWorker(QObject):
     def __init__(self, controller, poll_interval=0.008):
         super().__init__()
         self.controller = controller
-        self.poll_interval = poll_interval
+        # Never allow a zero/negative delay to turn the HID loop into a busy
+        # loop. One millisecond is fast enough for responsive input while
+        # keeping CPU usage bounded.
+        try:
+            self.poll_interval = max(0.001, float(poll_interval))
+        except (TypeError, ValueError):
+            self.poll_interval = 0.001
         self._running = True
+        self._stop_event = threading.Event()
 
     def stop(self):
         self._running = False
+        self._stop_event.set()
 
     def _is_dualsense(self) -> bool:
         """Return True only for the supported Sony DualSense (PS5) HID device."""
@@ -45,7 +53,7 @@ class HIDWorker(QObject):
             return
 
         try:
-            while self._running:
+            while self._running and not self._stop_event.is_set():
                 try:
                     try:
                         report = ds.read(65, timeout_ms=1)
@@ -59,7 +67,7 @@ class HIDWorker(QObject):
                     if report:
                         self.data_received.emit(bytes(report))
 
-                    time.sleep(self.poll_interval)
+                    self._stop_event.wait(self.poll_interval)
 
                 except Exception as e:
                     self.error.emit(str(e))

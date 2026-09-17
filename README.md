@@ -260,7 +260,7 @@ python main.py
 ### Build the recommended onedir package
 
 ```powershell
-python -m PyInstaller --clean --noconfirm InputBridge-Gamepad2XInput.spec
+python -m PyInstaller --clean --noconfirm UniversalRemapper.spec
 ```
 
 Output:
@@ -279,7 +279,7 @@ The **onedir** build is generally recommended for development and distribution w
 python -m PyInstaller --clean --noconfirm `
   --distpath dist\onefile `
   --workpath build\InputBridge-Gamepad2XInput_onefile `
-  InputBridge-Gamepad2XInput_onefile.spec
+  UniversalRemapper_onefile.spec
 ```
 
 Output:
@@ -301,8 +301,8 @@ The **onefile** build packages the application into a single executable and is m
 ├── profiles/                              # Controller profile definitions
 ├── config/                                # Default application configuration
 ├── main.py                                # Application entry point
-├── InputBridge-Gamepad2XInput.spec        # PyInstaller onedir specification
-├── InputBridge-Gamepad2XInput_onefile.spec# PyInstaller onefile specification
+├── UniversalRemapper.spec                  # PyInstaller onedir specification
+├── UniversalRemapper_onefile.spec          # PyInstaller onefile specification
 ├── requirements.txt                       # Python dependencies
 └── README.md
 ```

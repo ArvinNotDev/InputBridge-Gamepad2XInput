@@ -79,7 +79,8 @@ class ProfileManager:
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            return data if isinstance(data, dict) else None
         except (json.JSONDecodeError, OSError):
             return None
 
@@ -558,6 +559,10 @@ class ProfileManager:
             if not cfg.has_section(section):
                 cfg.add_section(section)
             for key, value in values.items():
+                if section == "device" and key == "polling_rate":
+                    if "poll_interval_ms" in values:
+                        continue
+                    key = "poll_interval_ms"
                 cfg.set(section, key, str(value))
         self.settings.save()
 
@@ -602,8 +607,10 @@ class ProfileManager:
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                return None
             meta = data.get("_meta")
-            if meta is None:
+            if not isinstance(meta, dict):
                 # Build minimal meta from filename
                 meta = {
                     "name": path.stem.replace("_", " ").title(),
