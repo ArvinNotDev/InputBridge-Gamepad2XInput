@@ -1,6 +1,7 @@
 from configparser import ConfigParser
 
 from core.mouse import MouseMotion
+from core.mapper import Mapper
 from core.settings import SettingsManager
 
 
@@ -21,3 +22,11 @@ def test_mouse_motion_accumulates_fractional_pixels_without_stalling():
 
     assert sum(dx for dx, _ in outputs) > 0
     assert all(isinstance(dx, int) and isinstance(dy, int) for dx, dy in outputs)
+
+
+def test_mouse_deadzone_filters_small_input_and_preserves_full_range():
+    assert Mapper._mouse_deadzone(0.05) == 0.0
+    assert Mapper._mouse_deadzone(-0.10) == 0.0
+    assert Mapper._mouse_deadzone(1.0) == 1.0
+    assert Mapper._mouse_deadzone(-1.0) == -1.0
+    assert 0.0 < Mapper._mouse_deadzone(0.20) < 0.20

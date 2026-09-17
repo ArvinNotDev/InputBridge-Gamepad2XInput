@@ -16,6 +16,11 @@ class Mapper:
     Maps input from a physical HID controller to an emulator (X360 or keyboard).
     """
 
+    # A small fixed deadzone prevents sensor noise and tiny involuntary stick
+    # movements from moving the desktop cursor. The output is rescaled so the
+    # usable stick range still reaches full speed.
+    MOUSE_DEADZONE = 0.10
+
     def __init__(
         self,
         controller,
@@ -36,7 +41,7 @@ class Mapper:
         self.mouse_mode = False
         self.mouse_mode_hotkey = False
         self._mouse_active = False
-        self._mouse_motion = MouseMotion(smoothing_ms=10.0)
+        self._mouse_motion = MouseMotion(smoothing_ms=4.0)
 
         self._prev_back = False
         self._prev_r3 = False
@@ -156,6 +161,18 @@ class Mapper:
         """Give fine stick movement precision while retaining full-speed travel."""
         value = max(-1.0, min(1.0, float(value)))
         return math.copysign(abs(value) ** 1.35, value)
+
+    @staticmethod
+    def _mouse_deadzone(value: float, deadzone: float = MOUSE_DEADZONE) -> float:
+        """Remove a fixed center deadzone and preserve the full output range."""
+        value = max(-1.0, min(1.0, float(value)))
+        deadzone = max(0.0, min(0.99, float(deadzone)))
+        magnitude = abs(value)
+        if magnitude <= deadzone:
+            return 0.0
+
+        remapped = (magnitude - deadzone) / (1.0 - deadzone)
+        return math.copysign(remapped, value)
 
     def _read_byte_safe(self, report: list[int], idx: int | None) -> int:
         """
@@ -342,8 +359,12 @@ class Mapper:
 
         if mouse_active:
             sensitivity = max(0.1, float(self.settings.get_mouse_sensitivity()))
-            nx = self._mouse_response(ljx / 32767.0)
-            ny = self._mouse_response(ljy / 32767.0)
+            nx = self._mouse_response(
+                self._mouse_deadzone(ljx / 32767.0)
+            )
+            ny = self._mouse_response(
+                self._mouse_deadzone(ljy / 32767.0)
+            )
 
             # Pixels per second. The time-based motion integrator below makes
             # this independent of the HID report frequency.

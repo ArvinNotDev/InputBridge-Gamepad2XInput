@@ -53,10 +53,15 @@ class HIDWorker(QObject):
             return
 
         try:
+            idle_cycles = 0
+            read_timeout_ms = max(1, int(round(self.poll_interval * 1000.0)))
             while self._running and not self._stop_event.is_set():
                 try:
                     try:
-                        report = ds.read(65, timeout_ms=1)
+                        # Let hidapi block while idle. Once a report arrives,
+                        # immediately return to read again; adding a sleep
+                        # after an active report creates avoidable input lag.
+                        report = ds.read(65, timeout_ms=read_timeout_ms)
                         # for i, r in enumerate(report):
                         #     if not r:
                         #         report = report[:i] + report[i+1:]
@@ -65,9 +70,19 @@ class HIDWorker(QObject):
                         report = ds.read(65, timeout=1)
 
                     if report:
+                        idle_cycles = 0
                         self.data_received.emit(bytes(report))
+                        continue
 
-                    self._stop_event.wait(self.poll_interval)
+                    # Some hidapi backends can return immediately with an
+                    # empty report. Back off only after repeated idle reads so
+                    # that such a backend cannot spin at 100% CPU, while the
+                    # active input path remains sleep-free.
+                    idle_cycles = min(idle_cycles + 1, 4)
+                    if idle_cycles >= 2:
+                        self._stop_event.wait(
+                            min(0.003, self.poll_interval * (idle_cycles - 1))
+                        )
 
                 except Exception as e:
                     self.error.emit(str(e))
