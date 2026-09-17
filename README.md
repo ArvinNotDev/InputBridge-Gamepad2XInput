@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A modern Windows gamepad remapper built with PySide6.</strong><br>
-  Map HID controllers to virtual Xbox 360 (XInput) or keyboard inputs — with profiles, hotkeys, mouse mode, and remote gamepad support.
+  Map HID controllers to virtual Xbox 360 (XInput) devices or mouse controls — with profiles, hotkeys, and remote gamepad support.
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 ## Overview
 
-**InputBridge-Gamepad2XInput** is a Windows desktop application for remapping physical HID controllers to virtual **Xbox 360 / XInput** devices, keyboard inputs, and mouse controls.
+**InputBridge-Gamepad2XInput** is a Windows desktop application for remapping physical HID controllers to virtual **Xbox 360 / XInput** devices and responsive mouse controls.
 
 It provides a graphical interface for configuring controller mappings without modifying source code. Profiles, hotkeys, analog settings, mouse emulation, and remote gamepad support are managed directly from the application.
 
@@ -30,19 +30,23 @@ The project is built with **PySide6** and packaged for Windows using **PyInstall
 
 The latest release includes a self-contained Windows `.exe`, so Python is **not required** to run the packaged application.
 
+> **Current release: v2.0.7** — reliability improvements, lower-latency input
+> handling, and smoother professional mouse control. See the full [changelog](CHANGELOG.md)
+> and the [latest release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/latest).
+
 ## Features
 
 * HID controller discovery and live device monitoring
 * Virtual Xbox 360 controller emulation through `vgamepad`
 * XInput-compatible controller output
-* Keyboard and media-key mapping
+* Controller hotkeys, media keys, and custom commands
 * Configurable controller profiles
 * Profile-based input configuration
-* Custom controller hotkeys
 * D-Pad and analog-stick mouse control
-* Adjustable mouse sensitivity
-* Configurable deadzones
-* Axis inversion
+* Low-latency, time-based mouse motion with fractional-pixel accumulation
+* Fixed 10% mouse deadzone to filter stick noise and accidental cursor drift
+* Adjustable mouse sensitivity with nonlinear fine-control response
+* Configurable gamepad deadzones and axis inversion
 * Remote gamepad server support
 * System-tray integration
 * Dark and light themes
@@ -53,6 +57,10 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * In-app About page with developer and project links
 * Portable/self-contained Windows executable
 * Separate writable user configuration from bundled application resources
+
+Keyboard emulation is intentionally not enabled in the current release. The
+keyboard target remains reserved for a future implementation; controller
+hotkeys and media/custom commands are available independently.
 
 ## Download
 
@@ -87,9 +95,10 @@ ViGEmClient.dll
 
 However, the **ViGEmBus driver itself may need to be installed separately**, especially on a clean Windows installation.
 
-### For keyboard or mouse mapping
+### For mouse control and hotkeys
 
-If you only use keyboard or mouse mapping, the virtual gamepad driver is not required.
+If you only use mouse mode or controller hotkeys, the virtual gamepad driver is
+not required. Keyboard emulation itself is not enabled in the current release.
 
 ## Quick Start
 
@@ -104,7 +113,7 @@ If you only use keyboard or mouse mapping, the virtual gamepad driver is not req
 9. Configure mappings, profiles, hotkeys, mouse mode, and sensitivity as needed.
 10. Start the emulation.
 
-Once configured, the physical controller can be translated into a virtual XInput controller or other supported input types.
+Once configured, the physical controller can be translated into a virtual XInput controller, mouse movement, or hotkey actions.
 
 ## Controller Mapping
 
@@ -120,7 +129,7 @@ InputBridge-Gamepad2XInput
         │
         ├──► Virtual Xbox 360 / XInput Controller
         │
-        ├──► Keyboard Input
+        ├──► Controller Hotkeys
         │
         └──► Mouse Input
 ```
@@ -168,8 +177,25 @@ Supported functionality includes:
 * Analog-stick mouse movement
 * D-Pad mouse control
 * Adjustable sensitivity
-* Configurable deadzones
+* A fixed 10% center deadzone that removes small stick noise while preserving
+  the full-speed range
+* Time-based smoothing that stays consistent across HID report rates
+* Fractional-pixel accumulation so slow movement does not stall
+* Nonlinear response for precise small movements and fast travel at larger
+  stick deflections
 * Axis inversion
+
+Mouse mode is designed for responsive desktop control. The cursor path avoids
+an unnecessary delay after active HID reports, while a short adaptive idle wait
+keeps CPU usage controlled when no input is arriving.
+
+## Input timing
+
+Settings names the timing control **Input poll interval (ms)**. It is an idle
+polling interval, not a polling rate in Hz. The default is `1 ms`; values below
+`1 ms` are clamped to `1 ms` to avoid a CPU-heavy busy loop. Existing settings
+using the old `polling_rate` key are read automatically and normalized to
+`poll_interval_ms` when saved.
 
 This can be useful for desktop navigation, media-center systems, remote-control setups, and games that do not provide adequate controller support.
 
@@ -260,7 +286,7 @@ python main.py
 ### Build the recommended onedir package
 
 ```powershell
-python -m PyInstaller --clean --noconfirm UniversalRemapper.spec
+python -m PyInstaller --clean --noconfirm InputBridge-Gamepad2XInput.spec
 ```
 
 Output:
@@ -279,7 +305,7 @@ The **onedir** build is generally recommended for development and distribution w
 python -m PyInstaller --clean --noconfirm `
   --distpath dist\onefile `
   --workpath build\InputBridge-Gamepad2XInput_onefile `
-  UniversalRemapper_onefile.spec
+  InputBridge-Gamepad2XInput_onefile.spec
 ```
 
 Output:
@@ -301,8 +327,8 @@ The **onefile** build packages the application into a single executable and is m
 ├── profiles/                              # Controller profile definitions
 ├── config/                                # Default application configuration
 ├── main.py                                # Application entry point
-├── UniversalRemapper.spec                  # PyInstaller onedir specification
-├── UniversalRemapper_onefile.spec          # PyInstaller onefile specification
+├── InputBridge-Gamepad2XInput.spec         # PyInstaller onedir specification
+├── InputBridge-Gamepad2XInput_onefile.spec # PyInstaller onefile specification
 ├── requirements.txt                       # Python dependencies
 └── README.md
 ```
@@ -420,8 +446,8 @@ Conceptually:
                ┌─────────┘     └──────────┐
                ▼                          ▼
      ┌─────────────────┐        ┌─────────────────┐
-     │ Virtual XInput  │        │ Keyboard /      │
-     │ Xbox 360 Pad    │        │ Mouse Output    │
+     │ Virtual XInput  │        │ Mouse Output    │
+     │ Xbox 360 Pad    │        │ and Hotkeys     │
      └─────────────────┘        └─────────────────┘
 ```
 
@@ -452,6 +478,13 @@ Current focus includes:
 * Desktop mouse control
 * Remote gamepad support
 * Windows packaging and distribution
+
+## Release policy
+
+Tagged releases are published on GitHub with a self-contained Windows
+one-file executable. Release notes call out user-visible changes, compatibility
+notes, and validation results so the downloadable artifact can be tested and
+tracked independently from source checkouts.
 
 ## License
 
