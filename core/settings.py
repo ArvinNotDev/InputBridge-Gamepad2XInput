@@ -1,4 +1,6 @@
 import configparser
+import hashlib
+import re
 from pathlib import Path
 
 from core.utils.paths import ensure_user_file, resolve_data_path
@@ -159,6 +161,58 @@ class SettingsManager:
         if not self.config.has_section("device"):
             self.config.add_section("device")
         self.config.set("device", "vibration_enabled", "true" if enabled else "false")
+
+    # -------- per-controller DualSense Lightbar --------
+    @staticmethod
+    def _lightbar_section(controller_id: str) -> str:
+        digest = hashlib.sha256(str(controller_id).encode("utf-8")).hexdigest()[:20]
+        return f"lightbar_{digest}"
+
+    def has_controller_lightbar_settings(self, controller_id: str) -> bool:
+        return self.config.has_section(self._lightbar_section(controller_id))
+
+    def get_controller_lightbar_settings(self, controller_id: str) -> dict:
+        section = self._lightbar_section(controller_id)
+        if not self.config.has_section(section):
+            return {
+                "enabled": False,
+                "color": "#8B5CF6",
+                "battery_mode": False,
+                "charging_indication": False,
+            }
+
+        color = self.config.get(section, "color", fallback="#8B5CF6").upper()
+        if not re.fullmatch(r"#[0-9A-F]{6}", color):
+            color = "#8B5CF6"
+        return {
+            "enabled": self.config.getboolean(section, "enabled", fallback=False),
+            "color": color,
+            "battery_mode": self.config.getboolean(
+                section, "battery_mode", fallback=False
+            ),
+            "charging_indication": self.config.getboolean(
+                section, "charging_indication", fallback=False
+            ),
+        }
+
+    def set_controller_lightbar_settings(self, controller_id: str, settings: dict):
+        section = self._lightbar_section(controller_id)
+        if not self.config.has_section(section):
+            self.config.add_section(section)
+
+        color = str(settings.get("color", "#8B5CF6")).upper()
+        if not re.fullmatch(r"#[0-9A-F]{6}", color):
+            color = "#8B5CF6"
+        self.config.set(section, "enabled", str(bool(settings.get("enabled", False))).lower())
+        self.config.set(section, "color", color)
+        self.config.set(
+            section, "battery_mode", str(bool(settings.get("battery_mode", False))).lower()
+        )
+        self.config.set(
+            section,
+            "charging_indication",
+            str(bool(settings.get("charging_indication", False))).lower(),
+        )
 
     # -------- ui --------
     def get_ui_language(self):

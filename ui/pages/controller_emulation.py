@@ -2,16 +2,25 @@ from typing import Optional, Tuple
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QListWidget, QPushButton,
-    QDialog, QListWidgetItem, QSizePolicy, QMessageBox, QFrame
+    QDialog, QListWidgetItem, QSizePolicy, QMessageBox, QFrame, QCheckBox,
+    QColorDialog, QDialogButtonBox
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QThread, QObject, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QColor
 
 from ui.pages.modal.add_controller import AddControllerDialog
 from core.mapper import Mapper
 from core.settings import SettingsManager
 from core.hid import HIDManager
 from core import hid
+from core.controller import stable_controller_id
+from core.dualsense_lightbar import (
+    DEFAULT_LIGHTBAR_COLOR,
+    DualSenseLightbar,
+    is_dualsense_device,
+    resolve_lightbar_color,
+)
+from ui.i18n import tr
 
 from core.hidhide import HIDHIDE_RELEASES_URL, HidHideError, HidHideManager
 
@@ -505,16 +514,108 @@ class HidHideCard(QFrame):
             print(f"[HidHide] Unexpected cleanup error: {exc}")
 
 
+class DualSenseLightbarDialog(QDialog):
+    """Compact per-controller Lightbar settings using the app's active theme."""
+
+    def __init__(self, controller_name: str, settings: dict, language="eng", parent=None):
+        super().__init__(parent)
+        self._language = language
+        self._color = settings.get("color", DEFAULT_LIGHTBAR_COLOR)
+        self.setWindowTitle(tr("Lightbar settings", language))
+        self.setMinimumWidth(360)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(18, 16, 18, 14)
+        root.setSpacing(10)
+
+        identity = QLabel(f"{tr('Controller', language)}: {controller_name}")
+        identity.setWordWrap(True)
+        identity.setProperty("_i18n_dynamic", True)
+        root.addWidget(identity)
+
+        self.enabled = QCheckBox(tr("Lightbar On", language))
+        self.enabled.setChecked(bool(settings.get("enabled", False)))
+        root.addWidget(self.enabled)
+
+        color_row = QHBoxLayout()
+        self.choose_color = QPushButton(tr("Choose color…", language))
+        self.choose_color.clicked.connect(self._choose_color)
+        color_row.addWidget(self.choose_color)
+        self.preview = QFrame()
+        self.preview.setObjectName("lightbar_preview")
+        self.preview.setFixedSize(48, 26)
+        color_row.addWidget(self.preview)
+        color_row.addWidget(QLabel(tr("HEX", language)))
+        self.hex_value = QLabel()
+        self.hex_value.setMinimumWidth(82)
+        self.hex_value.setProperty("_i18n_dynamic", True)
+        color_row.addWidget(self.hex_value)
+        color_row.addStretch(1)
+        root.addLayout(color_row)
+
+        self.battery_mode = QCheckBox(tr("Battery Lightbar", language))
+        self.battery_mode.setChecked(bool(settings.get("battery_mode", False)))
+        root.addWidget(self.battery_mode)
+
+        self.charging_indication = QCheckBox(
+            tr("Charging indication", language)
+        )
+        self.charging_indication.setChecked(
+            bool(settings.get("charging_indication", False))
+        )
+        root.addWidget(self.charging_indication)
+
+        self.enabled.toggled.connect(self._update_dependent_controls)
+        self._update_dependent_controls(self.enabled.isChecked())
+        self._update_color_preview()
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Save | QDialogButtonBox.Cancel,
+            orientation=Qt.Horizontal,
+        )
+        buttons.button(QDialogButtonBox.Save).setText(tr("Save", language))
+        buttons.button(QDialogButtonBox.Cancel).setText(tr("Cancel", language))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def _choose_color(self):
+        chosen = QColorDialog.getColor(QColor(self._color), self)
+        if chosen.isValid():
+            self._color = chosen.name().upper()
+            self._update_color_preview()
+
+    def _update_color_preview(self):
+        self.preview.setStyleSheet(
+            f"background-color: {self._color};"
+        )
+        self.hex_value.setText(self._color.upper())
+
+    def _update_dependent_controls(self, enabled: bool):
+        self.battery_mode.setEnabled(enabled)
+        self.charging_indication.setEnabled(enabled)
+
+    def get_settings(self) -> dict:
+        return {
+            "enabled": self.enabled.isChecked(),
+            "color": self._color.upper(),
+            "battery_mode": self.battery_mode.isChecked(),
+            "charging_indication": self.charging_indication.isChecked(),
+        }
+
+
 class EmuListItemWidget(QWidget):
     emulate_requested = Signal(str, str, object)
     delete_requested = Signal(object)
+    lightbar_requested = Signal(object)
 
-    def __init__(self, hid: str, emu: str, parent=None):
+    def __init__(self, hid: str, emu: str, device=None, parent=None):
         super().__init__(parent)
         self.hid = hid
         self.emu = emu
         self._running = False
         self._battery = None
+        self.device = device
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 8, 4)
@@ -528,6 +629,12 @@ class EmuListItemWidget(QWidget):
         self.lbl_battery.setMinimumWidth(115)
         self.lbl_battery.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.lbl_battery)
+
+        self.btn_lightbar = QPushButton("Lightbar")
+        self.btn_lightbar.setToolTip("Configure this controller's Lightbar")
+        self.btn_lightbar.clicked.connect(lambda: self.lightbar_requested.emit(self))
+        layout.addWidget(self.btn_lightbar)
+        self.set_device(device)
 
         self.btn_emulate = QPushButton("Emulate")
         self.btn_emulate.setToolTip("Start/stop emulation for this mapping")
@@ -558,6 +665,14 @@ class EmuListItemWidget(QWidget):
         self._running = bool(running)
         self._update_status_style(self._running)
         self.btn_emulate.setText("Stop" if self._running else "Emulate")
+
+    def set_device(self, device):
+        self.device = device
+        supported = bool(
+            device
+            and is_dualsense_device(device.get("vendor_id"), device.get("product_id"))
+        )
+        self.btn_lightbar.setVisible(supported)
 
     def set_battery(self, percent: int | None, charging: bool = False):
         if percent is None:
@@ -598,6 +713,7 @@ class ControllerEmulation(QWidget):
         self.mappers: dict = {}
         self._mapping_records: dict[int, dict] = {}
         self._path_records: dict[object, int] = {}
+        self._lightbar_outputs: dict[object, DualSenseLightbar] = {}
         self.settings = settings
         self._reconnect_timer = QTimer(self)
         self._reconnect_timer.setInterval(1000)
@@ -657,7 +773,7 @@ class ControllerEmulation(QWidget):
             vid = self._device_id(device.get("vendor_id"))
             pid = self._device_id(device.get("product_id"))
             is_supported = (
-                (vid == 0x054C and pid in (0x05C4, 0x09CC, 0x0CE6))
+                (vid == 0x054C and pid in (0x05C4, 0x09CC, 0x0CE6, 0x0DF2))
                 or (vid == 0x10C4 and pid == 0x82C0)
             )
             if not is_supported:
@@ -701,6 +817,8 @@ class ControllerEmulation(QWidget):
                 name = "Dualshock4 (PS4 Controller)"
             elif vid_int == 0x054C and pid_int == 0x0CE6:
                 name = "Dualsense (PS5 Controller)"
+            elif vid_int == 0x054C and pid_int == 0x0DF2:
+                name = "DualSense Edge (PS5 Controller)"
             elif vid_int == 0x10C4 and pid_int == 0x82C0:
                 name = "UnoJoy Controller (Arduino)"
             else:
@@ -772,7 +890,7 @@ class ControllerEmulation(QWidget):
                 return False
 
         item = QListWidgetItem()
-        widget = EmuListItemWidget(hid_choice, emu)
+        widget = EmuListItemWidget(hid_choice, emu, device=device)
 
         item.setSizeHint(widget.sizeHint())
         item.setData(Qt.UserRole, (device, hid_choice, emu))
@@ -782,6 +900,7 @@ class ControllerEmulation(QWidget):
 
         widget.emulate_requested.connect(self._on_emulate_requested)
         widget.delete_requested.connect(lambda w=widget, i=item: self._on_delete_requested(w, i))
+        widget.lightbar_requested.connect(self._on_lightbar_requested)
 
         return True
 
@@ -816,7 +935,7 @@ class ControllerEmulation(QWidget):
         pid = self._device_id(device.get("product_id"))
         if vid == 0x054C and pid in (0x05C4, 0x09CC):
             return "Dualshock4"
-        if vid == 0x054C and pid == 0x0CE6:
+        if vid == 0x054C and pid in (0x0CE6, 0x0DF2):
             return "Dualsense"
         if vid == 0x10C4 and pid == 0x82C0:
             return "Unojoy"
@@ -827,6 +946,77 @@ class ControllerEmulation(QWidget):
             return bool(self.settings.get_auto_reconnect())
         except Exception:
             return True
+
+    def _lightbar_settings_for_device(self, device: dict) -> tuple[str, dict]:
+        stable_id = stable_controller_id(
+            device.get("vendor_id"),
+            device.get("product_id"),
+            device.get("path"),
+            device.get("serial_number"),
+        )
+        return stable_id, self.settings.get_controller_lightbar_settings(stable_id)
+
+    def _get_lightbar_output(self, device: dict, stable_id=None):
+        if not is_dualsense_device(
+            device.get("vendor_id"), device.get("product_id")
+        ):
+            return None
+        path = device.get("path")
+        if not path:
+            return None
+        current = self._lightbar_outputs.get(path)
+        if current is not None:
+            return current
+
+        if stable_id is None:
+            stable_id, _ = self._lightbar_settings_for_device(device)
+        if not self.settings.has_controller_lightbar_settings(stable_id):
+            return None
+
+        output = DualSenseLightbar(
+            path,
+            transport=device.get("transport") or device.get("bus_type"),
+            controller_key=stable_id,
+        )
+        self._lightbar_outputs[path] = output
+        return output
+
+    def _on_lightbar_requested(self, widget: EmuListItemWidget) -> None:
+        item = self._find_item_by_widget(widget)
+        stored = item.data(Qt.UserRole) if item is not None else None
+        device = (stored or (None,))[0]
+        if not device:
+            key = id(item) if item is not None else None
+            record = self._mapping_records.get(key)
+            device = (record or {}).get("last_device")
+        if not device:
+            return
+
+        stable_id, current = self._lightbar_settings_for_device(device)
+        dialog = DualSenseLightbarDialog(
+            widget.hid,
+            current,
+            language=self.settings.get_ui_language(),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        updated = dialog.get_settings()
+        self.settings.set_controller_lightbar_settings(stable_id, updated)
+        self.settings.save()
+        output = self._get_lightbar_output(device, stable_id)
+        if output is None:
+            return
+
+        path = device.get("path")
+        mapper = self.mappers.get(path)
+        if mapper is not None:
+            mapper.configure_lightbar(updated)
+        else:
+            battery_state = getattr(self.controllers_page, "battery_states", {}).get(path)
+            color, enabled = resolve_lightbar_color(updated, battery_state)
+            output.set_color(color, enabled=enabled)
 
     def _start_mapping(
         self,
@@ -845,7 +1035,10 @@ class ControllerEmulation(QWidget):
                 device.get("product_id"),
                 path,
                 transport=device.get("transport") or device.get("bus_type"),
+                serial_number=device.get("serial_number"),
             )
+            stable_id, _ = self._lightbar_settings_for_device(device)
+            lightbar_output = self._get_lightbar_output(device, stable_id)
             mapper = Mapper(
                 controller,
                 self._controller_type(device),
@@ -853,6 +1046,7 @@ class ControllerEmulation(QWidget):
                 self.settings,
                 self.controllers_page,
                 self.hotkey_page,
+                lightbar_output=lightbar_output,
             )
         except Exception as exc:
             print(f"[Controller Emulation] Failed to start mapping: {exc}")
@@ -882,6 +1076,7 @@ class ControllerEmulation(QWidget):
             Qt.UserRole,
             (device, record["hid_choice"], record["emu"]),
         )
+        widget.set_device(device)
 
         wtuple = getattr(hid.hid_manager, "_workers", {}).get(path)
         if wtuple:
@@ -969,6 +1164,7 @@ class ControllerEmulation(QWidget):
 
         print(f"[Controller Emulation] Device lost at {path}: {message}")
         self._stop_mapping(path)
+        self._stop_lightbar_output(path)
         record["waiting"] = True
         record["path"] = None
         record["widget"].set_connection_state(False)
@@ -1042,6 +1238,7 @@ class ControllerEmulation(QWidget):
         path = (record or {}).get("path") or (device or {}).get("path")
         if path:
             self._stop_mapping(path)
+            self._stop_lightbar_output(path)
 
         for i in range(self.emu_list.count()):
             if self.emu_list.item(i) is item:
@@ -1052,6 +1249,8 @@ class ControllerEmulation(QWidget):
     def shutdown(self) -> None:
         for path in list(self.mappers):
             self._stop_mapping(path)
+        for path in list(self._lightbar_outputs):
+            self._stop_lightbar_output(path)
         self._mapping_records.clear()
         self._path_records.clear()
         self._reconnect_timer.stop()
@@ -1064,6 +1263,11 @@ class ControllerEmulation(QWidget):
             hid.hid_manager.stop_all()
         except Exception:
             pass
+
+    def _stop_lightbar_output(self, path) -> None:
+        output = self._lightbar_outputs.pop(path, None)
+        if output is not None:
+            output.stop()
 
     def closeEvent(self, event):
         self.shutdown()

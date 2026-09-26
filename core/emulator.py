@@ -24,17 +24,21 @@ class ListOfAllControllers:
 
 class EmulateX360:
     def __init__(self, device_path, controller_name, hotkey, rumble_enabled=False,
-                 rumble_transport=None, vibration_enabled=True):
+                 rumble_transport=None, vibration_enabled=True,
+                 rumble_controller_key=None):
         self.device_path = device_path
         self.controller_name = controller_name
         self.hotkey = hotkey
         self.hotkey_commander = HotkeyCommander(media_functions, custom_commands)
         self.is_monitoring = False
         self.could_instantiate = False
-        self.rumble = (
-            DualSenseRumble(device_path, transport=rumble_transport)
-            if rumble_enabled else None
-        )
+        self.rumble = None
+        if rumble_enabled:
+            self.rumble = DualSenseRumble(
+                device_path,
+                transport=rumble_transport,
+                controller_key=rumble_controller_key,
+            )
         self._vibration_enabled = bool(vibration_enabled)
 
         # debounce state for hotkeys

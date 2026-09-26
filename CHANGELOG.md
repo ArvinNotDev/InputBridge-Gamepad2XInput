@@ -3,6 +3,23 @@
 All notable user-facing changes to InputBridge-Gamepad2XInput are documented
 here. Version numbers follow semantic-versioning conventions where practical.
 
+## [2.0.8] — 2026-09-26
+
+### What's new
+
+- Added per-controller DualSense and DualSense Edge Lightbar color settings,
+  saved and restored using each controller's stable HID identity when available.
+- Added optional battery-level colors and a charging indication for the
+  Lightbar.
+- Added DualSense USB and Bluetooth Lightbar output reports with Bluetooth
+  sequence and CRC handling.
+
+### Validation
+
+- Added focused checks for USB/Bluetooth Lightbar reports, Bluetooth CRC and
+  sequence handling, per-controller settings persistence, and temporary
+  battery colors.
+
 ## [2.0.7] — 2026-09-17
 
 ### What's new
@@ -45,6 +62,7 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 - Added live vibration settings and XInput vibration testing.
 
+[2.0.8]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.8
 [2.0.7]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.7
 [2.0.6]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.6
 [2.0.5]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.5

@@ -556,3 +556,8 @@ QTextEdit {
     border-radius: 4px;
     padding: 6px;
 }
+
+QFrame#lightbar_preview {
+    border: 1px solid #77778a;
+    border-radius: 5px;
+}

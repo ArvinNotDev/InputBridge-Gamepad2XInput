@@ -5,6 +5,7 @@ from typing import Tuple
 
 from core.emulator import EmulateX360, EmulateKeyboard
 from core.emulator import media_functions, custom_commands
+from core.dualsense_lightbar import resolve_lightbar_color
 from core.mouse import Mouse, MouseMotion
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkey_commander import HotkeyCommander
@@ -30,6 +31,7 @@ class Mapper:
         controllers_page,
         hotkey_page,
         debug: bool = False,
+        lightbar_output=None,
     ):
         self.controller = controller
         self.controller_type = controller_type
@@ -48,6 +50,19 @@ class Mapper:
         self._prev_a = False
         self._prev_b = False
         self._last_battery = None
+        self._battery_state = None
+        self.lightbar_output = lightbar_output
+        try:
+            self.lightbar_settings = settings.get_controller_lightbar_settings(
+                controller.stable_id
+            )
+        except (AttributeError, TypeError):
+            self.lightbar_settings = {
+                "enabled": False,
+                "color": "#8B5CF6",
+                "battery_mode": False,
+                "charging_indication": False,
+            }
 
         if emulate_to == "x360":
             self.emulator = EmulateX360(
@@ -56,6 +71,7 @@ class Mapper:
                 hotkey_page.hotkey,
                 rumble_enabled=(controller_type == "Dualsense"),
                 rumble_transport=controller.transport,
+                rumble_controller_key=controller.stable_id,
                 vibration_enabled=settings.get_vibration_enabled(),
             )
             controllers_page.add_x360_instance(self.emulator)
@@ -66,6 +82,8 @@ class Mapper:
             raise ValueError(f"Invalid emulate_to target: {emulate_to}")
 
         self.controller_config = self._load_json(f"{controller_type}.json")
+        if self.lightbar_output is not None:
+            self._apply_lightbar()
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -262,6 +280,16 @@ class Mapper:
         battery_level = battery_byte & 0x0F  # Lower 4 bits
         charging_state = (battery_byte >> 4) & 0x0F  # Upper 4 bits
 
+        if self.controller_type == "Dualsense":
+            # hid-playstation's DualSense status nibble is 0=discharging,
+            # 1=charging, 2=full. Each capacity unit represents a 10% band.
+            if charging_state == 0x02:
+                return 100, False
+            if charging_state in (0x00, 0x01):
+                percent = min(100, battery_level * 10 + 5)
+                return percent, charging_state == 0x01
+            return 0, False
+
         is_charging = (charging_state == 0x02)
 
         if battery_level == 0x0A:
@@ -276,6 +304,35 @@ class Mapper:
             percent = 100
 
         return percent, is_charging
+
+    def _battery_report_index(self, configured_index):
+        """The BT full report has a two-byte header; USB has a one-byte header."""
+        if self.controller_type != "Dualsense":
+            return configured_index
+
+        transport = getattr(self.controller, "transport", None)
+        if transport == 1 or str(transport) == "1":  # HIDAPI USB bus type
+            return 53 if configured_index == 54 else max(0, configured_index - 1)
+        if transport == 2 or str(transport) == "2":  # HIDAPI Bluetooth bus type
+            return configured_index
+
+        text = str(transport or "").upper()
+        if "USB" in text:
+            return 53 if configured_index == 54 else max(0, configured_index - 1)
+        return configured_index
+
+    def configure_lightbar(self, settings: dict) -> None:
+        """Apply updated per-controller Lightbar preferences from the UI."""
+        self.lightbar_settings = dict(settings)
+        self._apply_lightbar()
+
+    def _apply_lightbar(self) -> None:
+        if self.lightbar_output is None:
+            return
+        color, enabled = resolve_lightbar_color(
+            self.lightbar_settings, self._battery_state
+        )
+        self.lightbar_output.set_color(color, enabled=enabled)
 
     def _handle_x360_input(self, data: bytes) -> None:
         """
@@ -301,10 +358,15 @@ class Mapper:
         battery_percent_cfg = battery_cfg.get("percent", {})
         if battery_percent_cfg.get("byte") is not None:
             raw_battery = self._read_byte_safe(
-                report, battery_percent_cfg.get("byte")
+                report,
+                self._battery_report_index(battery_percent_cfg.get("byte")),
             )
             battery_percent, is_charging = self._interpret_battery(raw_battery)
             self._publish_battery(battery_percent, is_charging)
+            state = (int(battery_percent), bool(is_charging))
+            if state != self._battery_state:
+                self._battery_state = state
+                self._apply_lightbar()
 
 
         left_deadzone, right_deadzone = self.settings.get_deadzones()

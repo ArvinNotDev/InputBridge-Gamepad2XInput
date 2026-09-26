@@ -29,7 +29,7 @@ class HIDWorker(QObject):
         """Return True only for the supported Sony DualSense (PS5) HID device."""
         return (
             self.controller.vendor_id == 0x054C
-            and self.controller.product_id == 0x0CE6
+            and self.controller.product_id in (0x0CE6, 0x0DF2)
         )
 
     def run(self):

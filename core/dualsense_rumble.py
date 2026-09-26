@@ -12,6 +12,11 @@ import zlib
 
 import hid
 
+from core.dualsense_output import (
+    dualsense_output_lock,
+    next_dualsense_bt_sequence,
+)
+
 
 SONY_VENDOR_ID = 0x054C
 DUALSENSE_PRODUCT_ID = 0x0CE6
@@ -70,13 +75,13 @@ def build_bt_report(sequence: int, left_motor: int, right_motor: int) -> bytearr
 class DualSenseRumble:
     """Coalescing, asynchronous DualSense rumble writer."""
 
-    def __init__(self, device_path: str, transport=None):
+    def __init__(self, device_path: str, transport=None, controller_key=None):
         self.device_path = device_path
+        self._controller_key = controller_key or device_path
         self._condition = threading.Condition()
         self._pending: tuple[int, int] | None = None
         self._stopping = False
         self._device = None
-        self._sequence = 0
         self._last_sent: tuple[int, int] | None = None
         self._bluetooth = self._is_bluetooth_transport(transport, device_path)
 
@@ -180,13 +185,16 @@ class DualSenseRumble:
             return False
 
         try:
-            if self._bluetooth:
-                report = build_bt_report(self._sequence, left_motor, right_motor)
-                self._sequence = (self._sequence + 1) & 0x0F
-            else:
-                report = build_usb_report(left_motor, right_motor)
+            # Bluetooth sequence numbers belong to the controller's shared
+            # output stream, so serialize them with Lightbar reports too.
+            with dualsense_output_lock(self._controller_key):
+                if self._bluetooth:
+                    sequence = next_dualsense_bt_sequence(self._controller_key)
+                    report = build_bt_report(sequence, left_motor, right_motor)
+                else:
+                    report = build_usb_report(left_motor, right_motor)
 
-            self._device.write(bytes(report))
+                self._device.write(bytes(report))
             return True
         except Exception as exc:
             print(f"[DualSenseRumble] Output report failed: {exc}")

@@ -18,13 +18,32 @@ class HIDManager(QObject):
         self.devices = hid.enumerate()
         return self.devices
 
-    def start_polling(self, vendor_id, product_id, path, name=None, on_data=None, on_error=None, transport=None):
+    def start_polling(
+        self,
+        vendor_id,
+        product_id,
+        path,
+        name=None,
+        on_data=None,
+        on_error=None,
+        transport=None,
+        serial_number=None,
+        stable_id=None,
+    ):
         """Start polling a single controller."""
         if path in self._workers:
             print(f"[HIDManager] Already polling device at path: {path}")
             return self._workers[path][2]  # return the controller
 
-        controller = Controller(vendor_id, product_id, path, name, transport)
+        controller = Controller(
+            vendor_id,
+            product_id,
+            path,
+            name,
+            transport,
+            serial_number=serial_number,
+            stable_id=stable_id,
+        )
 
         thread = QThread()
         worker = HIDWorker(controller, self.poll_interval)

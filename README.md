@@ -30,8 +30,9 @@ The project is built with **PySide6** and packaged for Windows using **PyInstall
 
 The latest release includes a self-contained Windows `.exe`, so Python is **not required** to run the packaged application.
 
-> **Current release: v2.0.7** — reliability improvements, lower-latency input
-> handling, and smoother professional mouse control. See the full [changelog](CHANGELOG.md)
+> **Current release: v2.0.8** — per-controller DualSense Lightbar colors,
+> optional battery and charging indications, and USB/Bluetooth output support.
+> See the full [changelog](CHANGELOG.md)
 > and the [latest release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/latest).
 
 ## Features
@@ -51,6 +52,7 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * System-tray integration
 * Dark and light themes
 * Persistent application settings
+* Per-controller DualSense Lightbar colors with optional battery and charging indication
 * Automatic settings save with per-section reset controls
 * English, فارسی, and Español UI languages
 * Portable profile export/import (`.ibprofile`) with avatar support
