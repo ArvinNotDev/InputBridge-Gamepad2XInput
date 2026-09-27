@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 import threading
-import zlib
-
 import hid
 
 from core.dualsense_output import (
@@ -18,10 +16,12 @@ SONY_VENDOR_ID = 0x054C
 DUALSENSE_PRODUCT_IDS = (0x0CE6, 0x0DF2)  # DualSense and optional Edge support.
 
 USB_OUTPUT_REPORT_ID = 0x02
-USB_OUTPUT_REPORT_LENGTH = 63
+# The USB HID descriptor defines report 0x02 as 47 data bytes plus the ID.
+USB_OUTPUT_REPORT_LENGTH = 48
 BT_OUTPUT_REPORT_ID = 0x31
 BT_OUTPUT_REPORT_LENGTH = 78
 BT_OUTPUT_CRC_SEED = 0xA2
+LIGHTBAR_SETUP_LIGHT_OUT = 0x02
 
 DEFAULT_LIGHTBAR_COLOR = "#8B5CF6"
 CHARGING_LIGHTBAR_COLOR = (56, 189, 248)
@@ -35,8 +35,16 @@ def is_dualsense_device(vendor_id, product_id) -> bool:
 
 
 def dualsense_bt_crc(report_without_crc: bytes) -> int:
-    """Compute the Bluetooth output CRC; 0xA2 is not part of the HID buffer."""
-    return zlib.crc32(bytes((BT_OUTPUT_CRC_SEED,)) + bytes(report_without_crc)) & 0xFFFFFFFF
+    """Compute the DualSense Bluetooth output CRC32 used by Linux/dualsensectl."""
+    crc = 0xFFFFFFFF
+    for value in bytes((BT_OUTPUT_CRC_SEED,)) + bytes(report_without_crc):
+        crc ^= value
+        for _ in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ 0xEDB88320
+            else:
+                crc >>= 1
+    return (~crc) & 0xFFFFFFFF
 
 
 def _rgb(color) -> tuple[int, int, int]:
@@ -44,12 +52,13 @@ def _rgb(color) -> tuple[int, int, int]:
 
 
 def build_usb_lightbar_report(color, enabled: bool = True) -> bytearray:
-    """Build the 63-byte DualSense USB output report (report ID included)."""
+    """Build USB report 0x02 at its descriptor-defined 48-byte length."""
     report = bytearray(USB_OUTPUT_REPORT_LENGTH)
     report[0] = USB_OUTPUT_REPORT_ID
+    # Color updates use only valid_flag1 + RGB.  Lightbar setup/power control
+    # is a separate DualSense output command and must not be mixed into this
+    # color report.
     report[2] = 0x04  # valid_flag1: enable Lightbar color control.
-    report[39] = 0x02  # valid_flag2: enable Lightbar setup control.
-    report[42] = 0x01  # Lightbar on/setup value required by this report.
     report[45:48] = bytes(_rgb(color) if enabled else (0, 0, 0))
     return report
 
@@ -60,10 +69,31 @@ def build_bt_lightbar_report(sequence: int, color, enabled: bool = True) -> byte
     report[0] = BT_OUTPUT_REPORT_ID
     report[1] = (int(sequence) & 0x0F) << 4
     report[2] = 0x10
+    # Color updates use only valid_flag1 + RGB.  Do not add the separate
+    # Lightbar setup command to the same report.
     report[4] = 0x04  # valid_flag1: enable Lightbar color control.
-    report[41] = 0x02  # valid_flag2: enable Lightbar setup control.
-    report[44] = 0x01  # Lightbar on/setup value required by this report.
     report[47:50] = bytes(_rgb(color) if enabled else (0, 0, 0))
+    report[74:78] = dualsense_bt_crc(bytes(report[:-4])).to_bytes(4, "little")
+    return report
+
+
+def build_usb_lightbar_reset_report() -> bytearray:
+    """Release controller startup lighting before applying a custom color."""
+    report = bytearray(USB_OUTPUT_REPORT_LENGTH)
+    report[0] = USB_OUTPUT_REPORT_ID
+    report[39] = 0x02  # valid_flag2: LIGHTBAR_SETUP_CONTROL_ENABLE
+    report[42] = LIGHTBAR_SETUP_LIGHT_OUT  # Fade out startup/controller lighting.
+    return report
+
+
+def build_bt_lightbar_reset_report(sequence: int) -> bytearray:
+    """Release controller startup lighting before applying a custom color."""
+    report = bytearray(BT_OUTPUT_REPORT_LENGTH)
+    report[0] = BT_OUTPUT_REPORT_ID
+    report[1] = (int(sequence) & 0x0F) << 4
+    report[2] = 0x10
+    report[41] = 0x02  # valid_flag2: LIGHTBAR_SETUP_CONTROL_ENABLE
+    report[44] = LIGHTBAR_SETUP_LIGHT_OUT  # Fade out startup/controller lighting.
     report[74:78] = dualsense_bt_crc(bytes(report[:-4])).to_bytes(4, "little")
     return report
 
@@ -96,14 +126,28 @@ def resolve_lightbar_color(settings: dict, battery_state=None) -> tuple[tuple[in
 class DualSenseLightbar:
     """Coalescing per-controller writer; sends only changed Lightbar states."""
 
-    def __init__(self, device_path, transport=None, controller_key=None):
+    def __init__(
+        self,
+        device_path,
+        transport=None,
+        controller_key=None,
+        device_info=None,
+        debug: bool = False,
+    ):
         self.device_path = device_path
         self._controller_key = controller_key or device_path
-        self._bluetooth = self._is_bluetooth_transport(transport, device_path)
+        self._device_info = device_info or {}
+        self._bluetooth = self._is_bluetooth_transport(
+            transport,
+            device_path,
+            self._device_info.get("interface_number"),
+        )
+        self._debug = bool(debug)
         self._condition = threading.Condition()
         self._pending = None
         self._stopping = False
         self._device = None
+        self._initialized = False
         self._last_sent = None
         self._in_flight = None
         self._thread = threading.Thread(
@@ -114,7 +158,7 @@ class DualSenseLightbar:
         self._thread.start()
 
     @staticmethod
-    def _is_bluetooth_transport(transport, device_path) -> bool:
+    def _is_bluetooth_transport(transport, device_path, interface_number=None) -> bool:
         if transport == 2 or str(transport) == "2":
             return True
         if transport == 1 or str(transport) == "1":
@@ -124,6 +168,11 @@ class DualSenseLightbar:
             return True
         if "USB" in text:
             return False
+        try:
+            if int(interface_number) == -1:
+                return True
+        except (TypeError, ValueError):
+            pass
         path = str(device_path).upper()
         return "BTHENUM" in path or "BLUETOOTH" in path
 
@@ -174,11 +223,80 @@ class DualSenseLightbar:
             device = hid.device()
             device.open_path(self.device_path)
             self._device = device
+            self._initialized = False
+            if self._debug:
+                info = self._device_info
+                transport = "Bluetooth" if self._bluetooth else "USB"
+                try:
+                    vendor_id = info.get("vendor_id", SONY_VENDOR_ID)
+                    product_id = info.get("product_id")
+                    if isinstance(vendor_id, str):
+                        vendor_id = int(vendor_id, 0)
+                    if isinstance(product_id, str):
+                        product_id = int(product_id, 0)
+                    vid_pid = f"{int(vendor_id):04X}:{int(product_id):04X}"
+                except (TypeError, ValueError):
+                    vid_pid = f"{info.get('vendor_id', SONY_VENDOR_ID)}:{info.get('product_id')}"
+                print(
+                    "[DualSenseLightbar] Opened output interface: "
+                    f"controller={self._controller_key!r} transport={transport} "
+                    f"path={self.device_path!r} "
+                    f"VID:PID={vid_pid} "
+                    f"usage_page={info.get('usage_page')} usage={info.get('usage')} "
+                    f"interface_number={info.get('interface_number')} "
+                    f"bus_type={info.get('bus_type', info.get('transport'))}"
+                )
             return True
         except Exception as exc:
             print(f"[DualSenseLightbar] Failed to open device: {exc}")
             self._close_device()
             return False
+
+    def _log_report(self, label: str, report: bytearray, written=None) -> None:
+        if not self._debug:
+            return
+
+        transport = "Bluetooth" if self._bluetooth else "USB"
+        if self._bluetooth:
+            flags = (
+                f"valid_flags={report[3]:02X}/{report[4]:02X}/{report[41]:02X} "
+                f"tag={report[2]:02X} sequence={report[1] >> 4}"
+            )
+            rgb = report[47:50]
+            crc = int.from_bytes(report[74:78], "little")
+            details = f"{flags} setup={report[44]:02X} crc={crc:08X}"
+        else:
+            flags = f"valid_flags={report[1]:02X}/{report[2]:02X}/{report[39]:02X}"
+            rgb = report[45:48]
+            details = f"{flags} setup={report[42]:02X}"
+
+        print(
+            f"[DualSenseLightbar] {label}: controller={self._controller_key!r} "
+            f"transport={transport} path={self.device_path!r} "
+            f"report_id={report[0]:02X} report_length={len(report)} "
+            f"rgb={rgb[0]:02X} {rgb[1]:02X} {rgb[2]:02X} {details} "
+            f"hid_write_return={written}"
+        )
+        print(f"[DualSenseLightbar] HEX: {bytes(report).hex(' ').upper()}")
+
+    def _write_report(self, label: str, report: bytearray) -> None:
+        written = self._device.write(bytes(report))
+        self._log_report(label, report, written)
+        # Windows HIDAPI can zero-pad to OutputReportByteLength, so a valid
+        # return count may be larger than this report's protocol length.
+        if written is not None and written < len(report):
+            raise OSError(
+                f"Short {label} HID write (hid_write returned {written}, "
+                f"report length {len(report)})"
+            )
+
+    def _send_lightbar_reset(self) -> None:
+        if self._bluetooth:
+            sequence = next_dualsense_bt_sequence(self._controller_key)
+            report = build_bt_lightbar_reset_report(sequence)
+        else:
+            report = build_usb_lightbar_reset_report()
+        self._write_report("setup reset", report)
 
     def _send(self, command) -> bool:
         enabled, color = command
@@ -186,16 +304,17 @@ class DualSenseLightbar:
             return False
         try:
             with dualsense_output_lock(self._controller_key):
+                if not self._initialized:
+                    self._send_lightbar_reset()
+                    self._initialized = True
+
                 if self._bluetooth:
                     sequence = next_dualsense_bt_sequence(self._controller_key)
                     report = build_bt_lightbar_report(sequence, color, enabled)
                 else:
                     report = build_usb_lightbar_report(color, enabled)
-                written = self._device.write(bytes(report))
-                if written is not None and written != len(report):
-                    raise OSError(
-                        f"Short HID output report: wrote {written} of {len(report)} bytes"
-                    )
+
+                self._write_report("color", report)
             return True
         except Exception as exc:
             print(f"[DualSenseLightbar] Output report failed: {exc}")
@@ -205,6 +324,7 @@ class DualSenseLightbar:
     def _close_device(self) -> None:
         device = self._device
         self._device = None
+        self._initialized = False
         if device is not None:
             try:
                 device.close()

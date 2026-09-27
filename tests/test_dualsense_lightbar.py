@@ -5,7 +5,9 @@ from core.controller import stable_controller_id
 from core.dualsense_lightbar import (
     CHARGING_LIGHTBAR_COLOR,
     DualSenseLightbar,
+    build_bt_lightbar_reset_report,
     build_bt_lightbar_report,
+    build_usb_lightbar_reset_report,
     build_usb_lightbar_report,
     dualsense_bt_crc,
     resolve_lightbar_color,
@@ -18,13 +20,36 @@ from core.settings import SettingsManager
 def test_usb_lightbar_report_has_dualsense_fields_and_rgb():
     report = build_usb_lightbar_report((0x12, 0x34, 0x56))
 
-    assert len(report) == 63
+    assert len(report) == 48
     assert report[0] == 0x02
     assert report[2] == 0x04
-    assert report[39] == 0x02
-    assert report[42] == 0x01
+    assert report[39] == 0
+    assert report[42] == 0
     assert report[45:48] == bytes((0x12, 0x34, 0x56))
     assert report[1] == 0
+
+
+def test_usb_lightbar_reset_report_is_separate():
+    report = build_usb_lightbar_reset_report()
+    assert len(report) == 48
+    assert report[0] == 0x02
+    assert report[39] == 0x02
+    assert report[42] == 0x02
+    assert report[2] == 0
+    assert report[45:48] == b"\x00\x00\x00"
+
+
+def test_bluetooth_lightbar_reset_report_is_separate():
+    report = build_bt_lightbar_reset_report(3)
+    assert len(report) == 78
+    assert report[0] == 0x31
+    assert report[1] == 0x30
+    assert report[2] == 0x10
+    assert report[41] == 0x02
+    assert report[44] == 0x02
+    assert report[4] == 0
+    assert report[47:50] == b"\x00\x00\x00"
+    assert int.from_bytes(report[74:78], "little") == dualsense_bt_crc(bytes(report[:-4]))
 
 
 def test_bluetooth_lightbar_report_has_sequence_rgb_and_crc():
@@ -35,12 +60,24 @@ def test_bluetooth_lightbar_report_has_sequence_rgb_and_crc():
     assert report[1] == 0xF0
     assert report[2] == 0x10
     assert report[4] == 0x04
-    assert report[41] == 0x02
-    assert report[44] == 0x01
+    assert report[41] == 0
+    assert report[44] == 0
     assert report[47:50] == bytes((0x12, 0x34, 0x56))
     assert int.from_bytes(report[74:78], "little") == dualsense_bt_crc(
         bytes(report[:-4])
     )
+
+
+def test_lightbar_transport_uses_hid_interface_number_as_bluetooth_fallback():
+    is_bluetooth = DualSenseLightbar._is_bluetooth_transport(
+        None, b"hid-path-without-transport-marker", -1
+    )
+    is_usb = DualSenseLightbar._is_bluetooth_transport(
+        None, b"hid-path-without-transport-marker", 3
+    )
+
+    assert is_bluetooth is True
+    assert is_usb is False
 
 
 def test_lightbar_off_sends_black_and_bluetooth_sequence_is_per_controller():
@@ -87,8 +124,9 @@ def test_lightbar_writer_deduplicates_same_state():
         output.stop()
         lightbar_module.hid.device = original_device
 
-    assert len(writes) == 1
-    assert writes[0][45:48] == b"\x01\x02\x03"
+    assert len(writes) == 2
+    assert writes[0][39] == 0x02 and writes[0][42] == 0x02
+    assert writes[1][45:48] == b"\x01\x02\x03"
 
 
 def test_lightbar_writer_applies_latest_color_after_in_flight_write():
@@ -104,6 +142,8 @@ def test_lightbar_writer_applies_latest_color_after_in_flight_write():
         def write(self, report):
             report = bytes(report)
             writes.append(report)
+            if report[2] != 0x04:
+                return len(report)
             color = report[45:48]
             if color == b"\x04\x05\x06":
                 first_color_sent.set()
@@ -132,7 +172,7 @@ def test_lightbar_writer_applies_latest_color_after_in_flight_write():
         output.stop()
         lightbar_module.hid.device = original_device
 
-    assert [report[45:48] for report in writes] == [
+    assert [report[45:48] for report in writes if report[2] == 0x04] == [
         b"\x04\x05\x06",
         b"\x07\x08\x09",
         b"\x04\x05\x06",

@@ -977,6 +977,8 @@ class ControllerEmulation(QWidget):
             path,
             transport=device.get("transport") or device.get("bus_type"),
             controller_key=stable_id,
+            device_info=device,
+            debug=self.settings.get_developer_debug(),
         )
         self._lightbar_outputs[path] = output
         return output
