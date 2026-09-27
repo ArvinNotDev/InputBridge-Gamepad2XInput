@@ -32,7 +32,7 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 
 > **Current release: v2.0.8** — per-controller DualSense Lightbar colors,
 > optional battery and charging indications, and USB/Bluetooth output support.
-> See the full [changelog](CHANGELOG.md)
+> Read the complete [v2.0.8 release notes](RELEASE_NOTES_2.0.8.md) and the full [changelog](CHANGELOG.md)
 > and the [latest release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/latest).
 
 ## Features
@@ -53,6 +53,8 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Dark and light themes
 * Persistent application settings
 * Per-controller DualSense Lightbar colors with optional battery and charging indication
+* DualSense USB and Bluetooth Lightbar output reports
+* DualSense Edge support for Lightbar output (PID `0x0DF2`)
 * Automatic settings save with per-section reset controls
 * English, فارسی, and Español UI languages
 * Portable profile export/import (`.ibprofile`) with avatar support
@@ -113,9 +115,92 @@ not required. Keyboard emulation itself is not enabled in the current release.
 7. Select the HID controller interface you want to use.
 8. Select the target emulation mode.
 9. Configure mappings, profiles, hotkeys, mouse mode, and sensitivity as needed.
-10. Start the emulation.
+10. If the device is a DualSense, open its **Lightbar** settings and choose the
+    Lightbar state, color, battery mode, and charging indication.
+11. Start the emulation.
 
 Once configured, the physical controller can be translated into a virtual XInput controller, mouse movement, or hotkey actions.
+
+## DualSense Lightbar
+
+InputBridge-Gamepad2XInput provides a compact Lightbar panel for each supported
+DualSense controller. The settings belong to the selected physical controller,
+so changing one controller does not change another controller's Lightbar.
+
+### Supported devices
+
+| Device | Vendor ID | Product ID | Lightbar output |
+| --- | ---: | ---: | --- |
+| Sony DualSense | `0x054C` | `0x0CE6` | USB and Bluetooth |
+| Sony DualSense Edge | `0x054C` | `0x0DF2` | USB and Bluetooth |
+
+The current desktop setup is commonly used over Bluetooth. USB Lightbar output
+is implemented as well, so a cable connection uses the correct DualSense
+report format without using DualShock 4 output packets. USB hardware
+verification requires a controller connected by cable.
+
+### Configure a controller
+
+1. Open **Controller Emulation**.
+2. Add the DualSense controller and select **Emulate** if it is not already running.
+3. Click **Lightbar** on that controller's row.
+4. Choose **Lightbar On**, select a color, and confirm the HEX value in the preview.
+5. Optionally enable **Battery Lightbar** and/or **Charging indication**.
+6. Click **Save**.
+
+The color selector stores a six-digit RGB HEX value such as `#8B5CF6`. The
+Lightbar button is shown only for supported DualSense devices, and the dialog
+identifies the controller being edited.
+
+### Custom color and temporary battery colors
+
+The saved custom color is kept separately from temporary status colors.
+
+When **Battery Lightbar** is enabled, the Lightbar uses this progression:
+
+| Battery level | Lightbar color |
+| --- | --- |
+| High (`70–100%`) | Green |
+| Medium (`40–69%`) | Yellow |
+| Low (`20–39%`) | Orange |
+| Critical (`0–19%`) | Red |
+
+When charging indication is enabled and the controller is charging, a subtle
+cyan charging color is used. When charging stops, the Lightbar returns to the
+current battery color or the saved custom color, depending on the selected
+mode. Temporary colors never replace the saved custom HEX value.
+
+### Persistence and reconnects
+
+Lightbar settings are stored in the existing application settings file. The
+application prefers the controller's serial number, then a Bluetooth address
+found in the HID path, and finally the HID path itself as a fallback. This
+allows settings to return after a reconnect when Windows/HIDAPI exposes a
+stable controller identity.
+
+Each controller keeps its own:
+
+* Lightbar enabled state
+* Saved custom RGB color
+* Battery Lightbar mode
+* Charging indication setting
+
+### Output report behavior
+
+Lightbar reports are sent only when the effective state changes, when the
+controller reconnects, or when the user changes a Lightbar setting. Identical
+reports are not continuously resent.
+
+USB output uses the DualSense report ID `0x02` and a 63-byte HIDAPI buffer.
+Bluetooth output uses report ID `0x31` and a 78-byte HIDAPI buffer. Bluetooth
+sequence numbers are kept per controller and wrap from `15` to `0`. The CRC
+is calculated with the `0xA2` seed, while the seed is excluded from the buffer
+passed to `hid_write()`.
+
+The implementation deliberately does not use DualShock 4 output report IDs
+`0x05` or `0x11`, and the existing `led_brightness` concept is not treated as
+Lightbar RGB brightness. A Lightbar brightness control should scale the RGB
+channels in software.
 
 ## Controller Mapping
 
@@ -329,6 +414,7 @@ The **onefile** build packages the application into a single executable and is m
 ├── profiles/                              # Controller profile definitions
 ├── config/                                # Default application configuration
 ├── main.py                                # Application entry point
+├── RELEASE_NOTES_2.0.8.md                 # Release-ready notes for v2.0.8
 ├── InputBridge-Gamepad2XInput.spec         # PyInstaller onedir specification
 ├── InputBridge-Gamepad2XInput_onefile.spec # PyInstaller onefile specification
 ├── requirements.txt                       # Python dependencies
@@ -361,6 +447,27 @@ Then:
 4. Select the interface that provides the actual controller input reports.
 
 Some physical devices expose multiple HID interfaces for different functions. The correct interface must be selected for controller input.
+
+### DualSense Lightbar settings do not appear
+
+The Lightbar control is shown only for Sony DualSense devices with VID
+`0x054C` and PID `0x0CE6`, or DualSense Edge devices with PID `0x0DF2`.
+Reconnect the controller and reopen **Add Controller** if Windows has exposed a
+different HID interface.
+
+### The Lightbar color does not change
+
+Check that **Lightbar On** is enabled and that the selected controller is the
+one being configured. The application coalesces duplicate output reports, so
+it will not resend an identical color continuously. On Bluetooth, reconnecting
+the controller can be necessary after a failed HID connection.
+
+### Battery colors are not visible
+
+Enable **Battery Lightbar** in that controller's Lightbar dialog. Battery mode
+is separate from the saved custom color and only changes the temporary output
+color while battery data is available. If the controller report does not
+expose battery status, the saved custom color remains the fallback.
 
 ### The application starts, but settings are not saved
 
@@ -486,7 +593,9 @@ Current focus includes:
 Tagged releases are published on GitHub with a self-contained Windows
 one-file executable. Release notes call out user-visible changes, compatibility
 notes, and validation results so the downloadable artifact can be tested and
-tracked independently from source checkouts.
+tracked independently from source checkouts. The repository keeps a matching
+`RELEASE_NOTES_<version>.md` file that can be pasted into the GitHub release
+description when the executable is uploaded.
 
 ## License
 

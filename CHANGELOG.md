@@ -5,6 +5,9 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [2.0.8] — 2026-09-26
 
+See the complete, release-ready description in
+[RELEASE_NOTES_2.0.8.md](RELEASE_NOTES_2.0.8.md).
+
 ### What's new
 
 - Added per-controller DualSense and DualSense Edge Lightbar color settings,
