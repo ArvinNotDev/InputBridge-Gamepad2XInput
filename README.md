@@ -32,7 +32,7 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 
 > **Current release: v2.0.8** — per-controller DualSense Lightbar colors,
 > optional battery and charging indications, and USB/Bluetooth output support.
-> Read the complete [v2.0.8 release notes](RELEASE_NOTES_2.0.8.md) and the full [changelog](CHANGELOG.md)
+> See the full [changelog](CHANGELOG.md)
 > and the [latest release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/latest).
 
 ## Features
@@ -414,7 +414,6 @@ The **onefile** build packages the application into a single executable and is m
 ├── profiles/                              # Controller profile definitions
 ├── config/                                # Default application configuration
 ├── main.py                                # Application entry point
-├── RELEASE_NOTES_2.0.8.md                 # Release-ready notes for v2.0.8
 ├── InputBridge-Gamepad2XInput.spec         # PyInstaller onedir specification
 ├── InputBridge-Gamepad2XInput_onefile.spec # PyInstaller onefile specification
 ├── requirements.txt                       # Python dependencies
@@ -593,9 +592,8 @@ Current focus includes:
 Tagged releases are published on GitHub with a self-contained Windows
 one-file executable. Release notes call out user-visible changes, compatibility
 notes, and validation results so the downloadable artifact can be tested and
-tracked independently from source checkouts. The repository keeps a matching
-`RELEASE_NOTES_<version>.md` file that can be pasted into the GitHub release
-description when the executable is uploaded.
+tracked independently from source checkouts. Release descriptions are published
+on the GitHub Releases page alongside their downloadable artifacts.
 
 ## License
 
