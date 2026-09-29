@@ -1,8 +1,8 @@
 # InputBridge-Gamepad2XInput
 
 <p align="center">
-  <strong>A modern Windows gamepad remapper built with PySide6.</strong><br>
-  Map HID controllers to virtual Xbox 360 (XInput) devices or mouse controls — with profiles, hotkeys, and remote gamepad support.
+  <strong>Remap Windows gamepads with a simple PySide6 desktop app.</strong><br>
+  Send HID controller input to a virtual Xbox 360 (XInput) controller, mouse controls, or hotkeys, and manage mappings with profiles.
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@ It provides a graphical interface for configuring controller mappings without mo
 
 The project is built with **PySide6** and packaged for Windows using **PyInstaller**.
 
-The latest release includes a self-contained Windows `.exe`, so Python is **not required** to run the packaged application.
+The latest release includes a self-contained Windows `.exe`, so Python is **not required** to run the packaged application. For source setup and build instructions, see [Build From Source](#build-from-source).
 
 > **Current release: v2.0.8** — per-controller DualSense Lightbar colors,
 > optional battery and charging indications, and USB/Bluetooth output support.
@@ -508,7 +508,7 @@ https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases
 
 <p align="center">
   <strong>InputBridge-Gamepad2XInput</strong><br>
-  Physical controller → virtual XInput, keyboard, and mouse input.
+  Physical controller → virtual XInput, mouse controls, and hotkeys.
 </p>
 
 ## HidHide integration
