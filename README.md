@@ -279,6 +279,12 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+On Python 3.15, `requirements.txt` selects the official Qt for Python development
+build of PySide6 because the latest stable PySide6 release does not yet declare
+support for Python 3.15. This is a pre-release build, and Python 3.15 compatibility
+is not guaranteed until Qt publishes its planned stable support in PySide6 6.12.1
+or later. Use Python 3.14 for a fully stable PySide6 dependency in the meantime.
+
 ### Run from source
 
 ```powershell
