@@ -638,6 +638,7 @@ class AppState:
         self.connected = False
         self.authenticating = False
 
+        self._connection_lock = threading.RLock()
         self._send_lock = threading.Lock()
         self._rx_stop = threading.Event()
         self._rx_thread = None
@@ -710,6 +711,8 @@ class AppState:
             self._ui_status("Already connecting...")
             return
 
+        ip = (ip or "").strip()
+        name = (name or "").strip() or "KivyGamepad"
         if not ip or not port_text:
             self._ui_status("IP and port are required")
             return
@@ -719,17 +722,33 @@ class AppState:
         except (TypeError, ValueError):
             self._ui_status("Invalid port")
             return
+        if not 1 <= port <= 65535:
+            self._ui_status("Port must be between 1 and 65535")
+            return
+        if (
+            len(ip) > 255
+            or len(name) > 64
+            or any(ord(c) < 32 or ord(c) == 127 for c in name)
+        ):
+            self._ui_status("Invalid IP or device name")
+            return
 
         save_last_ip(ip)
         save_name(name)
 
-        self.device_name = name
-        self.authenticating = True
-        self._connection_generation += 1
-        generation = self._connection_generation
+        with self._connection_lock:
+            if self.connected:
+                return
+            if self.authenticating:
+                self._ui_status("Already connecting...")
+                return
+            self.device_name = name
+            self.authenticating = True
+            self._connection_generation += 1
+            generation = self._connection_generation
 
         Clock.schedule_once(
-            lambda dt: self._ui_authenticating(),
+            lambda dt, g=generation: self._ui_authenticating(g),
             0,
         )
 
@@ -740,6 +759,7 @@ class AppState:
         ).start()
 
     def _connect_thread(self, ip, port, generation):
+        s = None
         try:
             s = socket.socket(
                 socket.AF_INET,
@@ -752,54 +772,66 @@ class AppState:
                 (ip, port)
             )
 
-            if generation != self._connection_generation:
-                s.close()
-                return
-
             s.settimeout(1.0)
-
-            self.sock = s
-            self.connected = True
-            self.authenticating = False
-
-            self._rx_stop.clear()
+            with self._connection_lock:
+                if (
+                    generation != self._connection_generation
+                    or not self.authenticating
+                ):
+                    s.close()
+                    return
+                self.sock = s
+                self.connected = True
+                self.authenticating = False
+                self._rx_stop.clear()
 
             Clock.schedule_once(
-                lambda dt: self._on_connected_ui(True),
+                lambda dt, g=generation: self._on_connected_ui(
+                    True, generation=g
+                ),
                 0,
             )
 
             self._rx_thread = threading.Thread(
                 target=self._rx_loop,
-                args=(generation,),
+                args=(generation, s),
                 daemon=True,
             )
 
             self._rx_thread.start()
-
-            self.send_state()
+            self._send(self.build_state_message(), generation=generation, sock=s)
 
         except Exception:
             try:
-                if self.sock:
-                    self.sock.close()
+                if s is not None:
+                    s.close()
             except Exception:
                 pass
 
-            self.sock = None
-            self.connected = False
-            self.authenticating = False
+            with self._connection_lock:
+                is_current = generation == self._connection_generation
+                if is_current:
+                    if self.sock is s:
+                        self.sock = None
+                    self.connected = False
+                    self.authenticating = False
 
-            Clock.schedule_once(
-                lambda dt: self._on_connected_ui(
-                    False,
-                    "Connection failed",
-                ),
-                0,
-            )
+            if is_current:
+                Clock.schedule_once(
+                    lambda dt, g=generation: self._on_connected_ui(
+                        False, "Connection failed", generation=g
+                    ),
+                    0,
+                )
 
-    def _on_connected_ui(self, connected, message=None):
-        self.connected = connected
+    def _on_connected_ui(self, connected, message=None, generation=None):
+        with self._connection_lock:
+            if (
+                generation is not None
+                and generation != self._connection_generation
+            ):
+                return
+            self.connected = connected
 
         if self.connect_screen:
             self.connect_screen.update_ui(
@@ -813,7 +845,13 @@ class AppState:
         if not connected:
             self._stop_gyro_for_disconnect()
 
-    def _ui_authenticating(self):
+    def _ui_authenticating(self, generation):
+        with self._connection_lock:
+            if (
+                generation != self._connection_generation
+                or not self.authenticating
+            ):
+                return
         if self.connect_screen:
             self.connect_screen.update_ui(
                 "authenticating"
@@ -843,14 +881,19 @@ class AppState:
             0,
         )
 
-    def _rx_loop(self, generation):
+    def _rx_loop(self, generation, sock):
         try:
-            while (
-                not self._rx_stop.is_set()
-                and self.sock
-            ):
+            while not self._rx_stop.is_set():
+                with self._connection_lock:
+                    is_current = (
+                        generation == self._connection_generation
+                        and self.sock is sock
+                        and self.connected
+                    )
+                if not is_current:
+                    break
                 try:
-                    data = self.sock.recv(2048)
+                    data = sock.recv(2048)
 
                     if not data:
                         break
@@ -863,13 +906,14 @@ class AppState:
 
         finally:
             Clock.schedule_once(
-                lambda dt, g=generation: self._disconnect_if_current(g),
+                lambda dt, g=generation, s=sock: self._disconnect_if_current(
+                    g, s
+                ),
                 0,
             )
 
-    def _disconnect_if_current(self, generation):
-        if generation == self._connection_generation:
-            self.disconnect()
+    def _disconnect_if_current(self, generation, sock):
+        self._disconnect_session(generation, sock, "Disconnected")
 
     def on_submit_code(self, code):
         code = (code or "").strip()
@@ -883,7 +927,9 @@ class AppState:
         payload = self.build_state_message()
         payload["auth_code"] = code
 
-        self._send(payload)
+        if not self._send(payload):
+            self._ui_pair_status("Not connected")
+            return False
 
         self._ui_pair_status("Sent")
 
@@ -908,40 +954,74 @@ class AppState:
             self.connect_screen.clear_pair_status()
 
     def disconnect(self):
-        self._connection_generation += 1
-        self._rx_stop.set()
+        self._disconnect_session(message="Disconnected")
 
-        self.connected = False
-        self.authenticating = False
+    def _disconnect_session(self, generation=None, sock=None, message="Disconnected"):
+        with self._connection_lock:
+            if generation is not None and generation != self._connection_generation:
+                return False
+            if sock is not None and self.sock is not sock:
+                return False
 
-        try:
-            if self.sock:
-                self.sock.close()
-        except Exception:
-            pass
+            self._connection_generation += 1
+            ui_generation = self._connection_generation
+            old_sock = self.sock
+            self.sock = None
+            self.connected = False
+            self.authenticating = False
+            self._rx_stop.set()
 
-        self.sock = None
+        if old_sock is not None:
+            try:
+                old_sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                old_sock.close()
+            except OSError:
+                pass
 
-        self._on_connected_ui(
-            False,
-            "Disconnected",
+        Clock.schedule_once(
+            lambda dt, g=ui_generation, m=message: self._on_connected_ui(
+                False, m, generation=g
+            ),
+            0,
         )
+        return True
 
-    def _send(self, obj):
-        if not self.connected or not self.sock:
-            return
-
+    def _send(self, obj, generation=None, sock=None):
+        expected_generation = None
+        target_sock = None
         try:
-            data = (
-                json.dumps(obj)
-                + "\n"
-            ).encode("utf-8")
-
+            data = (json.dumps(obj) + "\n").encode("utf-8")
+            with self._connection_lock:
+                expected_generation = (
+                    self._connection_generation if generation is None else generation
+                )
+                target_sock = self.sock if sock is None else sock
+                if (
+                    not self.connected
+                    or target_sock is None
+                    or self.sock is not target_sock
+                    or expected_generation != self._connection_generation
+                ):
+                    return False
             with self._send_lock:
-                self.sock.sendall(data)
-
+                with self._connection_lock:
+                    if (
+                        not self.connected
+                        or self.sock is not target_sock
+                        or expected_generation != self._connection_generation
+                    ):
+                        return False
+                target_sock.sendall(data)
+            return True
         except Exception:
-            self.disconnect()
+            if expected_generation is not None and target_sock is not None:
+                self._disconnect_session(
+                    expected_generation, target_sock, "Disconnected"
+                )
+            return False
 
     # -------------------- State --------------------
 
@@ -951,9 +1031,9 @@ class AppState:
             "name": self.device_name or "UnknownDevice",
             "mode": self.mode,
             "gyro_enabled": self.gyro_enabled,
-            "buttons": self.buttons,
-            "analog": self.analog,
-            "joystick": self.joystick,
+            "buttons": dict(self.buttons),
+            "analog": dict(self.analog),
+            "joystick": dict(self.joystick),
             "tilt": {
                 "neutral_x": self._gyro_neutral,
                 "steer": round(
@@ -1248,15 +1328,7 @@ class AppState:
         except Exception:
             pass
 
-        try:
-            if self.sock:
-                self.sock.close()
-        except Exception:
-            pass
-
-        self.sock = None
-        self.connected = False
-        self.authenticating = False
+        self.disconnect()
 
 
 class TabBar(BoxLayout):

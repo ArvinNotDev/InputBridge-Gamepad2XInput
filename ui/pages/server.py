@@ -5,6 +5,10 @@ import threading
 import hashlib
 import secrets
 import os
+import tempfile
+import time
+from math import ceil
+from pathlib import Path
 from typing import Optional, Dict, Tuple
 from core.settings import SettingsManager
 
@@ -20,17 +24,26 @@ from core.utils.paths import data_path
 
 HOST = "0.0.0.0"
 PORT = 5000
-TRUSTED_FILE = str(data_path("trusted_clients.json"))
+TRUSTED_FILE = data_path("trusted_clients.json")
+MAX_CLIENTS = 8
+MAX_FRAME_BYTES = 16 * 1024
+MAX_CLIENT_NAME_LENGTH = 64
+MAX_CLIENT_UUID_LENGTH = 128
+BUTTON_KEYS = {
+    "A", "B", "X", "Y", "LB", "RB", "BACK", "START", "GUIDE", "L3", "R3",
+    "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT",
+}
+ANALOG_KEYS = {"L2", "R2"}
+JOYSTICK_KEYS = {"left_x", "left_y", "right_x", "right_y"}
 
 
 # ---------------------------------------------------------
 
 def get_local_ip():
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
     except Exception:
         ip = "Unavailable"
     return f"{ip}:{PORT}"
@@ -41,18 +54,109 @@ def hash_uuid(uuid_str: str) -> str:
 
 
 def load_trusted() -> dict:
-    if os.path.exists(TRUSTED_FILE):
+    if TRUSTED_FILE.exists():
         try:
-            with open(TRUSTED_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            with TRUSTED_FILE.open("r", encoding="utf-8") as f:
+                stored = json.load(f)
+            if not isinstance(stored, dict):
+                return {}
+
+            # New format is UUID hash -> display name. Migrate the legacy
+            # display name -> UUID hash format in memory without losing trust.
+            trusted = {}
+            for key, value in stored.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    continue
+                if len(key) == 64 and all(c in "0123456789abcdefABCDEF" for c in key):
+                    trusted[key.lower()] = value[:MAX_CLIENT_NAME_LENGTH]
+                elif len(value) == 64 and all(c in "0123456789abcdefABCDEF" for c in value):
+                    trusted[value.lower()] = key[:MAX_CLIENT_NAME_LENGTH]
+            return trusted
         except Exception:
             pass
     return {}
 
 
 def save_trusted(trusted_data: dict):
-    with open(TRUSTED_FILE, "w", encoding="utf-8") as f:
-        json.dump(trusted_data, f, indent=4)
+    TRUSTED_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=TRUSTED_FILE.parent,
+            prefix=f"{TRUSTED_FILE.name}.", suffix=".tmp", delete=False,
+        ) as f:
+            temporary_path = Path(f.name)
+            json.dump(trusted_data, f, indent=4, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary_path, TRUSTED_FILE)
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _bounded_numeric_map(value, allowed_keys, minimum, maximum, *, allow_bool=False):
+    if not isinstance(value, dict):
+        return None
+    normalized = {}
+    for key, item in value.items():
+        if key not in allowed_keys:
+            continue
+        if allow_bool and isinstance(item, bool):
+            normalized[key] = int(item)
+            continue
+        if type(item) is not int or not minimum <= item <= maximum:
+            return None
+        normalized[key] = item
+    return normalized
+
+
+def validate_client_message(message):
+    """Return a bounded, normalized gamepad message, or None if it is invalid."""
+    if not isinstance(message, dict):
+        return None
+
+    client_uuid = message.get("uuid")
+    client_name = message.get("name")
+    if (
+        not isinstance(client_uuid, str)
+        or not client_uuid.strip()
+        or len(client_uuid) > MAX_CLIENT_UUID_LENGTH
+        or any(ord(char) < 32 for char in client_uuid)
+        or not isinstance(client_name, str)
+        or not client_name.strip()
+        or len(client_name.strip()) > MAX_CLIENT_NAME_LENGTH
+        or any(ord(char) < 32 for char in client_name)
+    ):
+        return None
+
+    buttons = _bounded_numeric_map(
+        message.get("buttons", {}), BUTTON_KEYS, 0, 1, allow_bool=True
+    )
+    analog = _bounded_numeric_map(message.get("analog", {}), ANALOG_KEYS, 0, 255)
+    joystick = _bounded_numeric_map(
+        message.get("joystick", {}), JOYSTICK_KEYS, 0, 255
+    )
+    if buttons is None or analog is None or joystick is None:
+        return None
+
+    auth_code = message.get("auth_code")
+    if auth_code is not None and (
+        not isinstance(auth_code, str) or len(auth_code) > 32
+    ):
+        return None
+
+    return {
+        "uuid": client_uuid.strip(),
+        "name": client_name.strip(),
+        "auth_code": auth_code,
+        "buttons": buttons,
+        "analog": analog,
+        "joystick": joystick,
+    }
 
 
 class ServerSignals(QObject):
@@ -66,13 +170,16 @@ class ServerSignals(QObject):
 
     trusted_client_added = Signal(str)          # name
     remote_mapper_added = Signal(object)         # emulator instance
+    server_started = Signal()
+    server_failed = Signal(str)
 
 
 class TrustedItemWidget(QWidget):
     remove_requested = Signal(str)
 
-    def __init__(self, name: str, parent=None):
+    def __init__(self, identity: str, name: str, parent=None):
         super().__init__(parent)
+        self.identity = identity
         self.name = name
 
         layout = QHBoxLayout(self)
@@ -80,6 +187,7 @@ class TrustedItemWidget(QWidget):
         layout.setSpacing(10)
 
         self.lbl_name = QLabel(name)
+        self.lbl_name.setTextFormat(Qt.PlainText)
         self.lbl_name.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.lbl_name)
 
@@ -92,7 +200,7 @@ class TrustedItemWidget(QWidget):
         layout.addWidget(self.btn_remove)
 
     def _on_remove_clicked(self):
-        self.remove_requested.emit(self.name)
+        self.remove_requested.emit(self.identity)
 
 
 class ClientListItemWidget(QWidget):
@@ -115,6 +223,7 @@ class ClientListItemWidget(QWidget):
         layout.setSpacing(10)
 
         self.lbl_text = QLabel(self._build_label_text())
+        self.lbl_text.setTextFormat(Qt.PlainText)
         self.lbl_text.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         layout.addWidget(self.lbl_text)
 
@@ -344,6 +453,8 @@ class ServerPage(QWidget):
         self.signals.show_auth_code.connect(self._on_show_auth_code_ui)
         self.signals.trusted_client_added.connect(self._on_trusted_client_added_ui)
         self.signals.remote_mapper_added.connect(self._on_remote_mapper_added_ui)
+        self.signals.server_started.connect(self._on_server_started)
+        self.signals.server_failed.connect(self._on_server_failed)
 
         # Populate trusted list
         self.refresh_trusted_ui()
@@ -357,12 +468,14 @@ class ServerPage(QWidget):
 
     def refresh_trusted_ui(self):
         self.trusted_list.clear()
-        for name in self.trusted_data.keys():
-            self._add_trusted_item_to_ui(name)
+        with self._state_lock:
+            trusted_clients = list(self.trusted_data.items())
+        for identity, name in trusted_clients:
+            self._add_trusted_item_to_ui(identity, name)
 
-    def _add_trusted_item_to_ui(self, name: str):
+    def _add_trusted_item_to_ui(self, identity: str, name: str):
         item = QListWidgetItem(self.trusted_list)
-        widget = TrustedItemWidget(name)
+        widget = TrustedItemWidget(identity, name)
         sh = widget.sizeHint()
         if sh.height() < 40:
             sh.setHeight(40)
@@ -370,11 +483,19 @@ class ServerPage(QWidget):
         self.trusted_list.setItemWidget(item, widget)
         widget.remove_requested.connect(self._on_remove_trusted_requested)
 
-    def _on_remove_trusted_requested(self, name: str):
-        if name in self.trusted_data:
-            del self.trusted_data[name]
-            save_trusted(self.trusted_data)
-            self.refresh_trusted_ui()
+    def _on_remove_trusted_requested(self, identity: str):
+        with self._state_lock:
+            if identity not in self.trusted_data:
+                return
+            trusted_snapshot = dict(self.trusted_data)
+            del trusted_snapshot[identity]
+            try:
+                save_trusted(trusted_snapshot)
+            except OSError as exc:
+                QMessageBox.warning(self, "Storage Error", str(exc))
+                return
+            self.trusted_data = trusted_snapshot
+        self.refresh_trusted_ui()
 
     def _on_show_auth_code_ui(self, addr: tuple, code: str, time_left: int):
         """Show/refresh auth code+timer on the client row instead of QMessageBox."""
@@ -394,68 +515,84 @@ class ServerPage(QWidget):
         self.controllers_page.add_x360_instance(instance)
         self.hotkey_page.add_x360_instance(instance)
 
+    def _on_server_started(self) -> None:
+        if self.stop_event.is_set():
+            return
+        self.button.setEnabled(True)
+        self._set_server_button(True)
+        self.auth_timer.start(1000)
+
+    def _on_server_failed(self, message: str) -> None:
+        self.button.setEnabled(True)
+        self._set_server_button(False)
+        self.auth_timer.stop()
+        if not self._is_shutting_down:
+            QMessageBox.warning(self, "Server Error", message)
+
     # ---------- Auth timer tick ----------
 
     def _on_auth_timer_tick(self):
         """Update auth countdowns for all clients every second."""
         to_expire = []
-
-        for conn_key, state in list(self.auth_states.items()):
-            # Skip already authenticated or already expired
-            if state.get("authenticated") or state.get("expired"):
-                continue
-
-            code = state.get("code")
-            time_left = state.get("time_left", 0)
-
-            if code is None:
-                continue
-
-            if time_left > 0:
-                time_left -= 1
+        expired_keys = []
+        now = time.monotonic()
+        with self._state_lock:
+            for conn_key, state in list(self.auth_states.items()):
+                if state.get("authenticated") or state.get("expired"):
+                    continue
+                code = state.get("code")
+                deadline = state.get("deadline")
+                if code is None or deadline is None:
+                    continue
+                time_left = max(0, ceil(deadline - now))
                 state["time_left"] = time_left
+                self.signals.show_auth_code.emit(conn_key, code, time_left)
+                if time_left <= 0:
+                    state["expired"] = True
+                    expired_keys.append(conn_key)
+                    conn_tuple = self.clients.get(conn_key)
+                    if conn_tuple:
+                        to_expire.append(conn_tuple[0])
 
-            # Update UI
-            self.signals.show_auth_code.emit(conn_key, code, time_left)
-
-            if time_left <= 0:
-                # Expired: mark and remember to close connection
-                state["expired"] = True
-                to_expire.append(conn_key)
-
-        # Close expired connections and clear UI
-        for conn_key in to_expire:
-            conn_tuple = self.clients.get(conn_key)
-            if conn_tuple:
-                try:
-                    conn_tuple[0].close()
-                except OSError:
-                    pass
-            # Clear auth UI
+        for conn in to_expire:
+            self._close_connection(conn)
+        for conn_key in expired_keys:
             self.signals.show_auth_code.emit(conn_key, "", 0)
+
+    @staticmethod
+    def _close_connection(conn: socket.socket) -> None:
+        try:
+            conn.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            conn.close()
+        except OSError:
+            pass
 
     # ---------- Networking / Client Handling ----------
 
     def _handle_client(self, conn: socket.socket, addr: tuple):
         conn_key = addr
-        buffer = ""
+        buffer = bytearray()
         uuid = "unknown"
+        client_name_identity = None
 
         authenticated = False
         auth_code_generated: Optional[str] = None
         auth_time_left = 120  # seconds
 
+        conn.settimeout(0.5)
         with self._state_lock:
             self.clients[conn_key] = (conn, addr, uuid)
             self.emulation_states.setdefault(conn_key, False)
-
-        # Initialize auth state
-        self.auth_states[conn_key] = {
-            "code": None,
-            "time_left": auth_time_left,
-            "authenticated": False,
-            "expired": False,
-        }
+            self.auth_states[conn_key] = {
+                "code": None,
+                "time_left": auth_time_left,
+                "deadline": None,
+                "authenticated": False,
+                "expired": False,
+            }
 
         self.signals.client_connected.emit(addr)
 
@@ -465,11 +602,16 @@ class ServerPage(QWidget):
         try:
             while not self.stop_event.is_set():
                 # If auth expired server-side, break loop
-                if self.auth_states.get(conn_key, {}).get("expired"):
+                with self._state_lock:
+                    auth_state = self.auth_states.get(conn_key)
+                    is_expired = auth_state is None or auth_state.get("expired")
+                if is_expired:
                     break
 
                 try:
-                    data = conn.recv(1024)
+                    data = conn.recv(4096)
+                except socket.timeout:
+                    continue
                 except ConnectionResetError:
                     break
                 except OSError:
@@ -478,115 +620,125 @@ class ServerPage(QWidget):
                 if not data:
                     break
 
-                buffer += data.decode("utf-8", errors="replace")
-                if len(buffer) > 64 * 1024:
-                    break
-
-                while "\n" in buffer:
-                    line, buffer = buffer.split("\n", 1)
-                    line = line.strip()
-                    if not line:
+                buffer.extend(data)
+                while b"\n" in buffer:
+                    newline = buffer.find(b"\n")
+                    if newline > MAX_FRAME_BYTES:
+                        return
+                    raw_line = bytes(buffer[:newline]).strip()
+                    del buffer[:newline + 1]
+                    if not raw_line:
                         continue
                     try:
-                        msg = json.loads(line)
+                        msg = validate_client_message(
+                            json.loads(raw_line.decode("utf-8"))
+                        )
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        continue
+                    if msg is None:
+                        continue
 
-                        client_uuid = msg.get("uuid", "unknown")
-                        client_name = msg.get("name", "UnknownDevice")
+                    client_uuid = msg["uuid"]
+                    client_name = msg["name"]
+                    if uuid == "unknown":
+                        uuid = client_uuid
+                        client_name_identity = client_name
+                        with self._state_lock:
+                            if conn_key in self.clients:
+                                self.clients[conn_key] = (conn, addr, uuid)
+                        self.signals.client_uuid_updated.emit(addr, uuid)
+                    elif client_uuid != uuid or client_name != client_name_identity:
+                        # A connection cannot switch identity after pairing starts.
+                        continue
 
-                        if client_uuid != "unknown" and client_uuid != uuid:
-                            uuid = client_uuid
-                            self.clients[conn_key] = (conn, addr, uuid)
-                            self.signals.client_uuid_updated.emit(addr, uuid)
+                    with self._state_lock:
+                        auth_state = self.auth_states.get(conn_key)
+                        is_expired = auth_state is None or auth_state.get("expired")
+                    if is_expired:
+                        return
 
-                        # If auth expired, ignore any further auth attempts and break
-                        if self.auth_states.get(conn_key, {}).get("expired"):
-                            break
-
-                        if not authenticated:
-                            hashed_id = hash_uuid(uuid)
-                            if (
-                                client_name in self.trusted_data
-                                and self.trusted_data[client_name] == hashed_id
-                            ):
-                                # Already trusted
-                                authenticated = True
-                                self.auth_states[conn_key]["authenticated"] = True
-
-                                # Clear any auth code in UI
-                                self.signals.show_auth_code.emit(addr, "", 0)
-
-                                mapper = Phone_mapper(uuid, "x360", self.controllers_page, self.hotkey_page, self.settings)
-                                self.signals.remote_mapper_added.emit(mapper.emulator)
-                            else:
-                                received_code = msg.get("auth_code")
-                                if received_code:
-                                    if (
-                                        auth_code_generated
-                                        and str(received_code) == auth_code_generated
-                                    ):
-                                        # Auth succeeded
-                                        authenticated = True
-                                        self.auth_states[conn_key]["authenticated"] = True
-
-                                        self.trusted_data[client_name] = hashed_id
-                                        save_trusted(self.trusted_data)
-                                        self.signals.trusted_client_added.emit(
-                                            client_name
-                                        )
-
-                                        # Auth succeeded -> clear auth code & timer in UI
-                                        self.signals.show_auth_code.emit(addr, "", 0)
-
-                                        mapper = Phone_mapper(
-                                            uuid, "x360", self.controllers_page, self.hotkey_page, self.settings
-                                        )
-                                        self.signals.remote_mapper_added.emit(mapper.emulator)
-                                    else:
-                                        auth_failures += 1
-                                        print(f"[{addr}] Invalid auth code: {received_code}")
-                                        if auth_failures >= 5:
-                                            self.auth_states[conn_key]["expired"] = True
-                                            break
+                    if not authenticated:
+                        hashed_id = hash_uuid(uuid)
+                        with self._state_lock:
+                            trusted_name = self.trusted_data.get(hashed_id)
+                        if trusted_name is not None:
+                            authenticated = True
+                            with self._state_lock:
+                                auth_state = self.auth_states.get(conn_key)
+                                if auth_state is not None:
+                                    auth_state["authenticated"] = True
+                            self.signals.show_auth_code.emit(addr, "", 0)
+                            mapper = Phone_mapper(
+                                uuid, "x360", self.controllers_page,
+                                self.hotkey_page, self.settings,
+                            )
+                            self.signals.remote_mapper_added.emit(mapper.emulator)
+                        else:
+                            received_code = msg["auth_code"]
+                            if received_code is not None:
+                                if auth_code_generated and secrets.compare_digest(
+                                    received_code, auth_code_generated
+                                ):
+                                    with self._state_lock:
+                                        trusted_snapshot = dict(self.trusted_data)
+                                        trusted_snapshot[hashed_id] = client_name
+                                        try:
+                                            save_trusted(trusted_snapshot)
+                                        except OSError as exc:
+                                            trusted_saved = False
+                                            print(
+                                                f"[Server] Could not save trusted phone: {exc}"
+                                            )
+                                        else:
+                                            trusted_saved = True
+                                            self.trusted_data = trusted_snapshot
+                                            auth_state = self.auth_states.get(conn_key)
+                                            if auth_state is not None:
+                                                auth_state["authenticated"] = True
+                                    if not trusted_saved:
+                                        return
+                                    authenticated = True
+                                    self.signals.trusted_client_added.emit(client_name)
+                                    self.signals.show_auth_code.emit(addr, "", 0)
+                                    mapper = Phone_mapper(
+                                        uuid, "x360", self.controllers_page,
+                                        self.hotkey_page, self.settings,
+                                    )
+                                    self.signals.remote_mapper_added.emit(mapper.emulator)
                                 else:
-                                    # No auth_code received yet: generate once and show
-                                    if not auth_code_generated:
-                                        auth_code_generated = str(secrets.randbelow(9000) + 1000)
-                                        auth_time_left = 120
-                                        st = self.auth_states.get(conn_key, {})
-                                        st["code"] = auth_code_generated
-                                        st["time_left"] = auth_time_left
-
-                                        # Initial display
-                                        self.signals.show_auth_code.emit(
-                                            addr,
-                                            auth_code_generated,
-                                            auth_time_left,
-                                        )
-
-                                # Skip HID processing until authenticated
+                                    auth_failures += 1
+                                    if auth_failures >= 5:
+                                        with self._state_lock:
+                                            auth_state = self.auth_states.get(conn_key)
+                                            if auth_state is not None:
+                                                auth_state["expired"] = True
+                                        return
+                            elif auth_code_generated is None:
+                                auth_code_generated = str(secrets.randbelow(9000) + 1000)
+                                deadline = time.monotonic() + auth_time_left
+                                with self._state_lock:
+                                    auth_state = self.auth_states.get(conn_key)
+                                    if auth_state is not None:
+                                        auth_state["code"] = auth_code_generated
+                                        auth_state["deadline"] = deadline
+                                        auth_state["time_left"] = auth_time_left
+                                self.signals.show_auth_code.emit(
+                                    addr, auth_code_generated, auth_time_left
+                                )
+                            if not authenticated:
                                 continue
 
-                        # If we reach here and expired in the meantime, stop
-                        if self.auth_states.get(conn_key, {}).get("expired"):
-                            break
+                    with self._state_lock:
+                        emulation_enabled = self.emulation_states.get(conn_key, False)
+                    if authenticated and mapper and emulation_enabled:
+                        mapper.handle_hid_data({
+                            "buttons": msg["buttons"],
+                            "analog": msg["analog"],
+                            "joystick": msg["joystick"],
+                        })
 
-                        if authenticated and mapper:
-                            buttons = msg.get("buttons", {})
-                            analog = msg.get("analog", {})
-                            joystick = msg.get("joystick", {})
-
-                            if self.emulation_states.get(conn_key, False):
-                                mapper.handle_hid_data(
-                                    {
-                                        "buttons": buttons,
-                                        "analog": analog,
-                                        "joystick": joystick,
-                                    }
-                                )
-
-                    except json.JSONDecodeError:
-                        # Ignore malformed messages
-                        continue
+                if len(buffer) > MAX_FRAME_BYTES:
+                    return
         finally:
             if mapper is not None:
                 try:
@@ -607,46 +759,73 @@ class ServerPage(QWidget):
             self.signals.client_disconnected.emit(addr)
 
     def _server_loop(self):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_socket.bind((HOST, PORT))
-        self.server_socket.listen()
-        self.server_socket.settimeout(0.5)
-
+        listener = None
         try:
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind((HOST, PORT))
+            listener.listen()
+            listener.settimeout(0.5)
+            with self._state_lock:
+                if self.stop_event.is_set():
+                    return
+                self.server_socket = listener
+            self.signals.server_started.emit()
+
             while not self.stop_event.is_set():
                 try:
-                    conn, addr = self.server_socket.accept()
-                    t = threading.Thread(
-                        target=self._handle_client, args=(conn, addr), daemon=True
-                    )
+                    conn, addr = listener.accept()
                     with self._state_lock:
-                        self.client_threads[addr] = t
-                    t.start()
+                        if len(self.client_threads) >= MAX_CLIENTS:
+                            client_thread = None
+                        else:
+                            client_thread = threading.Thread(
+                                target=self._handle_client,
+                                args=(conn, addr),
+                                daemon=True,
+                            )
+                            self.client_threads[addr] = client_thread
+                    if client_thread is None:
+                        self._close_connection(conn)
+                        continue
+                    client_thread.start()
                 except socket.timeout:
                     continue
-                except OSError:
-                    # socket closed while stopping
+                except OSError as exc:
+                    if not self.stop_event.is_set():
+                        self._fail_server(str(exc))
                     break
+        except OSError as exc:
+            if not self.stop_event.is_set():
+                self._fail_server(str(exc))
         finally:
-            if self.server_socket:
+            if listener is not None:
+                with self._state_lock:
+                    if self.server_socket is listener:
+                        self.server_socket = None
                 try:
-                    self.server_socket.close()
+                    listener.close()
                 except OSError:
                     pass
-                self.server_socket = None
+
+    def _fail_server(self, message: str) -> None:
+        self.stop_event.set()
+        with self._state_lock:
+            connections = [entry[0] for entry in self.clients.values()]
+        for conn in connections:
+            self._close_connection(conn)
+        self.signals.server_failed.emit(message)
 
     def toggle_server(self):
         if not self.server_running:
             self._is_shutting_down = False
             self.stop_event.clear()
-            self.auth_timer.start(1000)
+            self.button.setEnabled(False)
+            self.button.setText("Starting...")
             self.server_thread = threading.Thread(
                 target=self._server_loop, daemon=True
             )
             self.server_thread.start()
-            self._set_server_button(True)
-
         else:
             self.shutdown()
 
@@ -680,21 +859,15 @@ class ServerPage(QWidget):
             client_threads = list(self.client_threads.values())
 
         for conn, _, _ in connections:
-            try:
-                conn.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            try:
-                conn.close()
-            except OSError:
-                pass
+            self._close_connection(conn)
 
         current = threading.current_thread()
+        join_deadline = time.monotonic() + 2.0
         if server_thread and server_thread is not current:
-            server_thread.join(timeout=2.0)
+            server_thread.join(timeout=max(0.0, join_deadline - time.monotonic()))
         for client_thread in client_threads:
             if client_thread is not current:
-                client_thread.join(timeout=2.0)
+                client_thread.join(timeout=max(0.0, join_deadline - time.monotonic()))
 
         with self._state_lock:
             self.clients.clear()
@@ -705,6 +878,7 @@ class ServerPage(QWidget):
         self.server_thread = None
         self.server_socket = None
         self.clients_list.clear()
+        self.button.setEnabled(True)
         self._set_server_button(False)
         self.auth_timer.stop()
 
@@ -755,7 +929,9 @@ class ServerPage(QWidget):
             return
         widget = self.clients_list.itemWidget(item)
 
-        if conn_key not in self.clients:
+        with self._state_lock:
+            is_connected = conn_key in self.clients
+        if not is_connected:
             QMessageBox.warning(
                 self, "Client Disconnected", "Client is no longer connected."
             )
@@ -764,17 +940,15 @@ class ServerPage(QWidget):
             return
 
         if isinstance(widget, ClientListItemWidget):
-            self.emulation_states[conn_key] = widget.is_running()
+            with self._state_lock:
+                if conn_key in self.clients:
+                    self.emulation_states[conn_key] = widget.is_running()
 
     def _on_delete_requested(self, conn_key):
-        conn_tuple = self.clients.get(conn_key)
+        with self._state_lock:
+            conn_tuple = self.clients.get(conn_key)
         if conn_tuple:
-            try:
-                conn_tuple[0].close()
-            except OSError:
-                pass
-        self.emulation_states.pop(conn_key, None)
-        self.auth_states.pop(conn_key, None)
+            self._close_connection(conn_tuple[0])
 
     # ---------- Window Closing ----------
 
