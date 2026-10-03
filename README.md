@@ -214,7 +214,11 @@ InputBridge-Gamepad2XInput includes a remote input server for the companion
 phone client. After pairing a phone, choose **Emulate** for an XInput gamepad or
 **Mouse** for direct mouse output in that phone's row on the Server page. The
 phone's **Mouse** tab provides a touchpad, held left/right/middle buttons,
-scroll controls, and adjustable touch sensitivity.
+scroll controls, and adjustable touch sensitivity. Drag with one finger to move
+the pointer, tap for a left click, and swipe with two fingers to scroll. Tap to
+click can be disabled, and the mouse sensitivity and tap setting are saved on
+the phone. To send mouse input, select **Mouse** for that phone in the desktop
+Server page.
 
 The phone and PC must be on the same reachable network, the desktop server must
 be running, and the phone must be paired with the desktop application.
@@ -475,7 +479,8 @@ phone_client_with_auth.py
 
 It can be built and run separately from the desktop application. Along with the
 controller screen, it provides the touchpad mouse screen for remote desktop
-control.
+control, including one-finger pointer movement, optional tap-to-click,
+two-finger scrolling, held mouse buttons, and saved touch sensitivity.
 
 ## Project Status
 

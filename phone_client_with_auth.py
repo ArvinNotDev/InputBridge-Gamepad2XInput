@@ -26,6 +26,11 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
+from phone_mouse import (
+    MouseGestureTracker,
+    load_mouse_preferences,
+    save_mouse_preferences,
+)
 
 try:
     from plyer import accelerometer
@@ -636,6 +641,9 @@ class MousePad(Widget):
         super().__init__(**kwargs)
         self.state = state
         self._touch_id = None
+        self._gestures = MouseGestureTracker(
+            scroll_step=dp(42), tap_slop=dp(10), tap_timeout=0.28,
+        )
 
         with self.canvas.before:
             Color(*THEME["surface2"])
@@ -665,24 +673,35 @@ class MousePad(Widget):
         )
 
     def on_touch_down(self, touch):
-        if self._touch_id is not None or not self.collide_point(*touch.pos):
+        if not self.collide_point(*touch.pos):
+            return False
+        if not self._gestures.begin(touch.uid, touch.x, touch.y):
             return False
         self._touch_id = touch.uid
         touch.grab(self)
         return True
 
     def on_touch_move(self, touch):
-        if self._touch_id != touch.uid or touch.grab_current is not self:
+        if touch.grab_current is not self:
             return False
-        self.state.move_mouse(touch.dx, -touch.dy)
+        action = self._gestures.move(
+            touch.uid, touch.x, touch.y, touch.dx, touch.dy
+        )
+        if action and action[0] == "move":
+            self.state.move_mouse(action[1], -action[2])
+        elif action and action[0] == "scroll":
+            self.state.scroll_mouse(action[1])
         return True
 
     def on_touch_up(self, touch):
-        if self._touch_id != touch.uid:
+        if not self._gestures.contains(touch.uid):
             return False
         if touch.grab_current is self:
             touch.ungrab(self)
-        self._touch_id = None
+        was_tap = self._gestures.end(touch.uid)
+        self._touch_id = self._gestures._primary_touch
+        if was_tap and self.state.tap_to_click:
+            self.state.click_mouse("left")
         return True
 
 
@@ -748,7 +767,10 @@ class AppState:
         self._gyro_last_sample = None
 
         self.sensitivity = 1.5
-        self.mouse_sensitivity = 1.8
+        mouse_preferences = load_mouse_preferences()
+        self.mouse_sensitivity = mouse_preferences["sensitivity"]
+        self.tap_to_click = mouse_preferences["tap_to_click"]
+        self._mouse_pref_save_ev = None
 
         self.connect_screen = None
         self.control_screen = None
@@ -1449,7 +1471,38 @@ class AppState:
         except Exception:
             pass
 
+        self.persist_mouse_preferences()
         self.disconnect()
+
+    def set_mouse_sensitivity(self, value):
+        self.mouse_sensitivity = clamp(float(value), 0.5, 4.0)
+        self._schedule_mouse_preferences_save()
+
+    def set_tap_to_click(self, enabled):
+        self.tap_to_click = bool(enabled)
+        self._schedule_mouse_preferences_save()
+
+    def _schedule_mouse_preferences_save(self):
+        if self._mouse_pref_save_ev is not None:
+            self._mouse_pref_save_ev.cancel()
+        self._mouse_pref_save_ev = Clock.schedule_once(
+            lambda _dt: self.persist_mouse_preferences(), 0.5
+        )
+
+    def persist_mouse_preferences(self):
+        if self._mouse_pref_save_ev is not None:
+            self._mouse_pref_save_ev.cancel()
+            self._mouse_pref_save_ev = None
+        try:
+            save_mouse_preferences(self.mouse_sensitivity, self.tap_to_click)
+        except OSError:
+            pass
+
+    def click_mouse(self, button):
+        if button not in self.mouse_buttons or not self.connected:
+            return
+        self.set_mouse_button(button, True)
+        self.set_mouse_button(button, False)
 
 
 class TabBar(BoxLayout):
@@ -2317,10 +2370,10 @@ class MouseScreen(Screen):
         top_bar.add_widget(self.status_label)
         root.add_widget(top_bar)
 
-        help_card = Card(size_hint_y=None, height=dp(68))
+        help_card = Card(size_hint_y=None, height=dp(76))
         help_card.add_widget(fit_label(Label(
-            text="Drag one finger on the touchpad to move the PC cursor. "
-                 "Hold a mouse button to drag or select.",
+            text="Drag to move the cursor · tap to click · swipe with two fingers to scroll.\n"
+                 "For mouse output, select Mouse beside this phone on the PC.",
             color=THEME["muted"],
             font_size=sp(13),
             halign="left",
@@ -2346,6 +2399,10 @@ class MouseScreen(Screen):
                 on_release=lambda _instance, key=name: state.set_mouse_button(key, False),
             )
             click_row.add_widget(button)
+        self.tap_toggle = make_button("", height=dp(52))
+        self.tap_toggle.bind(on_release=self._toggle_tap_to_click)
+        self._refresh_tap_toggle()
+        click_row.add_widget(self.tap_toggle)
         root.add_widget(click_row)
 
         scroll_row = BoxLayout(
@@ -2389,8 +2446,19 @@ class MouseScreen(Screen):
         self.update_status()
 
     def _on_sensitivity(self, _slider, value):
-        self.state.mouse_sensitivity = float(value)
+        self.state.set_mouse_sensitivity(value)
         self.sensitivity_label.text = f"{value:.1f}x"
+
+    def _toggle_tap_to_click(self, *_):
+        self.state.set_tap_to_click(not self.state.tap_to_click)
+        self._refresh_tap_toggle()
+
+    def _refresh_tap_toggle(self):
+        enabled = self.state.tap_to_click
+        self.tap_toggle.text = f"Tap: {'On' if enabled else 'Off'}"
+        self.tap_toggle.background_color = (
+            THEME["accent"] if enabled else THEME["btn"]
+        )
 
     def update_status(self):
         connected = bool(self.state.connected)
@@ -3371,6 +3439,12 @@ class InputBridgeApp(App):
     def on_stop(self):
         if hasattr(self, "state"):
             self.state.on_stop()
+
+    def on_pause(self):
+        if hasattr(self, "state"):
+            self.state.persist_mouse_preferences()
+            self.state.disconnect()
+        return True
 
 
 if __name__ == "__main__":

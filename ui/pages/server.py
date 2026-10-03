@@ -277,7 +277,7 @@ class ClientListItemWidget(QWidget):
 
         self.status = QLabel()
         self.status.setFixedSize(14, 14)
-        self._update_status_style(False)
+        self._update_status_style()
         layout.addWidget(self.status, alignment=Qt.AlignRight | Qt.AlignVCenter)
 
     def _build_label_text(self) -> str:
