@@ -1,11 +1,52 @@
+import ast
 import json
+import math
+import os
+import tempfile
+import time
+from pathlib import Path
 
-from phone_mouse import (
-    DEFAULT_MOUSE_SENSITIVITY,
-    MouseGestureTracker,
-    load_mouse_preferences,
-    save_mouse_preferences,
+
+PHONE_CLIENT_PATH = Path(__file__).resolve().parents[1] / "phone_client_with_auth.py"
+PHONE_CLIENT_TREE = ast.parse(PHONE_CLIENT_PATH.read_text(encoding="utf-8"))
+_HELPER_NAMES = {
+    "MOUSE_SETTINGS_FILE",
+    "DEFAULT_MOUSE_SENSITIVITY",
+    "load_mouse_preferences",
+    "save_mouse_preferences",
+    "MouseGestureTracker",
+}
+
+
+def _defines_helper(node):
+    if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
+        return node.name in _HELPER_NAMES
+    if isinstance(node, ast.Assign):
+        return any(
+            isinstance(target, ast.Name) and target.id in _HELPER_NAMES
+            for target in node.targets
+        )
+    return False
+
+
+_HELPER_NODES = [
+    node for node in PHONE_CLIENT_TREE.body if _defines_helper(node)
+]
+_HELPERS = {
+    "json": json,
+    "math": math,
+    "os": os,
+    "tempfile": tempfile,
+    "time": time,
+}
+exec(
+    compile(ast.Module(body=_HELPER_NODES, type_ignores=[]), str(PHONE_CLIENT_PATH), "exec"),
+    _HELPERS,
 )
+DEFAULT_MOUSE_SENSITIVITY = _HELPERS["DEFAULT_MOUSE_SENSITIVITY"]
+MouseGestureTracker = _HELPERS["MouseGestureTracker"]
+load_mouse_preferences = _HELPERS["load_mouse_preferences"]
+save_mouse_preferences = _HELPERS["save_mouse_preferences"]
 
 
 def test_mouse_tracker_reports_cursor_motion_and_distinguishes_drag_from_tap():
@@ -61,3 +102,11 @@ def test_mouse_preferences_round_trip_and_sanitize(tmp_path):
         "sensitivity": DEFAULT_MOUSE_SENSITIVITY,
         "tap_to_click": True,
     }
+
+
+def test_phone_client_mouse_helpers_are_self_contained():
+    assert not (PHONE_CLIENT_PATH.parent / "phone_mouse.py").exists()
+    assert not any(
+        isinstance(node, ast.ImportFrom) and node.module == "phone_mouse"
+        for node in ast.walk(PHONE_CLIENT_TREE)
+    )

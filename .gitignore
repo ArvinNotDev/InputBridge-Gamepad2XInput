@@ -155,7 +155,6 @@ gamepad_uuid.txt
 device_name.txt
 buttons.txt
 last_ip.txt
-mouse_settings.json
 trusted_clients.json
 hotkeys.json
 
