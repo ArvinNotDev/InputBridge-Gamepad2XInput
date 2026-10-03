@@ -35,6 +35,8 @@ BUTTON_KEYS = {
 }
 ANALOG_KEYS = {"L2", "R2"}
 JOYSTICK_KEYS = {"left_x", "left_y", "right_x", "right_y"}
+MOUSE_BUTTON_KEYS = {"left", "right", "middle"}
+MAX_MOUSE_DELTA = 2048
 
 
 # ---------------------------------------------------------
@@ -140,6 +142,28 @@ def validate_client_message(message):
     joystick = _bounded_numeric_map(
         message.get("joystick", {}), JOYSTICK_KEYS, 0, 255
     )
+    mouse_data = message.get("mouse", {})
+    if not isinstance(mouse_data, dict):
+        return None
+    mouse = {"dx": 0, "dy": 0, "scroll": 0, "left": 0, "right": 0, "middle": 0}
+    for key in ("dx", "dy"):
+        value = mouse_data.get(key, 0)
+        if type(value) is not int or abs(value) > MAX_MOUSE_DELTA:
+            return None
+        mouse[key] = value
+    scroll = mouse_data.get("scroll", 0)
+    if type(scroll) is not int or not -20 <= scroll <= 20:
+        return None
+    mouse["scroll"] = scroll
+    for key in MOUSE_BUTTON_KEYS:
+        value = mouse_data.get(key, 0)
+        if isinstance(value, bool):
+            mouse[key] = int(value)
+        elif type(value) is int and value in (0, 1):
+            mouse[key] = value
+        else:
+            return None
+
     if buttons is None or analog is None or joystick is None:
         return None
 
@@ -156,6 +180,7 @@ def validate_client_message(message):
         "buttons": buttons,
         "analog": analog,
         "joystick": joystick,
+        "mouse": mouse,
     }
 
 
@@ -205,6 +230,7 @@ class TrustedItemWidget(QWidget):
 
 class ClientListItemWidget(QWidget):
     emulate_requested = Signal(object)
+    mouse_requested = Signal(object)
     delete_requested = Signal(object)
 
     def __init__(self, conn_key, addr_str: str, uuid: str = "unknown", parent=None):
@@ -213,6 +239,7 @@ class ClientListItemWidget(QWidget):
         self.addr_str = addr_str
         self.uuid = uuid
         self._running = False
+        self._mouse_running = False
 
         # --- NEW: auth code + timer UI state ---
         self.auth_code: Optional[str] = None
@@ -238,8 +265,13 @@ class ClientListItemWidget(QWidget):
         self.btn_emulate.clicked.connect(self._on_emulate_clicked)
         layout.addWidget(self.btn_emulate)
 
+        self.btn_mouse = QPushButton("Mouse")
+        self.btn_mouse.setFixedWidth(80)
+        self.btn_mouse.clicked.connect(self._on_mouse_clicked)
+        layout.addWidget(self.btn_mouse)
+
         self.btn_delete = QPushButton("Disconnect")
-        self.btn_delete.setFixedWidth(90)
+        self.btn_delete.setFixedWidth(85)
         self.btn_delete.clicked.connect(self._on_delete_clicked)
         layout.addWidget(self.btn_delete)
 
@@ -251,19 +283,37 @@ class ClientListItemWidget(QWidget):
     def _build_label_text(self) -> str:
         return f"{self.addr_str}  (uuid: {self.uuid})"
 
-    def _update_status_style(self, running: bool):
-        color = "#2ecc71" if running else "#9aa0a6"
+    def _update_status_style(self):
+        color = (
+            "#38bdf8" if self._mouse_running
+            else "#2ecc71" if self._running
+            else "#9aa0a6"
+        )
         self.status.setStyleSheet(
             f"border-radius: 7px; background-color: {color};"
         )
 
     def set_running(self, running: bool):
         self._running = bool(running)
-        self._update_status_style(self._running)
+        if self._running:
+            self._mouse_running = False
+            self.btn_mouse.setText("Mouse")
+        self._update_status_style()
         self.btn_emulate.setText("Stop" if self._running else "Emulate")
+
+    def set_mouse_running(self, running: bool):
+        self._mouse_running = bool(running)
+        if self._mouse_running:
+            self._running = False
+            self.btn_emulate.setText("Emulate")
+        self._update_status_style()
+        self.btn_mouse.setText("Stop Mouse" if self._mouse_running else "Mouse")
 
     def is_running(self) -> bool:
         return self._running
+
+    def is_mouse_running(self) -> bool:
+        return self._mouse_running
 
     def update_uuid(self, uuid: str):
         self.uuid = uuid
@@ -307,8 +357,12 @@ class ClientListItemWidget(QWidget):
 
     def _on_emulate_clicked(self):
         # Toggle locally first so UI is responsive
-        self.set_running(not self._running) if False else self.set_running(not self._running)
+        self.set_running(not self._running)
         self.emulate_requested.emit(self.conn_key)
+
+    def _on_mouse_clicked(self):
+        self.set_mouse_running(not self._mouse_running)
+        self.mouse_requested.emit(self.conn_key)
 
     def _on_delete_clicked(self):
         self.delete_requested.emit(self.conn_key)
@@ -337,6 +391,7 @@ class ServerPage(QWidget):
         self.clients: Dict[tuple, Tuple[socket.socket, tuple, str]] = {}
         # conn_key -> bool
         self.emulation_states: Dict[tuple, bool] = {}
+        self.mouse_states: Dict[tuple, bool] = {}
 
         # conn_key -> {"code": str, "time_left": int, "authenticated": bool, "expired": bool}
         self.auth_states: Dict[tuple, Dict[str, object]] = {}
@@ -586,6 +641,7 @@ class ServerPage(QWidget):
         with self._state_lock:
             self.clients[conn_key] = (conn, addr, uuid)
             self.emulation_states.setdefault(conn_key, False)
+            self.mouse_states.setdefault(conn_key, False)
             self.auth_states[conn_key] = {
                 "code": None,
                 "time_left": auth_time_left,
@@ -597,6 +653,7 @@ class ServerPage(QWidget):
         self.signals.client_connected.emit(addr)
 
         mapper: Optional[Phone_mapper] = None
+        active_output_mode: Optional[str] = None
         auth_failures = 0
 
         try:
@@ -730,12 +787,32 @@ class ServerPage(QWidget):
 
                     with self._state_lock:
                         emulation_enabled = self.emulation_states.get(conn_key, False)
-                    if authenticated and mapper and emulation_enabled:
-                        mapper.handle_hid_data({
-                            "buttons": msg["buttons"],
-                            "analog": msg["analog"],
-                            "joystick": msg["joystick"],
-                        })
+                        mouse_enabled = self.mouse_states.get(conn_key, False)
+                    output_mode = (
+                        "mouse" if mouse_enabled
+                        else "gamepad" if emulation_enabled
+                        else None
+                    )
+                    if authenticated and mapper:
+                        if output_mode != active_output_mode:
+                            if active_output_mode == "gamepad":
+                                mapper.reset_gamepad()
+                            if active_output_mode == "mouse":
+                                mapper.release_mouse_buttons()
+                            if output_mode == "mouse":
+                                mapper.reset_gamepad()
+                            if output_mode == "gamepad":
+                                mapper.release_mouse_buttons()
+                            active_output_mode = output_mode
+
+                        if output_mode == "gamepad":
+                            mapper.handle_hid_data({
+                                "buttons": msg["buttons"],
+                                "analog": msg["analog"],
+                                "joystick": msg["joystick"],
+                            })
+                        elif output_mode == "mouse":
+                            mapper.handle_mouse_data(msg["mouse"])
 
                 if len(buffer) > MAX_FRAME_BYTES:
                     return
@@ -753,6 +830,7 @@ class ServerPage(QWidget):
             with self._state_lock:
                 self.clients.pop(conn_key, None)
                 self.emulation_states.pop(conn_key, None)
+                self.mouse_states.pop(conn_key, None)
                 self.auth_states.pop(conn_key, None)
                 self.client_threads.pop(conn_key, None)
 
@@ -872,6 +950,7 @@ class ServerPage(QWidget):
         with self._state_lock:
             self.clients.clear()
             self.emulation_states.clear()
+            self.mouse_states.clear()
             self.auth_states.clear()
             self.client_threads.clear()
 
@@ -903,6 +982,7 @@ class ServerPage(QWidget):
         self.clients_list.setItemWidget(item, widget)
 
         widget.emulate_requested.connect(self._on_emulate_requested)
+        widget.mouse_requested.connect(self._on_mouse_requested)
         widget.delete_requested.connect(self._on_delete_requested)
 
     def _on_client_disconnected_ui(self, addr: tuple):
@@ -937,12 +1017,38 @@ class ServerPage(QWidget):
             )
             if isinstance(widget, ClientListItemWidget):
                 widget.set_running(False)
+                widget.set_mouse_running(False)
             return
 
         if isinstance(widget, ClientListItemWidget):
             with self._state_lock:
                 if conn_key in self.clients:
                     self.emulation_states[conn_key] = widget.is_running()
+                    self.mouse_states[conn_key] = False
+            widget.set_mouse_running(False)
+
+    def _on_mouse_requested(self, conn_key):
+        item = self._find_item_by_conn_key(conn_key)
+        if not item:
+            return
+        widget = self.clients_list.itemWidget(item)
+
+        with self._state_lock:
+            is_connected = conn_key in self.clients
+        if not is_connected:
+            QMessageBox.warning(
+                self, "Client Disconnected", "Client is no longer connected."
+            )
+            if isinstance(widget, ClientListItemWidget):
+                widget.set_mouse_running(False)
+            return
+
+        if isinstance(widget, ClientListItemWidget):
+            with self._state_lock:
+                if conn_key in self.clients:
+                    self.mouse_states[conn_key] = widget.is_mouse_running()
+                    self.emulation_states[conn_key] = False
+            widget.set_running(False)
 
     def _on_delete_requested(self, conn_key):
         with self._state_lock:

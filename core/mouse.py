@@ -64,3 +64,16 @@ class Mouse:
     @staticmethod
     def rightClick():
         pyautogui.click(button="right")
+
+
+    @staticmethod
+    def buttonDown(button: str):
+        pyautogui.mouseDown(button=button)
+
+    @staticmethod
+    def buttonUp(button: str):
+        pyautogui.mouseUp(button=button)
+
+    @staticmethod
+    def scroll(amount: int):
+        pyautogui.scroll(int(amount))

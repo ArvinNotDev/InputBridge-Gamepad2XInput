@@ -513,6 +513,7 @@ class Phone_mapper:
         self._last_hotkey_func = None
         self._last_hotkey_time = 0.0
         self._hotkey_interval = 0.1
+        self._mouse_buttons = {"left": False, "right": False, "middle": False}
 
         if emulate_to == "x360":
             self.emulator = EmulateX360(self.uuid, self.uuid, hotkey_page.hotkey)
@@ -536,6 +537,53 @@ class Phone_mapper:
             self._handle_x360_input(data)
         else:
             self._handle_keyboard_input(data)
+
+    def handle_mouse_data(self, data: dict) -> None:
+        """Apply remote touchpad motion and mouse button state to Windows."""
+        if not self._connected:
+            return
+
+        dx = int(data.get("dx", 0))
+        dy = int(data.get("dy", 0))
+        scroll = int(data.get("scroll", 0))
+        try:
+            if dx or dy:
+                Mouse.moveRel(dx, dy, duration=0)
+        except Exception:
+            pass
+        try:
+            if scroll:
+                Mouse.scroll(scroll)
+        except Exception:
+            pass
+
+        for name in self._mouse_buttons:
+            pressed = bool(data.get(name, False))
+            if pressed == self._mouse_buttons[name]:
+                continue
+            try:
+                if pressed:
+                    Mouse.buttonDown(name)
+                else:
+                    Mouse.buttonUp(name)
+            except Exception:
+                pass
+            self._mouse_buttons[name] = pressed
+
+    def release_mouse_buttons(self) -> None:
+        """Release remote mouse buttons when changing output mode or disconnecting."""
+        for name, pressed in self._mouse_buttons.items():
+            if pressed:
+                try:
+                    Mouse.buttonUp(name)
+                except Exception:
+                    pass
+            self._mouse_buttons[name] = False
+
+    def reset_gamepad(self) -> None:
+        """Return the virtual gamepad to neutral before switching to mouse output."""
+        if isinstance(self.emulator, EmulateX360):
+            self.emulator.reset_output()
 
     def _handle_keyboard_input(self, data: dict) -> None:
         """
@@ -675,6 +723,7 @@ class Phone_mapper:
         )
 
     def shutdown(self) -> None:
+        self.release_mouse_buttons()
         self._connected = False
         if hasattr(self.emulator, "shutdown"):
             try:

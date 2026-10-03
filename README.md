@@ -48,7 +48,8 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Fixed 10% mouse deadzone to filter stick noise and accidental cursor drift
 * Adjustable mouse sensitivity with nonlinear fine-control response
 * Configurable gamepad deadzones and axis inversion
-* Remote gamepad server support
+* Remote phone touchpad with cursor movement, left/right/middle buttons, and scrolling
+* Per-phone choice between XInput gamepad output and direct Windows mouse output
 * System-tray integration
 * Dark and light themes
 * Persistent application settings
@@ -209,11 +210,14 @@ Hotkeys can be used independently of standard controller mappings and are stored
 
 ## Remote Gamepad Support
 
-InputBridge-Gamepad2XInput includes support for a remote gamepad server.
+InputBridge-Gamepad2XInput includes a remote input server for the companion
+phone client. After pairing a phone, choose **Emulate** for an XInput gamepad or
+**Mouse** for direct mouse output in that phone's row on the Server page. The
+phone's **Mouse** tab provides a touchpad, held left/right/middle buttons,
+scroll controls, and adjustable touch sensitivity.
 
-This allows controller input to be received remotely and processed by the application as part of its input/remapping pipeline.
-
-Remote access functionality can be configured separately from local controller mappings.
+The phone and PC must be on the same reachable network, the desktop server must
+be running, and the phone must be paired with the desktop application.
 
 ## Configuration Files
 
@@ -463,15 +467,15 @@ This separation makes it possible to extend the project with additional input an
 
 ## Remote Client
 
-The repository may also contain remote-controller functionality such as:
+The repository includes the companion Kivy client source:
 
 ```text
 phone_client_with_auth.py
 ```
 
-This component is not part of the desktop application's primary entry-point dependency graph.
-
-The desktop application can therefore be built and executed independently of the remote client component.
+It can be built and run separately from the desktop application. Along with the
+controller screen, it provides the touchpad mouse screen for remote desktop
+control.
 
 ## Project Status
 

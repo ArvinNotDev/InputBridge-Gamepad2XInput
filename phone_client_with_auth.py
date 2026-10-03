@@ -629,6 +629,63 @@ class Joystick(Widget):
         return True
 
 
+class MousePad(Widget):
+    """Relative-motion touch surface for the remote mouse screen."""
+
+    def __init__(self, state, **kwargs):
+        super().__init__(**kwargs)
+        self.state = state
+        self._touch_id = None
+
+        with self.canvas.before:
+            Color(*THEME["surface2"])
+            self._background = RoundedRectangle(
+                pos=self.pos,
+                size=self.size,
+                radius=[dp(16)],
+            )
+            Color(*THEME["border"])
+            self._outline = Line(
+                rounded_rectangle=(self.x, self.y, self.width, self.height, dp(16)),
+                width=1.2,
+            )
+            Color(*THEME["subtle"])
+            self._center_mark = Ellipse(pos=(0, 0), size=(dp(6), dp(6)))
+
+        self.bind(pos=self._redraw, size=self._redraw)
+
+    def _redraw(self, *args):
+        self._background.pos = self.pos
+        self._background.size = self.size
+        self._outline.rounded_rectangle = (
+            self.x, self.y, self.width, self.height, dp(16)
+        )
+        self._center_mark.pos = (
+            self.center_x - dp(3), self.center_y - dp(3)
+        )
+
+    def on_touch_down(self, touch):
+        if self._touch_id is not None or not self.collide_point(*touch.pos):
+            return False
+        self._touch_id = touch.uid
+        touch.grab(self)
+        return True
+
+    def on_touch_move(self, touch):
+        if self._touch_id != touch.uid or touch.grab_current is not self:
+            return False
+        self.state.move_mouse(touch.dx, -touch.dy)
+        return True
+
+    def on_touch_up(self, touch):
+        if self._touch_id != touch.uid:
+            return False
+        if touch.grab_current is self:
+            touch.ungrab(self)
+        self._touch_id = None
+        return True
+
+
 class AppState:
     def __init__(self):
         self.device_uuid = load_or_create_uuid()
@@ -640,6 +697,12 @@ class AppState:
 
         self._connection_lock = threading.RLock()
         self._send_lock = threading.Lock()
+        self._state_send_lock = threading.Lock()
+        self._mouse_state_lock = threading.RLock()
+        self._mouse_pending_x = 0.0
+        self._mouse_pending_y = 0.0
+        self._mouse_pending_scroll = 0
+        self.mouse_buttons = {"left": 0, "right": 0, "middle": 0}
         self._rx_stop = threading.Event()
         self._rx_thread = None
         self._connection_generation = 0
@@ -685,9 +748,11 @@ class AppState:
         self._gyro_last_sample = None
 
         self.sensitivity = 1.5
+        self.mouse_sensitivity = 1.8
 
         self.connect_screen = None
         self.control_screen = None
+        self.mouse_screen = None
         self.settings_screen = None
 
         self._periodic_send_ev = Clock.schedule_interval(
@@ -841,6 +906,8 @@ class AppState:
 
         if self.control_screen:
             self.control_screen.refresh_top_bar()
+        if self.mouse_screen:
+            self.mouse_screen.update_status()
 
         if not connected:
             self._stop_gyro_for_disconnect()
@@ -924,10 +991,7 @@ class AppState:
             )
             return False
 
-        payload = self.build_state_message()
-        payload["auth_code"] = code
-
-        if not self._send(payload):
+        if not self.send_state({"auth_code": code}):
             self._ui_pair_status("Not connected")
             return False
 
@@ -970,6 +1034,13 @@ class AppState:
             self.connected = False
             self.authenticating = False
             self._rx_stop.set()
+
+        with self._mouse_state_lock:
+            self._mouse_pending_x = 0.0
+            self._mouse_pending_y = 0.0
+            self._mouse_pending_scroll = 0
+            for button in self.mouse_buttons:
+                self.mouse_buttons[button] = 0
 
         if old_sock is not None:
             try:
@@ -1026,6 +1097,13 @@ class AppState:
     # -------------------- State --------------------
 
     def build_state_message(self):
+        with self._mouse_state_lock:
+            mouse = {
+                "dx": int(clamp(round(self._mouse_pending_x), -2048, 2048)),
+                "dy": int(clamp(round(self._mouse_pending_y), -2048, 2048)),
+                "scroll": int(clamp(self._mouse_pending_scroll, -20, 20)),
+                **self.mouse_buttons,
+            }
         return {
             "uuid": self.device_uuid,
             "name": self.device_name or "UnknownDevice",
@@ -1034,6 +1112,7 @@ class AppState:
             "buttons": dict(self.buttons),
             "analog": dict(self.analog),
             "joystick": dict(self.joystick),
+            "mouse": mouse,
             "tilt": {
                 "neutral_x": self._gyro_neutral,
                 "steer": round(
@@ -1043,10 +1122,50 @@ class AppState:
             },
         }
 
-    def send_state(self):
-        self._send(
-            self.build_state_message()
-        )
+    def send_state(self, extra_fields=None):
+        with self._state_send_lock:
+            message = self.build_state_message()
+            if extra_fields:
+                message.update(extra_fields)
+            sent = self._send(message)
+            if sent:
+                with self._mouse_state_lock:
+                    self._mouse_pending_x -= message["mouse"]["dx"]
+                    self._mouse_pending_y -= message["mouse"]["dy"]
+                    self._mouse_pending_scroll -= message["mouse"]["scroll"]
+            return sent
+
+    def move_mouse(self, dx, dy):
+        if not self.connected:
+            return
+        with self._mouse_state_lock:
+            self._mouse_pending_x = clamp(
+                self._mouse_pending_x + float(dx) * self.mouse_sensitivity,
+                -2048,
+                2048,
+            )
+            self._mouse_pending_y = clamp(
+                self._mouse_pending_y + float(dy) * self.mouse_sensitivity,
+                -2048,
+                2048,
+            )
+        self.send_state()
+
+    def set_mouse_button(self, name, pressed):
+        if name not in self.mouse_buttons:
+            return
+        with self._mouse_state_lock:
+            self.mouse_buttons[name] = int(bool(pressed) and self.connected)
+        self.send_state()
+
+    def scroll_mouse(self, amount):
+        if not self.connected:
+            return
+        with self._mouse_state_lock:
+            self._mouse_pending_scroll = int(clamp(
+                self._mouse_pending_scroll + int(amount), -20, 20
+            ))
+        self.send_state()
 
     def periodic_send(self, dt):
         if self.connected:
@@ -1054,6 +1173,8 @@ class AppState:
 
             if self.control_screen:
                 self.control_screen.refresh_top_bar()
+            if self.mouse_screen:
+                self.mouse_screen.update_status()
 
     # -------------------- Controls --------------------
 
@@ -1373,6 +1494,11 @@ class TabBar(BoxLayout):
                 "control",
                 "\U0001F3AE",
                 "Controller",
+            ),
+            (
+                "mouse",
+                "\U0001F5B1",
+                "Mouse",
             ),
             (
                 "connect",
@@ -2156,6 +2282,120 @@ class ControlScreen(Screen):
                 )
             )
         )
+
+
+class MouseScreen(Screen):
+    """Touchpad, click, and scroll controls for remote desktop mouse output."""
+
+    def __init__(self, state, **kwargs):
+        self.state = state
+        super().__init__(**kwargs)
+
+        root = BoxLayout(
+            orientation="vertical",
+            spacing=dp(8),
+            padding=(dp(10), dp(8), dp(10), dp(8)),
+        )
+
+        top_bar = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(42),
+        )
+        top_bar.add_widget(SectionTitle(text="Touchpad Mouse"))
+        self.status_label = Label(
+            text="Disconnected",
+            color=THEME["danger"],
+            bold=True,
+            halign="right",
+            valign="middle",
+            size_hint_x=0.55,
+        )
+        self.status_label.bind(
+            size=lambda inst, *_: setattr(inst, "text_size", inst.size)
+        )
+        top_bar.add_widget(self.status_label)
+        root.add_widget(top_bar)
+
+        help_card = Card(size_hint_y=None, height=dp(68))
+        help_card.add_widget(fit_label(Label(
+            text="Drag one finger on the touchpad to move the PC cursor. "
+                 "Hold a mouse button to drag or select.",
+            color=THEME["muted"],
+            font_size=sp(13),
+            halign="left",
+            valign="middle",
+        )))
+        root.add_widget(help_card)
+
+        pad_card = Card(spacing=dp(8))
+        pad_card.add_widget(SectionTitle(text="Touchpad"))
+        pad_card.add_widget(MousePad(state, size_hint_y=1))
+        root.add_widget(pad_card)
+
+        click_row = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(52),
+        )
+        for name, label in (("left", "Left"), ("right", "Right"), ("middle", "Middle")):
+            button = make_button(label, height=dp(52))
+            button.bind(
+                on_press=lambda _instance, key=name: state.set_mouse_button(key, True),
+                on_release=lambda _instance, key=name: state.set_mouse_button(key, False),
+            )
+            click_row.add_widget(button)
+        root.add_widget(click_row)
+
+        scroll_row = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(42),
+        )
+        scroll_up = make_button("Scroll Up", height=dp(42))
+        scroll_up.bind(on_press=lambda *_: state.scroll_mouse(1))
+        scroll_down = make_button("Scroll Down", height=dp(42))
+        scroll_down.bind(on_press=lambda *_: state.scroll_mouse(-1))
+        scroll_row.add_widget(scroll_up)
+        scroll_row.add_widget(scroll_down)
+        root.add_widget(scroll_row)
+
+        sensitivity_row = Card(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(62),
+            spacing=dp(10),
+        )
+        sensitivity_row.add_widget(SectionTitle(text="Sensitivity", size_hint_x=0.28))
+        self.sensitivity_label = Label(
+            text=f"{state.mouse_sensitivity:.1f}x",
+            color=THEME["text"],
+            size_hint_x=0.16,
+        )
+        self.sensitivity_slider = Slider(
+            min=0.5,
+            max=4.0,
+            value=state.mouse_sensitivity,
+            size_hint_x=0.56,
+        )
+        self.sensitivity_slider.bind(value=self._on_sensitivity)
+        sensitivity_row.add_widget(self.sensitivity_label)
+        sensitivity_row.add_widget(self.sensitivity_slider)
+        root.add_widget(sensitivity_row)
+
+        self.add_widget(root)
+        self.update_status()
+
+    def _on_sensitivity(self, _slider, value):
+        self.state.mouse_sensitivity = float(value)
+        self.sensitivity_label.text = f"{value:.1f}x"
+
+    def update_status(self):
+        connected = bool(self.state.connected)
+        self.status_label.text = "Connected" if connected else "Disconnected"
+        self.status_label.color = THEME["success"] if connected else THEME["danger"]
 
 
 class ConnectScreen(Screen):
@@ -3025,6 +3265,11 @@ class InputBridgeApp(App):
             name="control",
         )
 
+        self.state.mouse_screen = MouseScreen(
+            self.state,
+            name="mouse",
+        )
+
         self.state.connect_screen = ConnectScreen(
             self.state,
             name="connect",
@@ -3041,6 +3286,10 @@ class InputBridgeApp(App):
 
         self.sm.add_widget(
             self.state.control_screen
+        )
+
+        self.sm.add_widget(
+            self.state.mouse_screen
         )
 
         self.sm.add_widget(
@@ -3078,6 +3327,10 @@ class InputBridgeApp(App):
             self.tabbar.set_active(name)
 
         screen = self.sm.get_screen(name)
+
+        update_status = getattr(screen, "update_status", None)
+        if update_status:
+            update_status()
 
         refresh = getattr(
             screen,
