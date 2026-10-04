@@ -11,6 +11,7 @@ import math
 import socket
 import tempfile
 import threading
+import time
 from math import sqrt, atan2, cos, sin
 
 from kivy.app import App
@@ -1306,7 +1307,6 @@ class AppState:
                 -2048,
                 2048,
             )
-        self.send_state()
 
     def set_mouse_button(self, name, pressed):
         if name not in self.mouse_buttons:
@@ -1322,7 +1322,6 @@ class AppState:
             self._mouse_pending_scroll = int(clamp(
                 self._mouse_pending_scroll + int(amount), -20, 20
             ))
-        self.send_state()
 
     def periodic_send(self, dt):
         if self.connected:
