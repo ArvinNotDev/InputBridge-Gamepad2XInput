@@ -858,6 +858,14 @@ class AppState:
         self._mouse_pending_y = 0.0
         self._mouse_pending_scroll = 0
         self.mouse_buttons = {"left": 0, "right": 0, "middle": 0}
+        self._mouse_send_wakeup = threading.Event()
+        self._mouse_send_stop = threading.Event()
+        self._mouse_send_thread = threading.Thread(
+            target=self._mouse_send_loop,
+            name="MouseStateSender",
+            daemon=True,
+        )
+        self._mouse_send_thread.start()
         self._rx_stop = threading.Event()
         self._rx_thread = None
         self._connection_generation = 0
@@ -994,6 +1002,11 @@ class AppState:
             s.connect(
                 (ip, port)
             )
+
+            try:
+                s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            except OSError:
+                pass
 
             s.settimeout(1.0)
             with self._connection_lock:
@@ -1192,6 +1205,7 @@ class AppState:
             self.connected = False
             self.authenticating = False
             self._rx_stop.set()
+            self._mouse_send_wakeup.set()
 
         with self._mouse_state_lock:
             self._mouse_pending_x = 0.0
@@ -1280,6 +1294,46 @@ class AppState:
             },
         }
 
+    def _send_mouse_state(self):
+        with self._state_send_lock:
+            message = self.build_state_message()
+            mouse = message["mouse"]
+            if not (
+                mouse["dx"]
+                or mouse["dy"]
+                or mouse["scroll"]
+            ):
+                return False
+
+            sent = self._send(message)
+            if sent:
+                with self._mouse_state_lock:
+                    self._mouse_pending_x -= mouse["dx"]
+                    self._mouse_pending_y -= mouse["dy"]
+                    self._mouse_pending_scroll -= mouse["scroll"]
+            return sent
+
+    def _mouse_send_loop(self):
+        while not self._mouse_send_stop.is_set():
+            self._mouse_send_wakeup.wait()
+            self._mouse_send_wakeup.clear()
+
+            if self._mouse_send_stop.is_set():
+                break
+
+            while self.connected and not self._mouse_send_stop.is_set():
+                if not self._send_mouse_state():
+                    break
+
+                with self._mouse_state_lock:
+                    has_pending = (
+                        self._mouse_pending_x != 0.0
+                        or self._mouse_pending_y != 0.0
+                        or self._mouse_pending_scroll != 0
+                    )
+                if not has_pending:
+                    break
+
     def send_state(self, extra_fields=None):
         with self._state_send_lock:
             message = self.build_state_message()
@@ -1297,16 +1351,9 @@ class AppState:
         if not self.connected:
             return
         with self._mouse_state_lock:
-            self._mouse_pending_x = clamp(
-                self._mouse_pending_x + float(dx) * self.mouse_sensitivity,
-                -2048,
-                2048,
-            )
-            self._mouse_pending_y = clamp(
-                self._mouse_pending_y + float(dy) * self.mouse_sensitivity,
-                -2048,
-                2048,
-            )
+            self._mouse_pending_x += float(dx) * self.mouse_sensitivity
+            self._mouse_pending_y += float(dy) * self.mouse_sensitivity
+        self._mouse_send_wakeup.set()
 
     def set_mouse_button(self, name, pressed):
         if name not in self.mouse_buttons:
@@ -1322,6 +1369,7 @@ class AppState:
             self._mouse_pending_scroll = int(clamp(
                 self._mouse_pending_scroll + int(amount), -20, 20
             ))
+        self._mouse_send_wakeup.set()
 
     def periodic_send(self, dt):
         if self.connected:
@@ -1586,6 +1634,8 @@ class AppState:
 
     def on_stop(self):
         self._rx_stop.set()
+        self._mouse_send_stop.set()
+        self._mouse_send_wakeup.set()
 
         try:
             if self._periodic_send_ev is not None:

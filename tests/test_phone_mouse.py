@@ -3,6 +3,7 @@ import json
 import math
 import os
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -10,11 +11,13 @@ from pathlib import Path
 PHONE_CLIENT_PATH = Path(__file__).resolve().parents[1] / "phone_client_with_auth.py"
 PHONE_CLIENT_TREE = ast.parse(PHONE_CLIENT_PATH.read_text(encoding="utf-8"))
 _HELPER_NAMES = {
+    "clamp",
     "MOUSE_SETTINGS_FILE",
     "DEFAULT_MOUSE_SENSITIVITY",
     "load_mouse_preferences",
     "save_mouse_preferences",
     "MouseGestureTracker",
+    "AppState",
 }
 
 
@@ -43,8 +46,10 @@ exec(
     compile(ast.Module(body=_HELPER_NODES, type_ignores=[]), str(PHONE_CLIENT_PATH), "exec"),
     _HELPERS,
 )
+clamp = _HELPERS["clamp"]
 DEFAULT_MOUSE_SENSITIVITY = _HELPERS["DEFAULT_MOUSE_SENSITIVITY"]
 MouseGestureTracker = _HELPERS["MouseGestureTracker"]
+AppState = _HELPERS["AppState"]
 load_mouse_preferences = _HELPERS["load_mouse_preferences"]
 save_mouse_preferences = _HELPERS["save_mouse_preferences"]
 
@@ -110,3 +115,80 @@ def test_phone_client_mouse_helpers_are_self_contained():
         isinstance(node, ast.ImportFrom) and node.module == "phone_mouse"
         for node in ast.walk(PHONE_CLIENT_TREE)
     )
+
+
+def _new_test_app_state():
+    state = AppState.__new__(AppState)
+    state.connected = True
+    state.device_uuid = "phone-uuid"
+    state.device_name = "Phone"
+    state.mode = "standard"
+    state.gyro_enabled = False
+    state._gyro_neutral = None
+    state._gyro_steer = 0.0
+    state.buttons = {}
+    state.analog = {}
+    state.joystick = {}
+    state.mouse_sensitivity = 1.0
+    state.mouse_buttons = {"left": 0, "right": 0, "middle": 0}
+    state._mouse_state_lock = threading.RLock()
+    state._state_send_lock = threading.Lock()
+    state._mouse_send_wakeup = threading.Event()
+    state._mouse_send_stop = threading.Event()
+    state._mouse_pending_x = 0.0
+    state._mouse_pending_y = 0.0
+    state._mouse_pending_scroll = 0
+    return state
+
+
+def test_mouse_move_wakes_background_sender_without_blocking_ui_thread():
+    state = _new_test_app_state()
+    sent_from = []
+    sent_event = threading.Event()
+
+    def fake_send(message):
+        sent_from.append(threading.current_thread())
+        sent_event.set()
+        return True
+
+    state._send = fake_send
+    sender = threading.Thread(
+        target=state._mouse_send_loop,
+        name="test-mouse-sender",
+        daemon=True,
+    )
+    sender.start()
+
+    state.move_mouse(2, -3)
+
+    assert sent_event.wait(1.0)
+    assert sent_from
+    assert sent_from[0] is not threading.current_thread()
+
+
+def test_mouse_sender_preserves_fractional_motion_until_it_can_emit():
+    state = _new_test_app_state()
+    sent = []
+    state._send = lambda message: sent.append(message["mouse"]) or True
+
+    state.move_mouse(0.4, 0)
+    assert not state._send_mouse_state()
+    assert sent == []
+    assert state._mouse_pending_x == 0.4
+
+    state.move_mouse(0.2, 0)
+    assert state._send_mouse_state()
+    assert sent[-1]["dx"] == 1
+
+
+def test_mouse_sender_chunks_large_motion_instead_of_clamping_it_away():
+    state = _new_test_app_state()
+    sent = []
+    state._send = lambda message: sent.append(message["mouse"]["dx"]) or True
+
+    state.move_mouse(4097, 0)
+
+    assert state._send_mouse_state()
+    assert state._send_mouse_state()
+    assert sent == [2048, 2048]
+    assert state._mouse_pending_x == 1
