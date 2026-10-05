@@ -49,6 +49,7 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Adjustable mouse sensitivity with nonlinear fine-control response
 * Configurable gamepad deadzones and axis inversion
 * Remote phone touchpad with cursor movement, left/right/middle buttons, and scrolling
+* Remote phone keyboard typing with text, editing, navigation, and special-key events
 * Per-phone choice between XInput gamepad output and direct Windows mouse output
 * System-tray integration
 * Dark and light themes
@@ -61,9 +62,9 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Portable/self-contained Windows executable
 * Separate writable user configuration from bundled application resources
 
-Keyboard emulation is intentionally not enabled in the current release. The
-keyboard target remains reserved for a future implementation; controller
-hotkeys and media/custom commands are available independently.
+Remote keyboard emulation is available through the phone clients. The desktop
+server validates every text/key event, then sends it to the active Windows
+keyboard target without allowing unbounded frames or control characters.
 
 ## Download
 
@@ -222,6 +223,21 @@ Server page.
 
 The phone and PC must be on the same reachable network, the desktop server must
 be running, and the phone must be paired with the desktop application.
+
+### Mobile clients
+
+`phone_client_with_auth.py` remains the Kivy/Android-friendly client. It now has
+a dedicated **Keyboard** tab and opens a focused **Secure pairing** popup for
+the code shown in the desktop Server page.
+
+`phone_client_pyside6.py` is a completely self-contained PySide6 client. It
+contains Connect, Controller, Mouse, Keyboard, and Settings tabs in one file,
+persists the device identity and last server, and uses the same authenticated
+newline-delimited protocol. Run it with:
+
+```text
+python phone_client_pyside6.py
+```
 
 ## Configuration Files
 
