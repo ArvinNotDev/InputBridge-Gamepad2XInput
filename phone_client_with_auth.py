@@ -29,6 +29,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
+from kivy.uix.popup import Popup
 
 try:
     from plyer import accelerometer
@@ -920,6 +921,7 @@ class AppState:
         self.control_screen = None
         self.mouse_screen = None
         self.settings_screen = None
+        self.keyboard_screen = None
 
         self._periodic_send_ev = Clock.schedule_interval(
             self.periodic_send,
@@ -1079,6 +1081,8 @@ class AppState:
             self.control_screen.refresh_top_bar()
         if self.mouse_screen:
             self.mouse_screen.update_status()
+        if self.keyboard_screen:
+            self.keyboard_screen.update_status()
 
         if not connected:
             self._stop_gyro_for_disconnect()
@@ -1346,6 +1350,24 @@ class AppState:
                     self._mouse_pending_y -= message["mouse"]["dy"]
                     self._mouse_pending_scroll -= message["mouse"]["scroll"]
             return sent
+
+    def send_keyboard_text(self, text):
+        """Send a text insertion event to the desktop keyboard bridge."""
+        text = str(text or "")
+        if not text or len(text) > 256 or not self.connected:
+            return False
+        return self.send_state({
+            "keyboard": {"action": "text", "key": "", "text": text}
+        })
+
+    def send_keyboard_key(self, key, action="key_down"):
+        """Send a named key event (backspace, enter, arrows, modifiers...)."""
+        key = str(key or "").strip().lower()
+        if not key or len(key) > 32 or action not in ("key_down", "key_up"):
+            return False
+        return self.send_state({
+            "keyboard": {"action": action, "key": key, "text": ""}
+        })
 
     def move_mouse(self, dx, dy):
         if not self.connected:
@@ -1736,6 +1758,11 @@ class TabBar(BoxLayout):
                 "mouse",
                 "\U0001F5B1",
                 "Mouse",
+            ),
+            (
+                "keyboard",
+                "\u2328\ufe0f",
+                "Keyboard",
             ),
             (
                 "connect",
@@ -2650,6 +2677,86 @@ class MouseScreen(Screen):
         self.status_label.color = THEME["success"] if connected else THEME["danger"]
 
 
+class KeyboardScreen(Screen):
+    """Full featured phone typing surface backed by desktop keyboard events."""
+
+    def __init__(self, state, **kwargs):
+        self.state = state
+        self._updating = False
+        super().__init__(**kwargs)
+
+        root = BoxLayout(orientation="vertical", spacing=dp(10),
+                         padding=(dp(10), dp(8), dp(10), dp(8)))
+        top = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(42))
+        top.add_widget(SectionTitle(text="Remote Keyboard"))
+        self.status_label = Label(text="Disconnected", color=THEME["danger"],
+                                  halign="right", valign="middle", size_hint_x=0.5)
+        self.status_label.bind(size=lambda inst, *_: setattr(inst, "text_size", inst.size))
+        top.add_widget(self.status_label)
+        root.add_widget(top)
+
+        intro = Card(size_hint_y=None, height=dp(86))
+        intro.add_widget(fit_label(Label(
+            text="Tap the field and type normally. Text is streamed to the active PC window.\n"
+                 "Use the quick keys for navigation and editing.",
+            color=THEME["muted"], font_size=sp(13), halign="left", valign="middle")))
+        root.add_widget(intro)
+
+        editor_card = Card(spacing=dp(8), size_hint_y=None, height=dp(174))
+        editor_card.add_widget(SectionTitle(text="Type on PC"))
+        self.editor = TextInput(
+            multiline=True, padding=(dp(12), dp(12)), font_size=sp(18),
+            background_color=THEME["panel_alt"], foreground_color=THEME["text"],
+            cursor_color=THEME["accent"], hint_text="Start typing…",
+            hint_text_color=THEME["subtle"], size_hint_y=1,
+        )
+        self.editor.bind(text=self._on_editor_text)
+        editor_card.add_widget(self.editor)
+        root.add_widget(editor_card)
+
+        keys = GridLayout(cols=4, spacing=dp(8), size_hint_y=None, height=dp(104))
+        for label, key in (("Backspace", "backspace"), ("Enter", "enter"),
+                           ("Tab", "tab"), ("Esc", "esc"), ("←", "left"),
+                           ("→", "right"), ("↑", "up"), ("↓", "down")):
+            btn = make_button(label, height=dp(46))
+            btn.bind(on_release=lambda _btn, k=key: self.state.send_keyboard_key(k))
+            keys.add_widget(btn)
+        root.add_widget(keys)
+
+        action_row = BoxLayout(orientation="horizontal", spacing=dp(8),
+                               size_hint_y=None, height=dp(46))
+        clear_btn = make_button("Clear local text", accent=THEME["danger"], height=dp(46))
+        clear_btn.bind(on_release=lambda *_: setattr(self.editor, "text", ""))
+        space_btn = make_button("Space", accent=THEME["accent"], height=dp(46))
+        space_btn.bind(on_release=lambda *_: self.state.send_keyboard_text(" "))
+        action_row.add_widget(clear_btn)
+        action_row.add_widget(space_btn)
+        root.add_widget(action_row)
+        root.add_widget(Widget())
+        self.add_widget(root)
+        self.update_status()
+
+    def _on_editor_text(self, _editor, value):
+        if self._updating or not self.state.connected:
+            self._last_text = value
+            return
+        previous = getattr(self, "_last_text", "")
+        if value.startswith(previous):
+            self.state.send_keyboard_text(value[len(previous):])
+        elif previous.startswith(value):
+            for _ in range(len(previous) - len(value)):
+                self.state.send_keyboard_key("backspace")
+        else:
+            self.state.send_keyboard_key("ctrl+a")
+            self.state.send_keyboard_text(value)
+        self._last_text = value
+
+    def update_status(self):
+        connected = bool(self.state.connected)
+        self.status_label.text = "Connected" if connected else "Disconnected"
+        self.status_label.color = THEME["success"] if connected else THEME["danger"]
+
+
 class ConnectScreen(Screen):
     """Connection, authentication and device identity screen."""
 
@@ -2873,13 +2980,13 @@ class ConnectScreen(Screen):
         )
 
         submit_btn = make_button(
-            "Submit Code",
+            "Enter PC Code",
             accent=THEME["warn"],
             height=dp(46),
         )
 
         submit_btn.bind(
-            on_release=self._on_submit_code
+            on_release=self._show_code_popup
         )
 
         auth_row.add_widget(
@@ -3010,6 +3117,31 @@ class ConnectScreen(Screen):
         self.state.on_submit_code(
             self.code_input.text
         )
+
+    def _show_code_popup(self, *_):
+        """Open a focused pairing dialog instead of forcing inline code entry."""
+        body = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(16))
+        body.add_widget(fit_label(Label(
+            text="Enter the 4-digit code shown in InputBridge on your computer.",
+            color=THEME["muted"], halign="left", valign="middle", size_hint_y=None,
+            height=dp(48),
+        )))
+        code = make_text_input(self.code_input.text, "4-digit pairing code", input_filter="int")
+        code.input_type = "number"
+        body.add_widget(code)
+        actions = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(44))
+        cancel = make_button("Cancel", height=dp(44))
+        submit = make_button("Pair device", accent=THEME["success"], height=dp(44))
+        actions.add_widget(cancel)
+        actions.add_widget(submit)
+        body.add_widget(actions)
+        popup = Popup(title="Secure pairing", content=body, size_hint=(0.88, None), height=dp(230),
+                      auto_dismiss=False, separator_color=THEME["accent"])
+        cancel.bind(on_release=popup.dismiss)
+        submit.bind(on_release=lambda *_: (setattr(self.code_input, "text", code.text),
+                                            self._on_submit_code(), popup.dismiss()))
+        popup.open()
+        Clock.schedule_once(lambda _dt: code.focus(), 0.1)
 
     # ---------- public UI API ----------
 
@@ -3522,6 +3654,11 @@ class InputBridgeApp(App):
             name="mouse",
         )
 
+        self.state.keyboard_screen = KeyboardScreen(
+            self.state,
+            name="keyboard",
+        )
+
         self.state.connect_screen = ConnectScreen(
             self.state,
             name="connect",
@@ -3542,6 +3679,10 @@ class InputBridgeApp(App):
 
         self.sm.add_widget(
             self.state.mouse_screen
+        )
+
+        self.sm.add_widget(
+            self.state.keyboard_screen
         )
 
         self.sm.add_widget(
