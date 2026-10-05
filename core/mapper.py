@@ -3,6 +3,11 @@ import math
 import time
 from typing import Tuple
 
+try:
+    import keyboard as _keyboard
+except Exception:
+    _keyboard = None
+
 from core.emulator import EmulateX360, EmulateKeyboard
 from core.emulator import media_functions, custom_commands
 from core.dualsense_lightbar import resolve_lightbar_color
@@ -569,6 +574,25 @@ class Phone_mapper:
             except Exception:
                 pass
             self._mouse_buttons[name] = pressed
+
+    def handle_keyboard_data(self, data: dict) -> None:
+        """Apply a bounded text/key event received from a phone client."""
+        if not self._connected or not isinstance(data, dict) or _keyboard is None:
+            return
+        action = data.get("action", "text")
+        text = data.get("text", "")
+        key = data.get("key", "")
+        try:
+            if action == "text" and isinstance(text, str) and text:
+                _keyboard.write(text, interval=0)
+            elif action == "key_down" and isinstance(key, str) and key:
+                _keyboard.press(key)
+            elif action == "key_up" and isinstance(key, str) and key:
+                _keyboard.release(key)
+        except Exception:
+            # A disconnected desktop session or unsupported key should not
+            # tear down the phone connection.
+            return
 
     def release_mouse_buttons(self) -> None:
         """Release remote mouse buttons when changing output mode or disconnecting."""
