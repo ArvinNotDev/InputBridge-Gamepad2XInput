@@ -37,6 +37,9 @@ ANALOG_KEYS = {"L2", "R2"}
 JOYSTICK_KEYS = {"left_x", "left_y", "right_x", "right_y"}
 MOUSE_BUTTON_KEYS = {"left", "right", "middle"}
 MAX_MOUSE_DELTA = 2048
+MAX_KEYBOARD_TEXT = 256
+MAX_KEYBOARD_KEY = 32
+KEYBOARD_ACTIONS = {"text", "key_down", "key_up"}
 
 
 # ---------------------------------------------------------
@@ -167,6 +170,23 @@ def validate_client_message(message):
     if buttons is None or analog is None or joystick is None:
         return None
 
+    keyboard = message.get("keyboard")
+    if keyboard is not None:
+        if not isinstance(keyboard, dict):
+            return None
+        action = keyboard.get("action", "text")
+        key = keyboard.get("key", "")
+        text = keyboard.get("text", "")
+        if action not in KEYBOARD_ACTIONS:
+            return None
+        if not isinstance(key, str) or len(key) > MAX_KEYBOARD_KEY:
+            return None
+        if not isinstance(text, str) or len(text) > MAX_KEYBOARD_TEXT:
+            return None
+        if any(ord(char) < 9 for char in text) or any(ord(char) in (10, 13) for char in text):
+            return None
+        keyboard = {"action": action, "key": key, "text": text}
+
     auth_code = message.get("auth_code")
     if auth_code is not None and (
         not isinstance(auth_code, str) or len(auth_code) > 32
@@ -181,6 +201,7 @@ def validate_client_message(message):
         "analog": analog,
         "joystick": joystick,
         "mouse": mouse,
+        "keyboard": keyboard,
     }
 
 
@@ -782,6 +803,13 @@ class ServerPage(QWidget):
                                 self.signals.show_auth_code.emit(
                                     addr, auth_code_generated, auth_time_left
                                 )
+                                try:
+                                    conn.sendall((json.dumps({
+                                        "type": "pairing_required",
+                                        "expires_in": auth_time_left,
+                                    }) + "\n").encode("utf-8"))
+                                except OSError:
+                                    return
                             if not authenticated:
                                 continue
 
@@ -813,6 +841,8 @@ class ServerPage(QWidget):
                             })
                         elif output_mode == "mouse":
                             mapper.handle_mouse_data(msg["mouse"])
+                        if msg.get("keyboard") is not None:
+                            mapper.handle_keyboard_data(msg["keyboard"])
 
                 if len(buffer) > MAX_FRAME_BYTES:
                     return
