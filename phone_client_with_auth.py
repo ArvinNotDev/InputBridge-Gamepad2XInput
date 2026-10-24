@@ -9,6 +9,9 @@ import uuid
 import json
 import math
 import socket
+import ssl
+import hashlib
+import hmac
 import tempfile
 import threading
 import time
@@ -40,6 +43,9 @@ UUID_FILE = "gamepad_uuid.txt"
 LAST_IP_FILE = "last_ip.txt"
 NAME_FILE = "device_name.txt"
 MOUSE_SETTINGS_FILE = "mouse_settings.json"
+SERVER_FINGERPRINTS_FILE = "server_fingerprints.json"
+REMOTE_PROTOCOL_VERSION = 1
+REMOTE_MAX_FRAME_BYTES = 16 * 1024
 DEFAULT_MOUSE_SENSITIVITY = 1.8
 
 
@@ -136,6 +142,68 @@ def save_name(name):
     except Exception:
         pass
 
+
+
+
+def normalize_server_fingerprint(value):
+    """Normalize a displayed SHA-256 certificate pin."""
+    if not isinstance(value, str):
+        return ""
+    normalized = "".join(c for c in value.lower() if c in "0123456789abcdef")
+    return normalized if len(normalized) == 64 else ""
+
+
+def _fingerprint_key(host, port):
+    return f"{str(host).strip().lower()}:{int(port)}"
+
+
+def load_server_fingerprints(path=SERVER_FINGERPRINTS_FILE):
+    try:
+        with open(path, "r", encoding="utf-8") as stream:
+            stored = json.load(stream)
+        if not isinstance(stored, dict):
+            return {}
+        return {
+            str(key): normalize_server_fingerprint(value)
+            for key, value in stored.items()
+            if isinstance(key, str) and normalize_server_fingerprint(value)
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def load_server_fingerprint(host, port, path=SERVER_FINGERPRINTS_FILE):
+    try:
+        return load_server_fingerprints(path).get(_fingerprint_key(host, port), "")
+    except (TypeError, ValueError):
+        return ""
+
+
+def save_server_fingerprint(host, port, fingerprint, path=SERVER_FINGERPRINTS_FILE):
+    """Atomically persist a pinned certificate for one host/port pair."""
+    fingerprint = normalize_server_fingerprint(fingerprint)
+    if not fingerprint:
+        raise ValueError("A valid SHA-256 server fingerprint is required")
+    stored = load_server_fingerprints(path)
+    stored[_fingerprint_key(host, port)] = fingerprint
+    directory = os.path.dirname(os.fspath(path)) or "."
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=directory,
+            prefix="server_fingerprints.", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary_path = stream.name
+            json.dump(stored, stream, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except OSError:
+                pass
 
 def load_mouse_preferences(path=MOUSE_SETTINGS_FILE):
     """Load and sanitize mouse preferences, falling back safely on bad data."""
@@ -919,7 +987,10 @@ class AppState:
         self.connect_screen = None
         self.control_screen = None
         self.mouse_screen = None
+        self.remote_screen = None
         self.settings_screen = None
+        self._pending_remote_lock = threading.RLock()
+        self._pending_remote_requests = {}
 
         self._periodic_send_ev = Clock.schedule_interval(
             self.periodic_send,
@@ -933,7 +1004,7 @@ class AppState:
 
     # -------------------- Networking --------------------
 
-    def request_connect(self, ip, port_text, name):
+    def request_connect(self, ip, port_text, name, fingerprint=None):
         if self.connected:
             self.disconnect()
             return
@@ -964,13 +1035,26 @@ class AppState:
             self._ui_status("Invalid IP or device name")
             return
 
+        submitted_fingerprint = (fingerprint or "").strip()
+        if submitted_fingerprint:
+            expected_fingerprint = normalize_server_fingerprint(submitted_fingerprint)
+            if not expected_fingerprint:
+                self._ui_status("The PC fingerprint must be a 64-character SHA-256 value")
+                return
+        else:
+            expected_fingerprint = load_server_fingerprint(ip, port)
+        if not expected_fingerprint:
+            self._ui_status(
+                "Enter the PC TLS fingerprint shown in the desktop server window. "
+                "This verifies the PC before pairing."
+            )
+            return
+
         save_last_ip(ip)
         save_name(name)
 
         with self._connection_lock:
-            if self.connected:
-                return
-            if self.authenticating:
+            if self.connected or self.authenticating:
                 self._ui_status("Already connecting...")
                 return
             self.device_name = name
@@ -985,77 +1069,85 @@ class AppState:
 
         threading.Thread(
             target=self._connect_thread,
-            args=(ip, port, generation),
+            args=(ip, port, generation, expected_fingerprint),
             daemon=True,
         ).start()
 
-    def _connect_thread(self, ip, port, generation):
-        s = None
+    def _connect_thread(self, ip, port, generation, expected_fingerprint):
+        raw_socket = None
+        secure_socket = None
         try:
-            s = socket.socket(
-                socket.AF_INET,
-                socket.SOCK_STREAM,
-            )
-
-            s.settimeout(5.0)
-
-            s.connect(
-                (ip, port)
-            )
-
+            raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            raw_socket.settimeout(5.0)
+            raw_socket.connect((ip, port))
             try:
-                s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                raw_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             except OSError:
                 pass
 
-            s.settimeout(1.0)
+            tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            tls_context.check_hostname = False
+            tls_context.verify_mode = ssl.CERT_NONE
+            try:
+                tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            except AttributeError:
+                pass
+            secure_socket = tls_context.wrap_socket(raw_socket, server_hostname=ip)
+            raw_socket = None
+            certificate_der = secure_socket.getpeercert(binary_form=True)
+            actual_fingerprint = hashlib.sha256(certificate_der).hexdigest()
+            if not hmac.compare_digest(actual_fingerprint, expected_fingerprint):
+                raise ssl.SSLError(
+                    "PC certificate fingerprint mismatch. Compare the desktop fingerprint "
+                    "and reconnect; the saved pin was not changed."
+                )
+            save_server_fingerprint(ip, port, actual_fingerprint)
+            secure_socket.settimeout(1.0)
+
             with self._connection_lock:
                 if (
                     generation != self._connection_generation
                     or not self.authenticating
                 ):
-                    s.close()
+                    secure_socket.close()
                     return
-                self.sock = s
+                self.sock = secure_socket
                 self.connected = True
                 self.authenticating = False
                 self._rx_stop.clear()
 
             Clock.schedule_once(
-                lambda dt, g=generation: self._on_connected_ui(
-                    True, generation=g
-                ),
+                lambda dt, g=generation: self._on_connected_ui(True, generation=g),
                 0,
             )
-
             self._rx_thread = threading.Thread(
                 target=self._rx_loop,
-                args=(generation, s),
+                args=(generation, secure_socket),
+                name="RemoteResponseReceiver",
                 daemon=True,
             )
-
             self._rx_thread.start()
-            self._send(self.build_state_message(), generation=generation, sock=s)
+            self._send(self.build_state_message(), generation=generation, sock=secure_socket)
 
-        except Exception:
-            try:
-                if s is not None:
-                    s.close()
-            except Exception:
-                pass
-
+        except Exception as exc:
+            for candidate in (secure_socket, raw_socket):
+                if candidate is not None:
+                    try:
+                        candidate.close()
+                    except Exception:
+                        pass
             with self._connection_lock:
                 is_current = generation == self._connection_generation
                 if is_current:
-                    if self.sock is s:
+                    if self.sock is secure_socket or self.sock is raw_socket:
                         self.sock = None
                     self.connected = False
                     self.authenticating = False
-
             if is_current:
+                detail = str(exc).strip() or "Connection failed"
                 Clock.schedule_once(
-                    lambda dt, g=generation: self._on_connected_ui(
-                        False, "Connection failed", generation=g
+                    lambda dt, g=generation, m=detail: self._on_connected_ui(
+                        False, m, generation=g
                     ),
                     0,
                 )
@@ -1079,6 +1171,8 @@ class AppState:
             self.control_screen.refresh_top_bar()
         if self.mouse_screen:
             self.mouse_screen.update_status()
+        if self.remote_screen:
+            self.remote_screen.update_status()
 
         if not connected:
             self._stop_gyro_for_disconnect()
@@ -1120,6 +1214,7 @@ class AppState:
         )
 
     def _rx_loop(self, generation, sock):
+        buffer = bytearray()
         try:
             while not self._rx_stop.is_set():
                 with self._connection_lock:
@@ -1131,14 +1226,40 @@ class AppState:
                 if not is_current:
                     break
                 try:
-                    data = sock.recv(2048)
-
+                    data = sock.recv(4096)
                     if not data:
                         break
-
+                    buffer.extend(data)
+                    while b"\n" in buffer:
+                        newline = buffer.find(b"\n")
+                        if newline > REMOTE_MAX_FRAME_BYTES:
+                            return
+                        raw_line = bytes(buffer[:newline]).strip()
+                        del buffer[:newline + 1]
+                        if not raw_line:
+                            continue
+                        try:
+                            message = json.loads(raw_line.decode("utf-8"))
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            continue
+                        if (
+                            isinstance(message, dict)
+                            and message.get("message_type") == "remote_response"
+                            and message.get("protocol_version") == REMOTE_PROTOCOL_VERSION
+                            and isinstance(message.get("request_id"), str)
+                            and isinstance(message.get("ok"), bool)
+                        ):
+                            with self._pending_remote_lock:
+                                self._pending_remote_requests.pop(message["request_id"], None)
+                            Clock.schedule_once(
+                                lambda dt, response=message: self._apply_remote_response(response),
+                                0,
+                            )
+                    if len(buffer) > REMOTE_MAX_FRAME_BYTES:
+                        return
                 except socket.timeout:
+                    self._expire_remote_requests()
                     continue
-
                 except Exception:
                     break
 
@@ -1152,6 +1273,68 @@ class AppState:
 
     def _disconnect_if_current(self, generation, sock):
         self._disconnect_session(generation, sock, "Disconnected")
+
+    def _expire_remote_requests(self):
+        now = time.monotonic()
+        expired = []
+        with self._pending_remote_lock:
+            for request_id, pending in list(self._pending_remote_requests.items()):
+                if now - pending["sent_at"] >= 12.0:
+                    expired.append((request_id, pending["action"]))
+                    self._pending_remote_requests.pop(request_id, None)
+        for request_id, action in expired:
+            response = {
+                "message_type": "remote_response",
+                "protocol_version": REMOTE_PROTOCOL_VERSION,
+                "request_id": request_id,
+                "action": action,
+                "ok": False,
+                "error": "Request timed out. Check the PC connection and permissions.",
+            }
+            Clock.schedule_once(
+                lambda dt, item=response: self._apply_remote_response(item),
+                0,
+            )
+
+    def _apply_remote_response(self, response):
+        screen = getattr(self, "remote_screen", None)
+        if screen is not None:
+            screen.handle_response(response)
+
+    def send_remote_action(self, action, payload=None):
+        """Send one validated-by-server action request over the pinned TLS session."""
+        allowed = {
+            "keyboard_text", "keyboard_key", "keyboard_shortcut", "keyboard_modifier",
+            "clipboard_set", "clipboard_get", "media", "pc_status", "launch_app",
+            "presentation", "power_action",
+        }
+        if action not in allowed or not self.connected:
+            return None
+        request_id = uuid.uuid4().hex
+        request = {
+            "protocol_version": REMOTE_PROTOCOL_VERSION,
+            "request_id": request_id,
+            "action": action,
+            "payload": payload or {},
+        }
+        message = self.build_state_message()
+        message["remote_request"] = request
+        with self._pending_remote_lock:
+            if len(self._pending_remote_requests) >= 32:
+                oldest = min(
+                    self._pending_remote_requests,
+                    key=lambda key: self._pending_remote_requests[key]["sent_at"],
+                )
+                self._pending_remote_requests.pop(oldest, None)
+            self._pending_remote_requests[request_id] = {
+                "sent_at": time.monotonic(),
+                "action": action,
+            }
+        if not self._send(message):
+            with self._pending_remote_lock:
+                self._pending_remote_requests.pop(request_id, None)
+            return None
+        return request_id
 
     def on_submit_code(self, code):
         code = (code or "").strip()
@@ -1213,6 +1396,8 @@ class AppState:
             self._mouse_pending_scroll = 0
             for button in self.mouse_buttons:
                 self.mouse_buttons[button] = 0
+        with self._pending_remote_lock:
+            self._pending_remote_requests.clear()
 
         if old_sock is not None:
             try:
@@ -1277,6 +1462,8 @@ class AppState:
                 **self.mouse_buttons,
             }
         return {
+            "protocol_version": REMOTE_PROTOCOL_VERSION,
+            "message_type": "state",
             "uuid": self.device_uuid,
             "name": self.device_name or "UnknownDevice",
             "mode": self.mode,
