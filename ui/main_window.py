@@ -5,9 +5,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QListWidget,
-    QListWidgetItem,
-    QListView,
+    QTabBar,
     QStackedWidget,
     QSystemTrayIcon,
     QMenu,
@@ -106,16 +104,9 @@ class MainWindow(QMainWindow):
         self._brand_mark.setFixedSize(44, 44)
         brand_layout.addWidget(self._brand_mark)
 
-        brand_copy = QVBoxLayout()
-        brand_copy.setContentsMargins(0, 0, 0, 0)
-        brand_copy.setSpacing(1)
         brand_title = QLabel("InputBridge")
         brand_title.setObjectName("brand_title")
-        brand_subtitle = QLabel("GAMEPAD CONTROL CENTER")
-        brand_subtitle.setObjectName("brand_subtitle")
-        brand_copy.addWidget(brand_title)
-        brand_copy.addWidget(brand_subtitle)
-        brand_layout.addLayout(brand_copy)
+        brand_layout.addWidget(brand_title)
         header_layout.addWidget(brand)
         header_layout.addStretch(1)
 
@@ -123,10 +114,10 @@ class MainWindow(QMainWindow):
         self._avatar_container = QWidget()
         self._avatar_container.setObjectName("profile_chip")
         avatar_layout = QHBoxLayout(self._avatar_container)
-        avatar_layout.setContentsMargins(9, 6, 13, 6)
-        avatar_layout.setSpacing(9)
+        avatar_layout.setContentsMargins(0, 0, 0, 0)
+        avatar_layout.setSpacing(8)
 
-        self._sidebar_avatar = _SidebarAvatar(36)
+        self._sidebar_avatar = _SidebarAvatar(32)
         avatar_layout.addWidget(self._sidebar_avatar, alignment=Qt.AlignVCenter)
 
         profile_copy = QVBoxLayout()
@@ -143,46 +134,28 @@ class MainWindow(QMainWindow):
         avatar_layout.addLayout(profile_copy)
         header_layout.addWidget(self._avatar_container)
 
-        self.github_button = QPushButton("GitHub")
-        self.github_button.setObjectName("github_button")
-        self.github_button.setToolTip("Open ArvinNotDev on GitHub")
-        self.github_button.setCursor(Qt.PointingHandCursor)
-        self.github_button.clicked.connect(
-            lambda: QDesktopServices.openUrl(
-                QUrl("https://github.com/ArvinNotDev/")
-            )
-        )
-        header_layout.addWidget(self.github_button)
-
-        self.quit_button = QPushButton("⏻")
-        self.quit_button.setObjectName("quit_button")
-        self.quit_button.setToolTip("Quit InputBridge")
-        self.quit_button.setCursor(Qt.PointingHandCursor)
-        self.quit_button.setFixedWidth(42)
-        self.quit_button.clicked.connect(self._quit_from_tray)
-        header_layout.addWidget(self.quit_button)
         main_layout.addWidget(header)
 
-        # Horizontal primary navigation
-        self.menu = QListWidget()
+        # Native horizontal tabs keep each label at its natural width.
+        # Unlike a QListWidget flow, tabs are never forced to share the first
+        # item's width, so longer names and translated labels remain readable.
+        self.menu = QTabBar()
         self.menu.setObjectName("top_navigation")
-        self.menu.setFlow(QListView.Flow.LeftToRight)
-        self.menu.setWrapping(False)
-        self.menu.setSpacing(3)
-        self.menu.setUniformItemSizes(True)
-        self.menu.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.menu.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.menu.setSelectionMode(QListWidget.SingleSelection)
-
-        # Navigation labels are intentionally concise and task-oriented.
-        self.menu.addItem(QListWidgetItem("Controller Studio"))       # 0
-        self.menu.addItem(QListWidgetItem("Mobile Controller"))      # 1
-        self.menu.addItem(QListWidgetItem("Hotkey Mapping"))         # 2
-        self.menu.addItem(QListWidgetItem("Profiles"))               # 3
-        self.menu.addItem(QListWidgetItem("Diagnostics"))            # 4
-        self.menu.addItem(QListWidgetItem("Preferences"))            # 5
-        self.menu.addItem(QListWidgetItem("About"))                  # 6
-        self.menu.setFixedHeight(58)
+        self.menu.setDocumentMode(True)
+        self.menu.setDrawBase(False)
+        self.menu.setExpanding(False)
+        self.menu.setMovable(False)
+        self.menu.setUsesScrollButtons(True)
+        self.menu.setElideMode(Qt.ElideNone)
+        self.menu.setShape(QTabBar.Shape.RoundedNorth)
+        self.menu.addTab("Controller Emulation")                       # 0
+        self.menu.addTab("Mobile Controller")                          # 1
+        self.menu.addTab("Hotkeys")                                    # 2
+        self.menu.addTab("Profiles")                                   # 3
+        self.menu.addTab("Input Test")                                 # 4
+        self.menu.addTab("Settings")                                   # 5
+        self.menu.addTab("About")                                      # 6
+        self.menu.setMinimumHeight(44)
         main_layout.addWidget(self.menu)
 
         # Pages
@@ -225,8 +198,8 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.pages, 1)
 
-        self.menu.currentRowChanged.connect(self._on_menu_index_changed)
-        self.menu.setCurrentRow(self.IDX_CONTROLLER_EMULATION)
+        self.menu.currentChanged.connect(self._on_menu_index_changed)
+        self.menu.setCurrentIndex(self.IDX_CONTROLLER_EMULATION)
 
         # Initialize sidebar avatar
         self._refresh_sidebar_avatar()
@@ -408,7 +381,7 @@ class MainWindow(QMainWindow):
             self._applying_language = False
 
     def _show_page_from_tray(self, index: int) -> None:
-        self.menu.setCurrentRow(index)
+        self.menu.setCurrentIndex(index)
         self._show_from_tray()
 
     def _quit_from_tray(self) -> None:

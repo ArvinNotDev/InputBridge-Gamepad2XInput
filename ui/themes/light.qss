@@ -750,3 +750,79 @@ QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
 QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
     background: #7988e6;
 }
+
+
+/* Focused navigation refinement: lightweight tabs, no container frame. */
+#app_root {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #edf3ff, stop:0.68 #f4f5fc, stop:1 #f7f0fc);
+}
+
+#brand_mark {
+    border: none;
+    border-radius: 11px;
+    font-size: 14px;
+}
+
+#brand_title {
+    font-size: 19px;
+    font-weight: 750;
+}
+
+#profile_chip {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+QTabBar#top_navigation {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+QTabBar#top_navigation::tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #74809a;
+    padding: 10px 13px 9px 13px;
+    margin: 0 3px 0 0;
+    min-width: 58px;
+    font-size: 10pt;
+    font-weight: 600;
+}
+
+QTabBar#top_navigation::tab:hover {
+    background: rgba(91,105,209,0.06);
+    border-bottom-color: #d0d6e8;
+    color: #293654;
+}
+
+QTabBar#top_navigation::tab:selected {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #6a72e6;
+    color: #28345a;
+    font-weight: 700;
+}
+
+QTabBar#top_navigation QToolButton {
+    background: transparent;
+    border: none;
+    color: #75819b;
+    min-width: 22px;
+    padding: 0;
+}
+
+QTabBar#top_navigation QToolButton:hover {
+    background: rgba(91,105,209,0.08);
+    border-radius: 6px;
+}
+
+QStackedWidget#content_stack {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}

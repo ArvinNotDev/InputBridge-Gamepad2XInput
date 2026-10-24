@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QListWidget,
+    QTabBar,
     QWidget,
 )
 
@@ -22,11 +23,11 @@ LANGUAGE_NAMES = {
 
 _TRANSLATIONS = {
     "fa": {
-        "Controller Studio": "🎮 استودیو دسته",
-        "Mobile Controller": "📱 کنترلر موبایل",
-        "Hotkey Mapping": "⌨️ نگاشت میانبرها",
-        "Diagnostics": "🧪 عیب‌یابی ورودی",
-        "Preferences": "⚙️ تنظیمات",
+        "Controller Emulation": "شبیه‌سازی دسته",
+        "Mobile Controller": "کنترلر موبایل",
+        "Hotkeys": "میانبرها",
+        "Input Test": "تست ورودی",
+        "Settings": "تنظیمات",
         "Controller Emulation": "🎮 شبیه‌سازی دسته",
         "Remote Gamepad": "📱 دستهٔ راه دور",
         "Hotkeys": "⌨️ میانبرها",
@@ -161,11 +162,11 @@ _TRANSLATIONS = {
         "Español": "اسپانیایی",
     },
     "es": {
-        "Controller Studio": "🎮 Centro de mandos",
-        "Mobile Controller": "📱 Mando móvil",
-        "Hotkey Mapping": "⌨️ Asignación de atajos",
-        "Diagnostics": "🧪 Diagnóstico",
-        "Preferences": "⚙️ Preferencias",
+        "Controller Emulation": "Emulación de mandos",
+        "Mobile Controller": "Mando móvil",
+        "Hotkeys": "Atajos",
+        "Input Test": "Prueba de entrada",
+        "Settings": "Ajustes",
         "Controller Emulation": "🎮 Emulación de mandos",
         "Remote Gamepad": "📱 Gamepad remoto",
         "Hotkeys": "⌨️ Atajos",
@@ -310,6 +311,14 @@ def _translate_widget(widget: QWidget, language: str) -> None:
                 item_source = item.text()
                 item.setData(Qt.UserRole + 1000, item_source)
             item.setText(tr(item_source, language))
+
+    if isinstance(widget, QTabBar):
+        for index in range(widget.count()):
+            tab_source = widget.tabData(index)
+            if tab_source is None:
+                tab_source = widget.tabText(index)
+                widget.setTabData(index, tab_source)
+            widget.setTabText(index, tr(tab_source, language))
 
 
 def apply_translations(root: QWidget, language: str) -> None:
