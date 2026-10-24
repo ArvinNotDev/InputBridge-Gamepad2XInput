@@ -23,11 +23,8 @@ LANGUAGE_NAMES = {
 
 _TRANSLATIONS = {
     "fa": {
-        "Controller Emulation": "شبیه‌سازی دسته",
         "Mobile Controller": "کنترلر موبایل",
-        "Hotkeys": "میانبرها",
         "Input Test": "تست ورودی",
-        "Settings": "تنظیمات",
         "Controller Emulation": "شبیه‌سازی دسته",
         "Remote Gamepad": "📱 دستهٔ راه دور",
         "Hotkeys": "میانبرها",
@@ -162,11 +159,8 @@ _TRANSLATIONS = {
         "Español": "اسپانیایی",
     },
     "es": {
-        "Controller Emulation": "Emulación de mandos",
         "Mobile Controller": "Mando móvil",
-        "Hotkeys": "Atajos",
         "Input Test": "Prueba de entrada",
-        "Settings": "Ajustes",
         "Controller Emulation": "Emulación de mandos",
         "Remote Gamepad": "📱 Gamepad remoto",
         "Hotkeys": "Atajos",
