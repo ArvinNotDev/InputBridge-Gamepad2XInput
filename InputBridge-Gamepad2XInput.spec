@@ -26,6 +26,8 @@ hiddenimports = [
     "vgamepad.win.virtual_gamepad",
     "keyboard",
     "pyautogui",
+    "pyperclip",
+    "cryptography.hazmat.bindings._rust",
 ]
 
 datas += collect_data_files("vgamepad")
