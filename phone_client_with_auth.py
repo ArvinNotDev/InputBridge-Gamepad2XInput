@@ -1423,6 +1423,8 @@ class AppState:
         target_sock = None
         try:
             data = (json.dumps(obj) + "\n").encode("utf-8")
+            if not data or len(data) > REMOTE_MAX_FRAME_BYTES:
+                return False
             with self._connection_lock:
                 expected_generation = (
                     self._connection_generation if generation is None else generation
@@ -2851,7 +2853,7 @@ class RemoteScreen(Screen):
         content.bind(minimum_height=content.setter("height"))
         scroll.add_widget(content)
 
-        header = Card(size_hint_y=None, height=dp(122), spacing=dp(6))
+        header = Card(size_hint_y=None, height=dp(154), spacing=dp(6))
         title_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(30))
         title_row.add_widget(SectionTitle(text="PC Remote Control"))
         self.connection_badge = Pill(text="Disconnected")
@@ -2886,7 +2888,7 @@ class RemoteScreen(Screen):
         ))
         content.add_widget(self.result_label)
 
-        keyboard_card = Card(size_hint_y=None, height=dp(294))
+        keyboard_card = Card(size_hint_y=None, height=dp(340))
         keyboard_card.add_widget(SectionTitle(text="Keyboard and Text"))
         self.text_input = TextInput(
             text="",
@@ -2948,7 +2950,7 @@ class RemoteScreen(Screen):
         keyboard_card.add_widget(modifiers)
         content.add_widget(keyboard_card)
 
-        shortcuts_card = Card(size_hint_y=None, height=dp(176))
+        shortcuts_card = Card(size_hint_y=None, height=dp(220))
         shortcuts_card.add_widget(SectionTitle(text="Keyboard Shortcuts"))
         shortcut_grid = GridLayout(
             cols=3,
@@ -2972,7 +2974,7 @@ class RemoteScreen(Screen):
         shortcuts_card.add_widget(shortcut_grid)
         content.add_widget(shortcuts_card)
 
-        media_card = Card(size_hint_y=None, height=dp(126))
+        media_card = Card(size_hint_y=None, height=dp(152))
         media_card.add_widget(SectionTitle(text="Media and Volume"))
         media_grid = GridLayout(
             cols=4,
@@ -3121,7 +3123,7 @@ class RemoteScreen(Screen):
             self.result_label.text = "PC status received from the connected computer."
         elif action == "clipboard_get":
             self.clipboard_input.text = result.get("text", "")
-            suffix = " (truncated to 4,096 characters)" if result.get("truncated") else ""
+            suffix = " (truncated to 3,000 characters)" if result.get("truncated") else ""
             self.result_label.text = "PC clipboard received" + suffix
         else:
             self.result_label.text = f"PC confirmed: {action.replace('_', ' ')}"
@@ -3262,7 +3264,7 @@ class ConnectScreen(Screen):
 
         server_card = Card(
             size_hint_y=None,
-            height=dp(292),
+            height=dp(356),
             spacing=dp(8),
         )
 
