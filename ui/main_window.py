@@ -14,8 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QColor, QFont
 
 from ui.theme_manager import ThemeManager
@@ -283,11 +282,11 @@ class MainWindow(QMainWindow):
 
         menu.addSeparator()
         for label, index in (
-            ("Controller Studio", self.IDX_CONTROLLER_EMULATION),
+            ("Controller Emulation", self.IDX_CONTROLLER_EMULATION),
             ("Mobile Controller", self.IDX_REMOTE_GAMEPAD),
-            ("Hotkey Mapping", self.IDX_HOTKEY),
+            ("Hotkeys", self.IDX_HOTKEY),
             ("Profiles", self.IDX_PROFILES),
-            ("Preferences", self.IDX_SETTINGS),
+            ("Settings", self.IDX_SETTINGS),
             ("About", self.IDX_ABOUT),
         ):
             action = QAction(label, menu)
