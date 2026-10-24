@@ -32,6 +32,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
 from kivy.uix.textinput import TextInput
 from kivy.uix.widget import Widget
+from kivy.uix.popup import Popup
 
 try:
     from plyer import accelerometer
@@ -1914,26 +1915,11 @@ class TabBar(BoxLayout):
         )
 
         for name, icon, label in (
-            (
-                "control",
-                "\U0001F3AE",
-                "Controller",
-            ),
-            (
-                "mouse",
-                "\U0001F5B1",
-                "Mouse",
-            ),
-            (
-                "connect",
-                "\U0001F4E1",
-                "Connect",
-            ),
-            (
-                "settings",
-                "\u2699\ufe0f",
-                "Settings",
-            ),
+            ("control", "\U0001F3AE", "Gamepad"),
+            ("mouse", "\U0001F5B1", "Mouse"),
+            ("remote", "\U0001F4BB", "Remote"),
+            ("connect", "\U0001F4E1", "Connect"),
+            ("settings", "\u2699\ufe0f", "Settings"),
         ):
             tab = self._make_tab(
                 name,
@@ -2837,6 +2823,345 @@ class MouseScreen(Screen):
         self.status_label.color = THEME["success"] if connected else THEME["danger"]
 
 
+
+class RemoteScreen(Screen):
+    """PC remote controls backed by authenticated server requests and acknowledgements."""
+
+    def __init__(self, state, **kwargs):
+        self.state = state
+        self.capabilities = {
+            "pc_status": True,
+            "keyboard": False,
+            "media": False,
+            "clipboard": False,
+            "app_launch": False,
+            "presentation": False,
+            "power": False,
+        }
+        self._capability_controls = []
+        super().__init__(**kwargs)
+
+        scroll = ScrollView(bar_width=0, do_scroll_x=False, do_scroll_y=True)
+        content = BoxLayout(
+            orientation="vertical",
+            spacing=dp(9),
+            size_hint_y=None,
+            padding=(dp(10), dp(10), dp(10), dp(12)),
+        )
+        content.bind(minimum_height=content.setter("height"))
+        scroll.add_widget(content)
+
+        header = Card(size_hint_y=None, height=dp(122), spacing=dp(6))
+        title_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(30))
+        title_row.add_widget(SectionTitle(text="PC Remote Control"))
+        self.connection_badge = Pill(text="Disconnected")
+        self.connection_badge.set_color(THEME["danger"])
+        title_row.add_widget(self.connection_badge)
+        header.add_widget(title_row)
+        self.pc_info = fit_label(Label(
+            text="Connect to your PC, then refresh its status.",
+            color=THEME["muted"],
+            font_size=sp(12),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(40),
+        ))
+        header.add_widget(self.pc_info)
+        self.refresh_status_button = make_button(
+            "Refresh PC Status", accent=THEME["accent"], height=dp(38)
+        )
+        self.refresh_status_button.bind(on_release=lambda *_: self.refresh_pc_status())
+        header.add_widget(self.refresh_status_button)
+        content.add_widget(header)
+
+        self.result_label = fit_label(Label(
+            text="Remote actions are sent only after the PC connection is authenticated.",
+            color=THEME["muted"],
+            font_size=sp(12),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(38),
+        ))
+        content.add_widget(self.result_label)
+
+        keyboard_card = Card(size_hint_y=None, height=dp(294))
+        keyboard_card.add_widget(SectionTitle(text="Keyboard and Text"))
+        self.text_input = TextInput(
+            text="",
+            hint_text="Type text to send to the active PC application",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(74),
+            background_color=THEME["panel_alt"],
+            foreground_color=THEME["text"],
+            hint_text_color=THEME["subtle"],
+            cursor_color=THEME["accent"],
+            padding=(dp(10), dp(8)),
+        )
+        keyboard_card.add_widget(self.text_input)
+        send_text_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(42), spacing=dp(7))
+        send_text = make_button("Send Text", accent=THEME["accent"], height=dp(42))
+        send_text.bind(on_release=lambda *_: self._request(
+            "keyboard_text", {"text": self.text_input.text}, "keyboard"
+        ))
+        clear_text = make_button("Clear", height=dp(42))
+        clear_text.bind(on_release=lambda *_: setattr(self.text_input, "text", ""))
+        send_text_row.add_widget(send_text)
+        send_text_row.add_widget(clear_text)
+        keyboard_card.add_widget(send_text_row)
+        self._capability_controls.append((send_text, "keyboard"))
+
+        key_grid = GridLayout(
+            cols=4,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(100),
+            row_default_height=dp(45),
+            row_force_default=True,
+        )
+        for label, key in (
+            ("Enter", "ENTER"), ("Tab", "TAB"), ("Esc", "ESCAPE"), ("⌫", "BACKSPACE"),
+            ("←", "LEFT"), ("↑", "UP"), ("↓", "DOWN"), ("→", "RIGHT"),
+        ):
+            button = make_button(label, height=dp(45))
+            button.bind(on_release=lambda _button, k=key: self._request(
+                "keyboard_key", {"key": k}, "keyboard"
+            ))
+            key_grid.add_widget(button)
+            self._capability_controls.append((button, "keyboard"))
+        keyboard_card.add_widget(key_grid)
+        modifiers = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(38))
+        for label, key in (("Ctrl", "CTRL"), ("Shift", "SHIFT"), ("Alt", "ALT"), ("Win", "WIN")):
+            button = make_button(label, height=dp(38))
+            button.bind(
+                on_press=lambda _button, k=key: self._request(
+                    "keyboard_modifier", {"key": k, "pressed": True}, "keyboard"
+                ),
+                on_release=lambda _button, k=key: self._request(
+                    "keyboard_modifier", {"key": k, "pressed": False}, "keyboard"
+                ),
+            )
+            modifiers.add_widget(button)
+            self._capability_controls.append((button, "keyboard"))
+        keyboard_card.add_widget(modifiers)
+        content.add_widget(keyboard_card)
+
+        shortcuts_card = Card(size_hint_y=None, height=dp(176))
+        shortcuts_card.add_widget(SectionTitle(text="Keyboard Shortcuts"))
+        shortcut_grid = GridLayout(
+            cols=3,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(128),
+            row_default_height=dp(38),
+            row_force_default=True,
+        )
+        for label, shortcut in (
+            ("Copy", "copy"), ("Paste", "paste"), ("Cut", "cut"),
+            ("Undo", "undo"), ("Select All", "select_all"), ("Save", "save"),
+            ("Alt + Tab", "alt_tab"), ("Show Desktop", "show_desktop"), ("Find", "find"),
+        ):
+            button = make_button(label, height=dp(38))
+            button.bind(on_release=lambda _button, key=shortcut: self._request(
+                "keyboard_shortcut", {"shortcut": key}, "keyboard"
+            ))
+            shortcut_grid.add_widget(button)
+            self._capability_controls.append((button, "keyboard"))
+        shortcuts_card.add_widget(shortcut_grid)
+        content.add_widget(shortcuts_card)
+
+        media_card = Card(size_hint_y=None, height=dp(126))
+        media_card.add_widget(SectionTitle(text="Media and Volume"))
+        media_grid = GridLayout(
+            cols=4,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(82),
+            row_default_height=dp(38),
+            row_force_default=True,
+        )
+        for label, command in (
+            ("Vol −", "volume_down"), ("Mute", "mute"), ("Vol +", "volume_up"),
+            ("Prev", "previous_track"), ("Play / Pause", "play_pause"),
+            ("Next", "next_track"), ("Stop", "stop"),
+        ):
+            button = make_button(label, height=dp(38))
+            button.bind(on_release=lambda _button, cmd=command: self._request(
+                "media", {"command": cmd}, "media"
+            ))
+            media_grid.add_widget(button)
+            self._capability_controls.append((button, "media"))
+        media_card.add_widget(media_grid)
+        content.add_widget(media_card)
+
+        clipboard_card = Card(size_hint_y=None, height=dp(184))
+        clipboard_card.add_widget(SectionTitle(text="Clipboard Sharing"))
+        self.clipboard_input = TextInput(
+            text="",
+            hint_text="Text to copy to the PC, or text read from the PC",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(78),
+            background_color=THEME["panel_alt"],
+            foreground_color=THEME["text"],
+            hint_text_color=THEME["subtle"],
+            cursor_color=THEME["accent"],
+            padding=(dp(10), dp(8)),
+        )
+        clipboard_card.add_widget(self.clipboard_input)
+        clipboard_buttons = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(42))
+        clipboard_set = make_button("Copy to PC", accent=THEME["accent"], height=dp(42))
+        clipboard_set.bind(on_release=lambda *_: self._request(
+            "clipboard_set", {"text": self.clipboard_input.text}, "clipboard"
+        ))
+        clipboard_get = make_button("Read PC Clipboard", height=dp(42))
+        clipboard_get.bind(on_release=lambda *_: self._request("clipboard_get", {}, "clipboard"))
+        clipboard_buttons.add_widget(clipboard_set)
+        clipboard_buttons.add_widget(clipboard_get)
+        clipboard_card.add_widget(clipboard_buttons)
+        self._capability_controls.extend(((clipboard_set, "clipboard"), (clipboard_get, "clipboard")))
+        content.add_widget(clipboard_card)
+
+        apps_card = Card(size_hint_y=None, height=dp(104))
+        apps_card.add_widget(SectionTitle(text="Approved Apps"))
+        apps_row = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(44))
+        for label, app_id in (("Browser", "browser"), ("Explorer", "explorer"), ("Calculator", "calculator"), ("Notepad", "notepad")):
+            button = make_button(label, height=dp(44))
+            button.bind(on_release=lambda _button, name=app_id: self._request(
+                "launch_app", {"app": name}, "app_launch"
+            ))
+            apps_row.add_widget(button)
+            self._capability_controls.append((button, "app_launch"))
+        apps_card.add_widget(apps_row)
+        content.add_widget(apps_card)
+
+        presentation_card = Card(size_hint_y=None, height=dp(104))
+        presentation_card.add_widget(SectionTitle(text="Presentation"))
+        presentation_row = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(44))
+        for label, command in (("Previous", "previous"), ("Next", "next"), ("Start", "start"), ("End", "end"), ("Black", "black_screen")):
+            button = make_button(label, height=dp(44))
+            button.bind(on_release=lambda _button, cmd=command: self._request(
+                "presentation", {"command": cmd}, "presentation"
+            ))
+            presentation_row.add_widget(button)
+            self._capability_controls.append((button, "presentation"))
+        presentation_card.add_widget(presentation_row)
+        content.add_widget(presentation_card)
+
+        power_card = Card(size_hint_y=None, height=dp(150))
+        power_card.add_widget(SectionTitle(text="System Power"))
+        power_grid = GridLayout(
+            cols=3,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(92),
+            row_default_height=dp(42),
+            row_force_default=True,
+        )
+        for label, command in (
+            ("Lock", "lock"), ("Sleep", "sleep"), ("Display Off", "display_off"),
+            ("Log Off", "logoff"), ("Restart", "restart"), ("Shut Down", "shutdown"),
+        ):
+            button = make_button(label, height=dp(42))
+            button.bind(on_release=lambda _button, cmd=command: self._confirm_power_action(cmd))
+            power_grid.add_widget(button)
+            self._capability_controls.append((button, "power"))
+        power_card.add_widget(power_grid)
+        content.add_widget(power_card)
+
+        content.add_widget(Widget(size_hint_y=None, height=dp(6)))
+        self.add_widget(scroll)
+        self.update_status()
+
+    def _request(self, action, payload, capability=None):
+        if not self.state.connected:
+            self.result_label.text = "Not connected. Connect and pair with the PC first."
+            return
+        request_id = self.state.send_remote_action(action, payload)
+        if request_id:
+            self.result_label.text = f"Waiting for PC confirmation: {action.replace('_', ' ')}…"
+        else:
+            self.result_label.text = "The request could not be sent. Check the connection."
+
+    def refresh_pc_status(self):
+        self._request("pc_status", {})
+
+    def update_status(self):
+        connected = bool(self.state.connected)
+        self.connection_badge.text = "Connected" if connected else "Disconnected"
+        self.connection_badge.set_color(THEME["success"] if connected else THEME["danger"])
+        self.refresh_status_button.disabled = not connected
+        for button, capability in self._capability_controls:
+            button.disabled = not connected or not self.capabilities.get(capability, False)
+        if not connected:
+            self.pc_info.text = "Connect to your PC to inspect status and use remote controls."
+            self.capabilities = {
+                "pc_status": True, "keyboard": False, "media": False, "clipboard": False,
+                "app_launch": False, "presentation": False, "power": False,
+            }
+
+    def handle_response(self, response):
+        action = response.get("action", "remote action")
+        if not response.get("ok"):
+            self.result_label.text = f"PC rejected {action.replace('_', ' ')}: {response.get('error', 'Unknown error')}"
+            return
+        result = response.get("result") or {}
+        if action == "pc_status":
+            self.capabilities.update({
+                key: bool(value) for key, value in result.get("capabilities", {}).items()
+                if key in self.capabilities
+            })
+            self.pc_info.text = (
+                f"{result.get('computer_name', 'PC')}  ·  {result.get('operating_system', 'OS unavailable')}\n"
+                f"PC time: {result.get('local_time', 'Unavailable')}"
+            )
+            self.update_status()
+            self.result_label.text = "PC status received from the connected computer."
+        elif action == "clipboard_get":
+            self.clipboard_input.text = result.get("text", "")
+            suffix = " (truncated to 4,096 characters)" if result.get("truncated") else ""
+            self.result_label.text = "PC clipboard received" + suffix
+        else:
+            self.result_label.text = f"PC confirmed: {action.replace('_', ' ')}"
+
+    def _confirm_power_action(self, command):
+        if command == "lock":
+            self._request("power_action", {"command": command}, "power")
+            return
+        descriptions = {
+            "sleep": "Put the PC into sleep mode.",
+            "display_off": "Turn off the PC display.",
+            "logoff": "Sign out of the current Windows session.",
+            "restart": "Restart Windows. Unsaved work may be lost.",
+            "shutdown": "Shut down Windows. Unsaved work may be lost.",
+        }
+        content = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(12))
+        detail = fit_label(Label(
+            text=descriptions.get(command, "Perform this system action?"),
+            color=THEME["text"], halign="left", valign="middle",
+        ))
+        content.add_widget(detail)
+        buttons = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
+        cancel = make_button("Cancel", height=dp(42))
+        confirm = make_button("Confirm", accent=THEME["danger"], height=dp(42))
+        buttons.add_widget(cancel)
+        buttons.add_widget(confirm)
+        content.add_widget(buttons)
+        popup = Popup(
+            title="Confirm PC action",
+            content=content,
+            size_hint=(0.88, 0.32),
+            auto_dismiss=False,
+        )
+        cancel.bind(on_release=lambda *_: popup.dismiss())
+        confirm.bind(on_release=lambda *_: (popup.dismiss(), self._request(
+            "power_action", {"command": command}, "power"
+        )))
+        popup.open()
+
+
 class ConnectScreen(Screen):
     """Connection, authentication and device identity screen."""
 
@@ -2937,7 +3262,7 @@ class ConnectScreen(Screen):
 
         server_card = Card(
             size_hint_y=None,
-            height=dp(214),
+            height=dp(292),
             spacing=dp(8),
         )
 
@@ -2949,58 +3274,37 @@ class ConnectScreen(Screen):
             orientation="horizontal",
             spacing=dp(8),
             size_hint_y=None,
-            height=dp(66),
+            height=dp(62),
         )
-
-        self.name_input = make_text_input(
-            load_name(),
-            "Device name",
-        )
-
-        self.ip_input = make_text_input(
-            load_last_ip(),
-            "Server IP",
-        )
-
-        name_row.add_widget(
-            field_box(
-                "Device Name",
-                self.name_input,
-            )
-        )
-
-        name_row.add_widget(
-            field_box(
-                "Server IP",
-                self.ip_input,
-            )
-        )
-
+        self.name_input = make_text_input(load_name(), "Device name")
+        self.ip_input = make_text_input(load_last_ip(), "Server IP")
+        name_row.add_widget(field_box("Device Name", self.name_input))
+        name_row.add_widget(field_box("Server IP", self.ip_input))
         server_card.add_widget(name_row)
 
         port_row = BoxLayout(
             orientation="horizontal",
             spacing=dp(8),
             size_hint_y=None,
-            height=dp(66),
+            height=dp(60),
         )
-
-        self.port_input = make_text_input(
-            "5000",
-            "Port",
-            input_filter="int",
-        )
-
-        port_row.add_widget(
-            field_box(
-                "Port",
-                self.port_input,
-            )
-        )
-
+        self.port_input = make_text_input("5000", "Port", input_filter="int")
+        port_row.add_widget(field_box("Port", self.port_input))
         port_row.add_widget(Widget())
-
         server_card.add_widget(port_row)
+
+        fingerprint_row = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(68),
+        )
+        self.fingerprint_input = make_text_input(
+            load_server_fingerprint(load_last_ip(), 5000),
+            "Paste SHA-256 fingerprint shown on PC",
+        )
+        fingerprint_row.add_widget(field_box("PC TLS Fingerprint", self.fingerprint_input))
+        server_card.add_widget(fingerprint_row)
 
         self.connect_btn = make_button(
             "Connect",
@@ -3189,8 +3493,8 @@ class ConnectScreen(Screen):
             self.state.request_connect(
                 self.ip_input.text.strip(),
                 self.port_input.text.strip(),
-                self.name_input.text.strip()
-                or load_name(),
+                self.name_input.text.strip() or load_name(),
+                self.fingerprint_input.text.strip(),
             )
 
     def _on_submit_code(self, *_):
@@ -3240,6 +3544,7 @@ class ConnectScreen(Screen):
             self.name_input.disabled = True
             self.ip_input.disabled = True
             self.port_input.disabled = True
+            self.fingerprint_input.disabled = True
 
         elif status == "authenticating":
             self.badge.text = "Connecting"
@@ -3277,6 +3582,7 @@ class ConnectScreen(Screen):
             self.name_input.disabled = False
             self.ip_input.disabled = False
             self.port_input.disabled = False
+            self.fingerprint_input.disabled = False
 
         if message:
             self.show_status(message)
@@ -3709,6 +4015,11 @@ class InputBridgeApp(App):
             name="mouse",
         )
 
+        self.state.remote_screen = RemoteScreen(
+            self.state,
+            name="remote",
+        )
+
         self.state.connect_screen = ConnectScreen(
             self.state,
             name="connect",
@@ -3729,6 +4040,10 @@ class InputBridgeApp(App):
 
         self.sm.add_widget(
             self.state.mouse_screen
+        )
+
+        self.sm.add_widget(
+            self.state.remote_screen
         )
 
         self.sm.add_widget(
@@ -3766,6 +4081,8 @@ class InputBridgeApp(App):
             self.tabbar.set_active(name)
 
         screen = self.sm.get_screen(name)
+        if name == "remote" and self.state.connected and self.state.remote_screen:
+            self.state.remote_screen.refresh_pc_status()
 
         update_status = getattr(screen, "update_status", None)
         if update_status:
