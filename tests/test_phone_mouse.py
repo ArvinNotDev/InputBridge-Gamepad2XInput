@@ -16,6 +16,9 @@ _HELPER_NAMES = {
     "SERVER_FINGERPRINTS_FILE",
     "DEFAULT_MOUSE_SENSITIVITY",
     "normalize_server_fingerprint",
+    "PAIRING_QR_SCHEMA",
+    "PAIRING_QR_VERSION",
+    "parse_pairing_qr_payload",
     "_fingerprint_key",
     "load_server_fingerprints",
     "load_server_fingerprint",
@@ -54,6 +57,7 @@ exec(
 )
 clamp = _HELPERS["clamp"]
 DEFAULT_MOUSE_SENSITIVITY = _HELPERS["DEFAULT_MOUSE_SENSITIVITY"]
+parse_pairing_qr_payload = _HELPERS["parse_pairing_qr_payload"]
 MouseGestureTracker = _HELPERS["MouseGestureTracker"]
 AppState = _HELPERS["AppState"]
 load_mouse_preferences = _HELPERS["load_mouse_preferences"]
@@ -224,3 +228,36 @@ def test_server_fingerprint_helpers_reject_invalid_pins_and_ignore_bad_entries(t
     )
     assert load_server_fingerprints(path) == {"pc:5000": "ab" * 32}
     assert normalize_server_fingerprint("AB:" * 31 + "AB") == "ab" * 32
+
+
+
+def test_pairing_qr_payload_parses_endpoint_and_tls_fingerprint():
+    fingerprint = "AA" * 32
+    payload = json.dumps({
+        "schema": "inputbridge-pairing",
+        "version": 1,
+        "host": "192.168.1.25",
+        "port": 5000,
+        "tls_sha256": ":".join(fingerprint[i:i + 2] for i in range(0, 64, 2)),
+    })
+
+    assert parse_pairing_qr_payload(payload) == {
+        "host": "192.168.1.25",
+        "port": "5000",
+        "fingerprint": fingerprint.lower(),
+    }
+
+
+def test_pairing_qr_rejects_invalid_version_port_fingerprint_and_schema():
+    base = {
+        "schema": "inputbridge-pairing",
+        "version": 1,
+        "host": "192.168.1.25",
+        "port": 5000,
+        "tls_sha256": "AA" * 32,
+    }
+    assert parse_pairing_qr_payload(json.dumps({**base, "version": 2})) is None
+    assert parse_pairing_qr_payload(json.dumps({**base, "port": 0})) is None
+    assert parse_pairing_qr_payload(json.dumps({**base, "tls_sha256": "not-a-pin"})) is None
+    assert parse_pairing_qr_payload(json.dumps({**base, "schema": "other-app"})) is None
+    assert parse_pairing_qr_payload("not json") is None

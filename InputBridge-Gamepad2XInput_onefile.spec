@@ -27,6 +27,8 @@ hiddenimports = [
     "pyautogui",
     "pyperclip",
     "cryptography.hazmat.bindings._rust",
+    "qrcode",
+    "qrcode.image.pil",
 ]
 
 

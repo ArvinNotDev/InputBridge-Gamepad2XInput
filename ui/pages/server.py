@@ -1,4 +1,5 @@
 import sys
+import io
 import socket
 import json
 import threading
@@ -14,11 +15,13 @@ from typing import Optional, Dict, Tuple
 from core.settings import SettingsManager
 
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QCheckBox,
+    QApplication, QWidget, QDialog, QVBoxLayout, QLabel, QPushButton, QCheckBox,
     QListWidget, QListWidgetItem, QHBoxLayout, QSizePolicy, QMessageBox,
     QGroupBox, QGridLayout
 )
 from PySide6.QtCore import Qt, Signal, QObject, QSize, QTimer
+from PySide6.QtGui import QPixmap
+import qrcode
 
 from core.mapper import Phone_mapper
 from core.remote_actions import RemoteActionSession, load_remote_permissions, save_remote_permissions
@@ -431,11 +434,19 @@ class ServerPage(QWidget):
         self.ip_label.setObjectName("ipLabel")
 
         self.fingerprint_label = QLabel(
-            "TLS fingerprint: start the server to create this PC's identity."
+            "TLS certificate fingerprint: start the server to create this PC's identity. "
+            "The QR pairs the phone without manually copying this public fingerprint."
         )
         self.fingerprint_label.setObjectName("tlsFingerprintLabel")
         self.fingerprint_label.setWordWrap(True)
         self.fingerprint_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        self.pairing_qr_button = QPushButton("Show Phone Pairing QR")
+        self.pairing_qr_button.setCursor(Qt.PointingHandCursor)
+        self.pairing_qr_button.setFixedHeight(40)
+        self.pairing_qr_button.setObjectName("pairingQrButton")
+        self.pairing_qr_button.setEnabled(False)
+        self.pairing_qr_button.clicked.connect(self._show_pairing_qr)
 
         self.clients_label = QLabel("Connected Clients")
         self.clients_label.setAlignment(Qt.AlignCenter)
@@ -484,6 +495,7 @@ class ServerPage(QWidget):
 
         layout.addWidget(self.ip_label)
         layout.addWidget(self.fingerprint_label)
+        layout.addWidget(self.pairing_qr_button)
         layout.addWidget(self.clients_label)
         layout.addWidget(self.clients_list)
         layout.addWidget(self.trusted_label)
@@ -516,6 +528,22 @@ class ServerPage(QWidget):
 
         #serverButton:hover {
             background-color: #3b82f6;
+        }
+        #pairingQrButton {
+            background-color: #0f766e;
+            border: 1px solid #14b8a6;
+            border-radius: 9px;
+            font-size: 14px;
+            font-weight: 600;
+            color: white;
+        }
+        #pairingQrButton:hover:enabled {
+            background-color: #0d9488;
+        }
+        #pairingQrButton:disabled {
+            background-color: #334155;
+            border-color: #475569;
+            color: #94a3b8;
         }
 
         #serverButton:pressed {
@@ -651,16 +679,113 @@ class ServerPage(QWidget):
         self.controllers_page.add_x360_instance(instance)
         self.hotkey_page.add_x360_instance(instance)
 
+    def _pairing_host(self) -> str:
+        endpoint = self.ip_label.text().partition(":")[2].strip()
+        host, separator, _port = endpoint.rpartition(":")
+        if not separator or not host or host.lower() == "unavailable":
+            return ""
+        return host
+
+    def _show_pairing_qr(self) -> None:
+        if not self.server_running or not self.tls_fingerprint:
+            QMessageBox.information(
+                self, "Secure pairing", "Start the server before showing the pairing QR."
+            )
+            return
+        host = self._pairing_host()
+        if not host:
+            QMessageBox.warning(
+                self,
+                "Network address unavailable",
+                "InputBridge could not determine this PC's local network address. "
+                "Check Wi-Fi/Ethernet connectivity and restart the server.",
+            )
+            return
+
+        # This QR contains only the endpoint and public certificate fingerprint.
+        # The private TLS key is never shared or embedded in the QR.
+        payload = json.dumps(
+            {
+                "schema": "inputbridge-pairing",
+                "version": 1,
+                "host": host,
+                "port": PORT,
+                "tls_sha256": self.tls_fingerprint,
+            },
+            separators=(",", ":"),
+        )
+        try:
+            qr = qrcode.QRCode(
+                version=None,
+                error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=8,
+                border=4,
+            )
+            qr.add_data(payload)
+            qr.make(fit=True)
+            qr_image = qr.make_image(fill_color="#0b1220", back_color="white")
+            buffer = io.BytesIO()
+            qr_image.save(buffer, format="PNG")
+            pixmap = QPixmap()
+            if not pixmap.loadFromData(buffer.getvalue(), "PNG"):
+                raise RuntimeError("Could not render the QR image")
+        except Exception as exc:
+            QMessageBox.warning(self, "Pairing QR unavailable", str(exc))
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("InputBridge — Secure Phone Pairing")
+        dialog.setMinimumSize(420, 520)
+        content = QVBoxLayout(dialog)
+        content.setContentsMargins(22, 18, 22, 18)
+        content.setSpacing(10)
+
+        title = QLabel("Pair your phone securely")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size:20px; font-weight:700; color:#0f766e;")
+        content.addWidget(title)
+
+        explanation = QLabel(
+            f"Connect your phone to the same network, open InputBridge, and tap "
+            f"“Scan Pairing QR”.\nPC address: {host}:{PORT}"
+        )
+        explanation.setWordWrap(True)
+        explanation.setAlignment(Qt.AlignCenter)
+        content.addWidget(explanation)
+
+        qr_label = QLabel()
+        qr_label.setAlignment(Qt.AlignCenter)
+        qr_label.setPixmap(
+            pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+        content.addWidget(qr_label, 1)
+
+        pin_label = QLabel(
+            "TLS SHA-256 pin (manual fallback):\n" + self.tls_fingerprint
+        )
+        pin_label.setWordWrap(True)
+        pin_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        pin_label.setStyleSheet("font-size:10px; color:#64748b;")
+        content.addWidget(pin_label)
+
+        close_button = QPushButton("Close")
+        close_button.setFixedHeight(38)
+        close_button.clicked.connect(dialog.accept)
+        content.addWidget(close_button)
+        dialog.exec()
+
     def _on_server_started(self) -> None:
         if self.stop_event.is_set():
             return
         self.button.setEnabled(True)
         self._set_server_button(True)
+        self.pairing_qr_button.setEnabled(bool(self.tls_fingerprint and self._pairing_host()))
         self.auth_timer.start(1000)
 
     def _on_server_failed(self, message: str) -> None:
         self.button.setEnabled(True)
         self._set_server_button(False)
+        self.pairing_qr_button.setEnabled(False)
         self.auth_timer.stop()
         if not self._is_shutting_down:
             QMessageBox.warning(self, "Server Error", message)
@@ -1063,9 +1188,9 @@ class ServerPage(QWidget):
                 )
                 return
             self.fingerprint_label.setText(
-                "TLS SHA-256 fingerprint — enter this exact value on the phone before pairing:\n"
-                + self.tls_fingerprint
+                "TLS SHA-256 fingerprint (manual fallback):\n" + self.tls_fingerprint
             )
+            self.pairing_qr_button.setEnabled(False)
             self.button.setEnabled(False)
             self.button.setText("Starting...")
             self.server_thread = threading.Thread(
@@ -1125,6 +1250,7 @@ class ServerPage(QWidget):
         self.server_thread = None
         self.server_socket = None
         self.clients_list.clear()
+        self.pairing_qr_button.setEnabled(False)
         self.button.setEnabled(True)
         self._set_server_button(False)
         self.auth_timer.stop()

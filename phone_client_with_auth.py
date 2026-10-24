@@ -35,6 +35,11 @@ from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
 
 try:
+    from kivy.uix.camera import Camera
+except Exception:
+    Camera = None
+
+try:
     from plyer import accelerometer
 except Exception:
     accelerometer = None
@@ -47,19 +52,21 @@ MOUSE_SETTINGS_FILE = "mouse_settings.json"
 SERVER_FINGERPRINTS_FILE = "server_fingerprints.json"
 REMOTE_PROTOCOL_VERSION = 1
 REMOTE_MAX_FRAME_BYTES = 16 * 1024
+PAIRING_QR_SCHEMA = "inputbridge-pairing"
+PAIRING_QR_VERSION = 1
 DEFAULT_MOUSE_SENSITIVITY = 1.8
 
 
 THEME = {
-    "bg":          (0.07, 0.09, 0.12, 1),
-    "surface":     (0.11, 0.14, 0.19, 1),
-    "surface2":    (0.15, 0.18, 0.24, 1),
-    "border":      (0.22, 0.28, 0.38, 1),
-    "text":        (0.95, 0.97, 1.00, 1),
-    "muted":       (0.68, 0.74, 0.84, 1),
-    "subtle":      (0.48, 0.54, 0.64, 1),
-    "accent":      (0.22, 0.60, 1.00, 1),
-    "accent2":     (0.96, 0.62, 0.18, 1),
+    "bg":          (0.035, 0.052, 0.082, 1),
+    "surface":     (0.075, 0.105, 0.16, 1),
+    "surface2":    (0.105, 0.145, 0.21, 1),
+    "border":      (0.19, 0.27, 0.39, 1),
+    "text":        (0.96, 0.975, 1.00, 1),
+    "muted":       (0.70, 0.77, 0.88, 1),
+    "subtle":      (0.50, 0.58, 0.70, 1),
+    "accent":      (0.22, 0.66, 0.98, 1),
+    "accent2":     (0.58, 0.43, 0.96, 1),
     "success":     (0.20, 0.74, 0.42, 1),
     "danger":      (0.92, 0.28, 0.30, 1),
     "warn":        (0.94, 0.74, 0.16, 1),
@@ -152,6 +159,44 @@ def normalize_server_fingerprint(value):
         return ""
     normalized = "".join(c for c in value.lower() if c in "0123456789abcdef")
     return normalized if len(normalized) == 64 else ""
+
+
+def parse_pairing_qr_payload(raw_payload):
+    """Validate an InputBridge pairing QR and return its endpoint and TLS pin."""
+    if isinstance(raw_payload, bytes):
+        try:
+            raw_payload = raw_payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(raw_payload, str) or len(raw_payload) > 2048:
+        return None
+    try:
+        payload = json.loads(raw_payload)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("schema") != PAIRING_QR_SCHEMA:
+        return None
+    if type(payload.get("version")) is not int or payload["version"] != PAIRING_QR_VERSION:
+        return None
+
+    host = payload.get("host")
+    port = payload.get("port")
+    fingerprint = normalize_server_fingerprint(payload.get("tls_sha256"))
+    if (
+        not isinstance(host, str)
+        or not host
+        or len(host) > 253
+        or any(not (char.isalnum() or char in ".-") for char in host)
+        or host.startswith(".")
+        or host.endswith(".")
+        or type(port) is not int
+        or not 1 <= port <= 65535
+        or not fingerprint
+    ):
+        return None
+    return {"host": host, "port": str(port), "fingerprint": fingerprint}
 
 
 def _fingerprint_key(host, port):
@@ -1078,14 +1123,6 @@ class AppState:
         raw_socket = None
         secure_socket = None
         try:
-            raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            raw_socket.settimeout(5.0)
-            raw_socket.connect((ip, port))
-            try:
-                raw_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            except OSError:
-                pass
-
             tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             tls_context.check_hostname = False
             tls_context.verify_mode = ssl.CERT_NONE
@@ -1093,17 +1130,68 @@ class AppState:
                 tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
             except AttributeError:
                 pass
-            secure_socket = tls_context.wrap_socket(raw_socket, server_hostname=ip)
-            raw_socket = None
-            certificate_der = secure_socket.getpeercert(binary_form=True)
-            actual_fingerprint = hashlib.sha256(certificate_der).hexdigest()
-            if not hmac.compare_digest(actual_fingerprint, expected_fingerprint):
-                raise ssl.SSLError(
-                    "PC certificate fingerprint mismatch. Compare the desktop fingerprint "
-                    "and reconnect; the saved pin was not changed."
-                )
+
+            last_error = None
+            for attempt in range(3):
+                with self._connection_lock:
+                    if generation != self._connection_generation or not self.authenticating:
+                        return
+
+                try:
+                    raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    # Short TCP timeout makes a stale server address fail quickly;
+                    # TLS gets a longer timeout for slower phones and busy PCs.
+                    raw_socket.settimeout(3.5)
+                    raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    try:
+                        raw_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    except OSError:
+                        pass
+                    raw_socket.connect((ip, port))
+                    raw_socket.settimeout(8.0)
+
+                    secure_socket = tls_context.wrap_socket(raw_socket, server_hostname=ip)
+                    raw_socket = None
+                    certificate_der = secure_socket.getpeercert(binary_form=True)
+                    actual_fingerprint = hashlib.sha256(certificate_der).hexdigest()
+                    if not hmac.compare_digest(actual_fingerprint, expected_fingerprint):
+                        raise ValueError(
+                            "PC certificate fingerprint mismatch. Scan the QR shown on the PC "
+                            "again or compare the desktop fingerprint. The saved pin was not changed."
+                        )
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    for candidate in (secure_socket, raw_socket):
+                        if candidate is not None:
+                            try:
+                                candidate.close()
+                            except Exception:
+                                pass
+                    secure_socket = None
+                    raw_socket = None
+
+                    # Never retry a pin mismatch or a local/programming error.
+                    if isinstance(exc, ValueError) or not isinstance(
+                        exc, (OSError, socket.timeout, ssl.SSLError)
+                    ):
+                        raise
+                    if attempt >= 2:
+                        raise
+                    with self._connection_lock:
+                        is_current = (
+                            generation == self._connection_generation
+                            and self.authenticating
+                        )
+                    if not is_current:
+                        return
+                    time.sleep(0.35 * (attempt + 1))
+
+            if secure_socket is None:
+                raise last_error or ConnectionError("Could not establish a secure PC connection")
+
             save_server_fingerprint(ip, port, actual_fingerprint)
-            secure_socket.settimeout(1.0)
+            secure_socket.settimeout(2.0)
 
             with self._connection_lock:
                 if (
@@ -1128,7 +1216,10 @@ class AppState:
                 daemon=True,
             )
             self._rx_thread.start()
-            self._send(self.build_state_message(), generation=generation, sock=secure_socket)
+            if not self._send(self.build_state_message(), generation=generation, sock=secure_socket):
+                self._disconnect_session(
+                    generation, secure_socket, "Connected, but the initial state could not be sent"
+                )
 
         except Exception as exc:
             for candidate in (secure_socket, raw_socket):
@@ -3164,6 +3255,209 @@ class RemoteScreen(Screen):
         popup.open()
 
 
+class PairingQRScannerPopup(Popup):
+    """Camera-based pairing QR scanner with a paste fallback for minimal builds."""
+
+    def __init__(self, on_pairing, **kwargs):
+        self._on_pairing = on_pairing
+        self._camera = None
+        self._scan_event = None
+        self._decoder = None
+        self._numpy = None
+        self._finished = False
+        try:
+            import numpy as np
+            import zxingcpp
+            self._numpy = np
+            self._decoder = zxingcpp
+        except Exception:
+            self._numpy = None
+            self._decoder = None
+
+        root = BoxLayout(
+            orientation="vertical",
+            spacing=dp(9),
+            padding=(dp(12), dp(12), dp(12), dp(12)),
+        )
+        title = fit_label(Label(
+            text="[b]Pair securely with your PC[/b]",
+            markup=True,
+            color=THEME["text"],
+            font_size=sp(18),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(34),
+        ))
+        root.add_widget(title)
+
+        if Camera is not None and self._decoder is not None:
+            try:
+                self._camera = Camera(
+                    index=0,
+                    resolution=(640, 480),
+                    play=False,
+                    size_hint_y=0.72,
+                )
+                root.add_widget(self._camera)
+                scanner_hint = "Point the camera at the QR shown by InputBridge on your PC."
+            except Exception:
+                self._camera = None
+                scanner_hint = "Camera could not be initialized. Paste the scanned QR text below."
+        else:
+            scanner_hint = (
+                "Live QR decoding is not included in this build. Scan the desktop QR "
+                "with a QR reader and paste its complete text below."
+            )
+
+        self.status_label = fit_label(Label(
+            text=scanner_hint,
+            color=THEME["muted"],
+            font_size=sp(12),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(38),
+        ))
+        root.add_widget(self.status_label)
+
+        self.payload_input = TextInput(
+            text="",
+            hint_text="Paste the complete InputBridge QR text (JSON)",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(68),
+            background_color=THEME["surface2"],
+            foreground_color=THEME["text"],
+            hint_text_color=THEME["subtle"],
+            cursor_color=THEME["accent"],
+            padding=(dp(10), dp(8)),
+        )
+        root.add_widget(self.payload_input)
+
+        actions = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(42),
+        )
+        use_qr_button = make_button(
+            "Use QR Text",
+            accent=THEME["accent"],
+            height=dp(42),
+        )
+        use_qr_button.bind(on_release=self._use_pasted_payload)
+        close_button = make_button("Cancel", height=dp(42))
+        close_button.bind(on_release=lambda *_: self.dismiss())
+        actions.add_widget(use_qr_button)
+        actions.add_widget(close_button)
+        root.add_widget(actions)
+
+        super().__init__(
+            title="Secure pairing",
+            content=root,
+            size_hint=(0.96, 0.88),
+            auto_dismiss=False,
+        )
+        self.bind(on_open=self._start_camera, on_dismiss=self._cleanup)
+
+    def _start_camera(self, *_):
+        if self._camera is None or self._decoder is None:
+            return
+        try:
+            from android.permissions import Permission, request_permissions
+            request_permissions([Permission.CAMERA], self._on_camera_permission_result)
+        except Exception:
+            try:
+                self._camera.play = True
+                self._scan_event = Clock.schedule_interval(self._scan_frame, 0.25)
+            except Exception as exc:
+                self.status_label.text = f"Camera unavailable: {exc}"
+
+    def _on_camera_permission_result(self, permissions, grants):
+        if grants and all(grants):
+            Clock.schedule_once(lambda _dt: self._enable_camera(), 0)
+        else:
+            Clock.schedule_once(
+                lambda _dt: setattr(
+                    self.status_label,
+                    "text",
+                    "Camera permission was denied. Paste the QR text below instead.",
+                ),
+                0,
+            )
+
+    def _enable_camera(self):
+        if self._camera is None or self._finished:
+            return
+        try:
+            self._camera.play = True
+            if self._scan_event is None:
+                self._scan_event = Clock.schedule_interval(self._scan_frame, 0.25)
+        except Exception as exc:
+            self.status_label.text = f"Camera unavailable: {exc}"
+
+    def _scan_frame(self, _dt):
+        if (
+            self._finished
+            or self._camera is None
+            or self._decoder is None
+            or self._numpy is None
+        ):
+            return
+        texture = self._camera.texture
+        if texture is None:
+            return
+        try:
+            width, height = (int(texture.size[0]), int(texture.size[1]))
+            if width < 1 or height < 1:
+                return
+            pixels = self._numpy.frombuffer(texture.pixels, dtype=self._numpy.uint8)
+            pixel_count = width * height
+            channels = pixels.size // pixel_count
+            if channels not in (3, 4):
+                return
+            frame = pixels.reshape((height, width, channels))[:, :, :3]
+            frame = self._numpy.ascontiguousarray(self._numpy.flipud(frame))
+            for barcode in self._decoder.read_barcodes(frame):
+                pairing = parse_pairing_qr_payload(getattr(barcode, "text", ""))
+                if pairing:
+                    self._finish(pairing)
+                    return
+        except Exception:
+            # Camera texture formats can differ by platform; keep scanning rather
+            # than dropping the user back to the Connect screen on one bad frame.
+            return
+
+    def _use_pasted_payload(self, *_):
+        pairing = parse_pairing_qr_payload(self.payload_input.text)
+        if not pairing:
+            self.status_label.text = (
+                "That text is not a valid InputBridge pairing QR. "
+                "Paste the complete QR contents, not just the fingerprint."
+            )
+            return
+        self._finish(pairing)
+
+    def _finish(self, pairing):
+        if self._finished:
+            return
+        self._finished = True
+        self._cleanup()
+        self.dismiss()
+        Clock.schedule_once(lambda _dt, data=pairing: self._on_pairing(data), 0)
+
+    def _cleanup(self, *_):
+        if self._scan_event is not None:
+            self._scan_event.cancel()
+            self._scan_event = None
+        if self._camera is not None:
+            try:
+                self._camera.play = False
+            except Exception:
+                pass
+
+
 class ConnectScreen(Screen):
     """Connection, authentication and device identity screen."""
 
@@ -3247,7 +3541,7 @@ class ConnectScreen(Screen):
 
         subtitle = fit_label(
             Label(
-                text="Gamepad Controller",
+                text="Secure PC connection · Gamepad and remote control",
                 color=THEME["muted"],
                 halign="left",
                 valign="middle",
@@ -3264,13 +3558,21 @@ class ConnectScreen(Screen):
 
         server_card = Card(
             size_hint_y=None,
-            height=dp(356),
+            height=dp(408),
             spacing=dp(8),
         )
 
         server_card.add_widget(
-            SectionTitle(text="Server")
+            SectionTitle(text="Secure PC pairing")
         )
+
+        self.scan_qr_btn = make_button(
+            "Scan Pairing QR",
+            accent=THEME["accent2"],
+            height=dp(42),
+        )
+        self.scan_qr_btn.bind(on_release=self._on_scan_qr)
+        server_card.add_widget(self.scan_qr_btn)
 
         name_row = BoxLayout(
             orientation="horizontal",
@@ -3488,9 +3790,26 @@ class ConnectScreen(Screen):
 
     # ---------- actions ----------
 
+    def _on_scan_qr(self, *_):
+        PairingQRScannerPopup(self._on_pairing_qr).open()
+
+    def _on_pairing_qr(self, pairing):
+        self.ip_input.text = pairing["host"]
+        self.port_input.text = pairing["port"]
+        self.fingerprint_input.text = pairing["fingerprint"]
+        self.show_status("QR read successfully. Verifying the PC TLS certificate…")
+        self.state.request_connect(
+            pairing["host"],
+            pairing["port"],
+            self.name_input.text.strip() or load_name(),
+            pairing["fingerprint"],
+        )
+
     def _on_connect(self, *_):
         if self.state.connected:
             self.state.disconnect()
+        elif self.state.authenticating:
+            self.show_status("Connection attempt is already in progress…")
         else:
             self.state.request_connect(
                 self.ip_input.text.strip(),
@@ -3529,6 +3848,7 @@ class ConnectScreen(Screen):
                 THEME["success"]
             )
 
+            self.connect_btn.disabled = False
             self.connect_btn.text = "Disconnect"
 
             self.connect_btn._accent_color = (

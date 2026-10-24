@@ -220,21 +220,29 @@ select **Emulate** or **Mouse** for the connected phone.
 
 1. Install the updated desktop dependencies and start InputBridge.
 2. Open the desktop **Server** page and start the server. It creates a persistent
-   TLS certificate and displays its SHA-256 fingerprint.
-3. On the phone, open **Connect**, enter the PC's IP address and port (default
-   `5000`), and paste the complete fingerprint shown on the PC. Compare the
-   value carefully. The phone verifies the certificate fingerprint before it
-   sends device identity or pairing information.
-4. Tap **Connect**. If the phone is not trusted yet, copy the short pairing code
-   shown beside the connected client on the PC into the phone and submit it.
+   TLS certificate. Once the server is listening, click **Show Phone Pairing QR**.
+3. On the phone, open **Connect** and tap **Scan Pairing QR**. The QR transfers
+   the PC's LAN address, port, and public SHA-256 certificate fingerprint; the
+   phone compares the live TLS certificate against that fingerprint before
+   sending device identity or pairing information. If camera QR decoding is not
+   bundled in the mobile build, scan the QR with a compatible QR reader and paste
+   its complete text into the fallback field, or enter the fingerprint manually.
+4. If the phone is not trusted yet, copy the short pairing code shown beside the
+   connected client on the PC into the phone and submit it.
 5. Open **Remote** and refresh PC status. On the PC, explicitly enable the
    individual remote-action permissions required by your workflow.
 
 The TLS certificate and private key are stored in the desktop app's writable
-`remote_security/` data directory. The server fingerprint is saved on the phone
-per host and port; later connections use that pin. If the PC certificate is
-replaced, compare and enter the newly displayed fingerprint deliberately. Do not
-accept a fingerprint sent through an untrusted channel.
+`remote_security/` data directory. The QR contains only the PC endpoint and
+the public certificate fingerprint; **the private TLS key is never exported**.
+The server fingerprint is saved on the phone per host and port; later connections
+use that pin. If the PC certificate is replaced, scan the new QR or compare and
+enter the newly displayed fingerprint deliberately. Do not accept a fingerprint
+sent through an untrusted channel.
+
+The mobile client retries a transient TCP/TLS establishment failure up to two
+times automatically, keeps longer TLS-handshake timeouts for slower phones, and
+prevents duplicate connect taps while one attempt is in progress.
 
 ### Remote actions currently implemented
 
