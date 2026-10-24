@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
+    QListView,
     QStackedWidget,
     QSystemTrayIcon,
     QMenu,
@@ -165,7 +166,7 @@ class MainWindow(QMainWindow):
         # Horizontal primary navigation
         self.menu = QListWidget()
         self.menu.setObjectName("top_navigation")
-        self.menu.setFlow(QListWidget.LeftToRight)
+        self.menu.setFlow(QListView.Flow.LeftToRight)
         self.menu.setWrapping(False)
         self.menu.setSpacing(3)
         self.menu.setUniformItemSizes(True)
