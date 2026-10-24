@@ -79,80 +79,70 @@ class MainWindow(QMainWindow):
 
         self._shown_tray_hint = False
 
-        # Central layout
+        # Main application shell
         central = QWidget(self)
-        main_layout = QHBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        central.setObjectName("app_root")
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(22, 18, 22, 18)
+        main_layout.setSpacing(14)
         self.setCentralWidget(central)
 
-        # Left column
-        left_column = QVBoxLayout()
-        left_column.setContentsMargins(10, 10, 10, 10)
-        left_column.setSpacing(0)
+        # Compact application header
+        header = QWidget()
+        header.setObjectName("app_header")
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(2, 0, 2, 0)
+        header_layout.setSpacing(12)
 
-        # ---- Profile avatar widget at top of sidebar ----
+        brand = QWidget()
+        brand_layout = QHBoxLayout(brand)
+        brand_layout.setContentsMargins(0, 0, 0, 0)
+        brand_layout.setSpacing(12)
+
+        self._brand_mark = QLabel("IB")
+        self._brand_mark.setObjectName("brand_mark")
+        self._brand_mark.setAlignment(Qt.AlignCenter)
+        self._brand_mark.setFixedSize(44, 44)
+        brand_layout.addWidget(self._brand_mark)
+
+        brand_copy = QVBoxLayout()
+        brand_copy.setContentsMargins(0, 0, 0, 0)
+        brand_copy.setSpacing(1)
+        brand_title = QLabel("InputBridge")
+        brand_title.setObjectName("brand_title")
+        brand_subtitle = QLabel("GAMEPAD CONTROL CENTER")
+        brand_subtitle.setObjectName("brand_subtitle")
+        brand_copy.addWidget(brand_title)
+        brand_copy.addWidget(brand_subtitle)
+        brand_layout.addLayout(brand_copy)
+        header_layout.addWidget(brand)
+        header_layout.addStretch(1)
+
+        # Active profile chip (kept compact so navigation remains the focus)
         self._avatar_container = QWidget()
-        self._avatar_container.setObjectName("sidebar_avatar_container")
-        avatar_layout = QVBoxLayout(self._avatar_container)
-        avatar_layout.setContentsMargins(10, 12, 10, 12)
-        avatar_layout.setSpacing(6)
-        avatar_layout.setAlignment(Qt.AlignCenter)
+        self._avatar_container.setObjectName("profile_chip")
+        avatar_layout = QHBoxLayout(self._avatar_container)
+        avatar_layout.setContentsMargins(9, 6, 13, 6)
+        avatar_layout.setSpacing(9)
 
-        self._sidebar_avatar = _SidebarAvatar(64)
-        avatar_layout.addWidget(self._sidebar_avatar, alignment=Qt.AlignCenter)
+        self._sidebar_avatar = _SidebarAvatar(36)
+        avatar_layout.addWidget(self._sidebar_avatar, alignment=Qt.AlignVCenter)
 
+        profile_copy = QVBoxLayout()
+        profile_copy.setContentsMargins(0, 0, 0, 0)
+        profile_copy.setSpacing(1)
         self._sidebar_profile_name = QLabel("")
-        self._sidebar_profile_name.setAlignment(Qt.AlignCenter)
         self._sidebar_profile_name.setObjectName("sidebar_profile_name")
-        self._sidebar_profile_name.setStyleSheet(
-            "font-size:13px; font-weight:600; color:#ccccdd;"
-        )
-        avatar_layout.addWidget(self._sidebar_profile_name)
-
+        self._sidebar_profile_name.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._sidebar_profile_label = QLabel("No profile active")
-        self._sidebar_profile_label.setAlignment(Qt.AlignCenter)
-        self._sidebar_profile_label.setStyleSheet(
-            "font-size:10px; color:#666677;"
-        )
-        avatar_layout.addWidget(self._sidebar_profile_label)
+        self._sidebar_profile_label.setObjectName("sidebar_profile_label")
+        self._sidebar_profile_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        profile_copy.addWidget(self._sidebar_profile_name)
+        profile_copy.addWidget(self._sidebar_profile_label)
+        avatar_layout.addLayout(profile_copy)
+        header_layout.addWidget(self._avatar_container)
 
-        left_column.addWidget(self._avatar_container)
-
-        # Separator line
-        _sep = QLabel()
-        _sep.setFixedHeight(1)
-        _sep.setStyleSheet("background-color: #3a3a4a; margin: 4px 10px;")
-        left_column.addWidget(_sep)
-
-        self.menu = QListWidget()
-        self.menu.setObjectName("sidebar_menu")
-        self.menu.setFixedWidth(200)
-
-        # Disable scrolling completely
-        self.menu.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.menu.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
-        self.menu.setSelectionMode(QListWidget.SingleSelection)
-
-        # Menu items (order must match the constants above)
-        self.menu.addItem(QListWidgetItem("Controller Emulation"))  # 0
-        self.menu.addItem(QListWidgetItem("Remote Gamepad"))        # 1
-        self.menu.addItem(QListWidgetItem("Hotkeys"))               # 2
-        self.menu.addItem(QListWidgetItem("Profiles"))              # 3
-        self.menu.addItem(QListWidgetItem("Test XInput"))           # 4
-        self.menu.addItem(QListWidgetItem("Settings"))              # 5
-        self.menu.addItem(QListWidgetItem("About"))                 # 6
-        self.menu.addItem(QListWidgetItem("Quit"))                  # 7
-
-        # Force menu to fit all items
-        item_height = self.menu.sizeHintForRow(0)
-        total_height = item_height * self.menu.count() + 2 * self.menu.frameWidth()
-        self.menu.setFixedHeight(total_height)
-
-        left_column.addWidget(self.menu)
-        left_column.addStretch()
-
-        self.github_button = QPushButton("GitHub · ArvinNotDev")
+        self.github_button = QPushButton("GitHub")
         self.github_button.setObjectName("github_button")
         self.github_button.setToolTip("Open ArvinNotDev on GitHub")
         self.github_button.setCursor(Qt.PointingHandCursor)
@@ -161,10 +151,42 @@ class MainWindow(QMainWindow):
                 QUrl("https://github.com/ArvinNotDev/")
             )
         )
-        left_column.addWidget(self.github_button)
+        header_layout.addWidget(self.github_button)
+
+        self.quit_button = QPushButton("⏻")
+        self.quit_button.setObjectName("quit_button")
+        self.quit_button.setToolTip("Quit InputBridge")
+        self.quit_button.setCursor(Qt.PointingHandCursor)
+        self.quit_button.setFixedWidth(42)
+        self.quit_button.clicked.connect(self._quit_from_tray)
+        header_layout.addWidget(self.quit_button)
+        main_layout.addWidget(header)
+
+        # Horizontal primary navigation
+        self.menu = QListWidget()
+        self.menu.setObjectName("top_navigation")
+        self.menu.setFlow(QListWidget.LeftToRight)
+        self.menu.setWrapping(False)
+        self.menu.setSpacing(3)
+        self.menu.setUniformItemSizes(True)
+        self.menu.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.menu.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.menu.setSelectionMode(QListWidget.SingleSelection)
+
+        # Navigation labels are intentionally concise and task-oriented.
+        self.menu.addItem(QListWidgetItem("Controller Studio"))       # 0
+        self.menu.addItem(QListWidgetItem("Mobile Controller"))      # 1
+        self.menu.addItem(QListWidgetItem("Hotkey Mapping"))         # 2
+        self.menu.addItem(QListWidgetItem("Profiles"))               # 3
+        self.menu.addItem(QListWidgetItem("Diagnostics"))            # 4
+        self.menu.addItem(QListWidgetItem("Preferences"))            # 5
+        self.menu.addItem(QListWidgetItem("About"))                  # 6
+        self.menu.setFixedHeight(58)
+        main_layout.addWidget(self.menu)
 
         # Pages
         self.pages = QStackedWidget()
+        self.pages.setObjectName("content_stack")
 
         controllers_page = ControllersPage(self.settings)
         self.controllers_page = controllers_page
@@ -200,7 +222,6 @@ class MainWindow(QMainWindow):
         self.about_page = AboutPage()
         self.pages.addWidget(self.about_page)
 
-        main_layout.addLayout(left_column)
         main_layout.addWidget(self.pages, 1)
 
         self.menu.currentRowChanged.connect(self._on_menu_index_changed)
@@ -288,11 +309,11 @@ class MainWindow(QMainWindow):
 
         menu.addSeparator()
         for label, index in (
-            ("Controller emulation", self.IDX_CONTROLLER_EMULATION),
-            ("Remote gamepad", self.IDX_REMOTE_GAMEPAD),
-            ("Hotkeys", self.IDX_HOTKEY),
+            ("Controller Studio", self.IDX_CONTROLLER_EMULATION),
+            ("Mobile Controller", self.IDX_REMOTE_GAMEPAD),
+            ("Hotkey Mapping", self.IDX_HOTKEY),
             ("Profiles", self.IDX_PROFILES),
-            ("Settings", self.IDX_SETTINGS),
+            ("Preferences", self.IDX_SETTINGS),
             ("About", self.IDX_ABOUT),
         ):
             action = QAction(label, menu)
@@ -353,16 +374,10 @@ class MainWindow(QMainWindow):
             self._sidebar_avatar.set_image(img_path)
             self._sidebar_profile_name.setText(name)
             self._sidebar_profile_label.setText(tr("Active profile", language))
-            self._sidebar_profile_label.setStyleSheet(
-                "font-size:10px; color:#4ecdc4;"
-            )
         else:
             self._sidebar_avatar.set_image(None)
             self._sidebar_profile_name.setText("")
             self._sidebar_profile_label.setText(tr("No profile active", language))
-            self._sidebar_profile_label.setStyleSheet(
-                "font-size:10px; color:#666677;"
-            )
 
     def _apply_language(self) -> None:
         """Apply the selected UI language without changing layout direction."""
