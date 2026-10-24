@@ -1973,55 +1973,32 @@ class AppState:
 
 
 class TabBar(BoxLayout):
-    def __init__(self, app_ref=None, **kwargs):
-        kwargs.setdefault(
-            "size_hint_y",
-            None,
-        )
-        kwargs.setdefault(
-            "height",
-            dp(56),
-        )
+    """Compact bottom navigation with a clearly selected, touch-friendly tab."""
 
+    def __init__(self, app_ref=None, **kwargs):
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(62))
         super().__init__(**kwargs)
 
         self.app_ref = app_ref
         self.tabs = {}
 
         with self.canvas.before:
-            Color(*THEME["surface"])
-
-            self._bg = RoundedRectangle(
-                pos=self.pos,
-                size=self.size,
-                radius=[0],
-            )
-
+            Color(*THEME["bg"])
+            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[0])
             Color(*THEME["border"])
+            self._topline = Line(points=[], width=1)
 
-            self._topline = Line(
-                points=[],
-                width=1,
-            )
-
-        self.bind(
-            pos=self._redraw,
-            size=self._redraw,
-        )
+        self.bind(pos=self._redraw, size=self._redraw)
 
         for name, icon, label in (
-            ("control", "\U0001F3AE", "Gamepad"),
-            ("mouse", "\U0001F5B1", "Mouse"),
-            ("remote", "\U0001F4BB", "Remote"),
-            ("connect", "\U0001F4E1", "Connect"),
-            ("settings", "\u2699\ufe0f", "Settings"),
+            ("control", "🎮", "Gamepad"),
+            ("mouse", "🖱️", "Mouse"),
+            ("remote", "💻", "Remote"),
+            ("connect", "📡", "Connect"),
+            ("settings", "⚙️", "Settings"),
         ):
-            tab = self._make_tab(
-                name,
-                icon,
-                label,
-            )
-
+            tab = self._make_tab(name, icon, label)
             self.tabs[name] = tab
             self.add_widget(tab)
 
@@ -2031,50 +2008,34 @@ class TabBar(BoxLayout):
             markup=True,
             background_normal="",
             background_down="",
-            background_color=THEME["surface"],
+            background_color=THEME["bg"],
             color=THEME["muted"],
-            font_size=sp(13),
+            font_size=sp(12),
+            bold=False,
             size_hint_x=1,
         )
-
         tab._name = name
         tab._underline_color = THEME["border"]
-        tab._underline_width = 1.0
+        tab._underline_width = 0.7
 
         with tab.canvas.after:
             Color(*tab._underline_color)
+            tab._underline = Line(points=[], width=tab._underline_width)
 
-            tab._underline = Line(
-                points=[],
-                width=tab._underline_width,
-            )
-
-        # FIX:
-        # _draw_underline is a TabBar method, not a Button method.
-        tab.bind(
-            pos=self._draw_underline,
-            size=self._draw_underline,
-        )
-
-        tab.bind(
-            on_press=lambda inst, n=name:
-                self._on_tab(n)
-        )
-
+        tab.bind(pos=self._draw_underline, size=self._draw_underline)
+        tab.bind(on_press=lambda _inst, tab_name=name: self._on_tab(tab_name))
         return tab
 
     def _draw_underline(self, widget, *args):
         widget.canvas.after.clear()
-
         with widget.canvas.after:
             Color(*widget._underline_color)
-
             widget._underline = Line(
                 points=[
-                    widget.x,
-                    widget.y + dp(1),
-                    widget.x + widget.width,
-                    widget.y + dp(1),
+                    widget.x + dp(12),
+                    widget.y + dp(2),
+                    widget.x + widget.width - dp(12),
+                    widget.y + dp(2),
                 ],
                 width=widget._underline_width,
             )
@@ -2085,34 +2046,21 @@ class TabBar(BoxLayout):
 
     def set_active(self, name):
         for key, tab in self.tabs.items():
-            if key == name:
-                tab.color = THEME["accent"]
-                tab._underline_color = THEME["accent"]
-                tab._underline_width = 3.0
-            else:
-                tab.color = THEME["muted"]
-                tab._underline_color = THEME["border"]
-                tab._underline_width = 1.0
-
-            # FIX:
-            # _draw_underline belongs to TabBar.
+            active = key == name
+            tab.color = THEME["accent"] if active else THEME["muted"]
+            tab.background_color = THEME["surface2"] if active else THEME["bg"]
+            tab.bold = active
+            tab._underline_color = THEME["accent"] if active else THEME["border"]
+            tab._underline_width = 2.5 if active else 0.7
             self._draw_underline(tab)
 
     def _redraw(self, *args):
         self._bg.pos = self.pos
         self._bg.size = self.size
-
         self._topline.points = [
-            self.x,
-            self.y + self.height,
-            self.x + self.width,
-            self.y + self.height,
+            self.x, self.y + self.height,
+            self.x + self.width, self.y + self.height,
         ]
-
-
-# ============================================================
-# Screens
-# ============================================================
 
 
 class ControlScreen(Screen):
