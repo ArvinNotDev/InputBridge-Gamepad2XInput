@@ -1052,7 +1052,7 @@ class AppState:
 
     def request_connect(self, ip, port_text, name, fingerprint=None):
         if self.connected:
-            self.disconnect()
+            self._ui_status("Already connected. Disconnect before connecting to another PC.")
             return
 
         if self.authenticating:
@@ -1258,6 +1258,8 @@ class AppState:
                 "connected" if connected else "disconnected",
                 message,
             )
+            if connected:
+                self.connect_screen.show_status("Secure TLS connection established. Pairing may still be required.")
 
         if self.control_screen:
             self.control_screen.refresh_top_bar()
@@ -3267,9 +3269,9 @@ class PairingQRScannerPopup(Popup):
         self._finished = False
         try:
             import numpy as np
-            import zxingcpp
+            from pyzbar.pyzbar import decode as decode_barcodes
             self._numpy = np
-            self._decoder = zxingcpp
+            self._decoder = decode_barcodes
         except Exception:
             self._numpy = None
             self._decoder = None
@@ -3419,8 +3421,8 @@ class PairingQRScannerPopup(Popup):
                 return
             frame = pixels.reshape((height, width, channels))[:, :, :3]
             frame = self._numpy.ascontiguousarray(self._numpy.flipud(frame))
-            for barcode in self._decoder.read_barcodes(frame):
-                pairing = parse_pairing_qr_payload(getattr(barcode, "text", ""))
+            for barcode in self._decoder(frame):
+                pairing = parse_pairing_qr_payload(getattr(barcode, "data", b""))
                 if pairing:
                     self._finish(pairing)
                     return
@@ -3849,6 +3851,7 @@ class ConnectScreen(Screen):
             )
 
             self.connect_btn.disabled = False
+            self.scan_qr_btn.disabled = True
             self.connect_btn.text = "Disconnect"
 
             self.connect_btn._accent_color = (
@@ -3869,6 +3872,7 @@ class ConnectScreen(Screen):
             self.fingerprint_input.disabled = True
 
         elif status == "authenticating":
+            self.scan_qr_btn.disabled = True
             self.badge.text = "Connecting"
 
             self.badge.set_color(
@@ -3879,6 +3883,7 @@ class ConnectScreen(Screen):
             self.connect_btn.disabled = True
 
         else:
+            self.scan_qr_btn.disabled = False
             self.badge.text = "Disconnected"
 
             self.badge.set_color(

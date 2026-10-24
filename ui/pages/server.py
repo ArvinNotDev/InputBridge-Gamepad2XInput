@@ -842,7 +842,8 @@ class ServerPage(QWidget):
             secure_conn = self.tls_context.wrap_socket(
                 raw_conn, server_side=True, do_handshake_on_connect=False
             )
-            secure_conn.settimeout(5.0)
+            # Give mobile devices more time for a TLS handshake over busy Wi-Fi.
+            secure_conn.settimeout(10.0)
             secure_conn.do_handshake()
             secure_conn.settimeout(0.5)
             conn = secure_conn

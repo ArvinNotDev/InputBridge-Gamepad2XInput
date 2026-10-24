@@ -224,9 +224,12 @@ select **Emulate** or **Mouse** for the connected phone.
 3. On the phone, open **Connect** and tap **Scan Pairing QR**. The QR transfers
    the PC's LAN address, port, and public SHA-256 certificate fingerprint; the
    phone compares the live TLS certificate against that fingerprint before
-   sending device identity or pairing information. If camera QR decoding is not
-   bundled in the mobile build, scan the QR with a compatible QR reader and paste
-   its complete text into the fallback field, or enter the fingerprint manually.
+   sending device identity or pairing information. Install the dependencies in
+   `requirements-phone.txt`; for Android packaging, include `numpy` and
+   `pyzbar` in the python-for-android requirements and declare `CAMERA` and
+   `INTERNET` in the Android manifest. If the current mobile build does not
+   include its QR decoder or camera permission, scan the QR with a compatible
+   QR reader and paste its complete text into the fallback field.
 4. If the phone is not trusted yet, copy the short pairing code shown beside the
    connected client on the PC into the phone and submit it.
 5. Open **Remote** and refresh PC status. On the PC, explicitly enable the
