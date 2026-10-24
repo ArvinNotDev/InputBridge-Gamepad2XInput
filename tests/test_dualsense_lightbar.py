@@ -253,6 +253,12 @@ def test_dualsense_battery_status_and_transport_offsets():
     mapper.controller.transport = 2
     assert mapper._battery_report_index(54) == 54
 
+    # The incoming report ID is authoritative when transport metadata is stale.
+    mapper.controller.transport = 2
+    assert mapper._battery_report_index(54, report=[0x01] + [0] * 63) == 53
+    mapper.controller.transport = 1
+    assert mapper._battery_report_index(54, report=[0x31] + [0] * 77) == 54
+
 
 def test_stable_controller_id_prefers_serial_over_connection_path():
     first = stable_controller_id(0x054C, 0x0CE6, "bt-path-a", "S0NY-123")
