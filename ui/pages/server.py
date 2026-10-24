@@ -5,6 +5,7 @@ import threading
 import hashlib
 import secrets
 import os
+import ssl
 import tempfile
 import time
 from math import ceil
@@ -13,12 +14,16 @@ from typing import Optional, Dict, Tuple
 from core.settings import SettingsManager
 
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QLabel, QPushButton,
-    QListWidget, QListWidgetItem, QHBoxLayout, QSizePolicy, QMessageBox
+    QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QCheckBox,
+    QListWidget, QListWidgetItem, QHBoxLayout, QSizePolicy, QMessageBox,
+    QGroupBox, QGridLayout
 )
 from PySide6.QtCore import Qt, Signal, QObject, QSize, QTimer
 
 from core.mapper import Phone_mapper
+from core.remote_actions import RemoteActionSession, load_remote_permissions, save_remote_permissions
+from core.remote_protocol import MAX_FRAME_BYTES as REMOTE_MAX_FRAME_BYTES, PROTOCOL_VERSION, encode_json_line, make_remote_response, validate_remote_request
+from core.remote_security import create_server_ssl_context
 from core.utils.paths import data_path
 
 
@@ -26,7 +31,8 @@ HOST = "0.0.0.0"
 PORT = 5000
 TRUSTED_FILE = data_path("trusted_clients.json")
 MAX_CLIENTS = 8
-MAX_FRAME_BYTES = 16 * 1024
+MAX_FRAME_BYTES = REMOTE_MAX_FRAME_BYTES
+INPUT_WATCHDOG_SECONDS = 2.5
 MAX_CLIENT_NAME_LENGTH = 64
 MAX_CLIENT_UUID_LENGTH = 128
 BUTTON_KEYS = {
@@ -173,6 +179,18 @@ def validate_client_message(message):
     ):
         return None
 
+    version = message.get("protocol_version")
+    if version is not None and (type(version) is not int or version != PROTOCOL_VERSION):
+        return None
+    message_type = message.get("message_type")
+    if message_type not in (None, "state"):
+        return None
+    remote_request = None
+    if "remote_request" in message:
+        remote_request = validate_remote_request(message.get("remote_request"))
+        if remote_request is None:
+            return None
+
     return {
         "uuid": client_uuid.strip(),
         "name": client_name.strip(),
@@ -181,6 +199,9 @@ def validate_client_message(message):
         "analog": analog,
         "joystick": joystick,
         "mouse": mouse,
+        "protocol_version": PROTOCOL_VERSION,
+        "message_type": "state",
+        "remote_request": remote_request,
     }
 
 
@@ -384,6 +405,9 @@ class ServerPage(QWidget):
         self._is_shutting_down = False
         self.signals = ServerSignals()
         self.settings = settings
+        self.tls_context: Optional[ssl.SSLContext] = None
+        self.tls_fingerprint = ""
+        self.remote_permissions = load_remote_permissions()
         self.controllers_page = controllers_page
         self.hotkey_page = hotkey_page
 
@@ -406,19 +430,26 @@ class ServerPage(QWidget):
         self.ip_label.setAlignment(Qt.AlignCenter)
         self.ip_label.setObjectName("ipLabel")
 
+        self.fingerprint_label = QLabel(
+            "TLS fingerprint: start the server to create this PC's identity."
+        )
+        self.fingerprint_label.setObjectName("tlsFingerprintLabel")
+        self.fingerprint_label.setWordWrap(True)
+        self.fingerprint_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
         self.clients_label = QLabel("Connected Clients")
         self.clients_label.setAlignment(Qt.AlignCenter)
         self.clients_label.setObjectName("sectionLabel")
 
         self.clients_list = QListWidget()
-        self.clients_list.setFixedHeight(220)
+        self.clients_list.setFixedHeight(142)
 
         self.trusted_label = QLabel("Trusted Platforms")
         self.trusted_label.setAlignment(Qt.AlignCenter)
         self.trusted_label.setObjectName("sectionLabel")
 
         self.trusted_list = QListWidget()
-        self.trusted_list.setFixedHeight(220)
+        self.trusted_list.setFixedHeight(142)
 
         self.button = QPushButton("Start Server")
         self.button.setCursor(Qt.PointingHandCursor)
@@ -428,11 +459,36 @@ class ServerPage(QWidget):
         self.button.setProperty("running", False)  # initial state
 
 
+        permissions_group = QGroupBox("Remote action permissions")
+        permissions_grid = QGridLayout(permissions_group)
+        permissions_grid.setContentsMargins(12, 10, 12, 10)
+        permissions_grid.setHorizontalSpacing(18)
+        permissions_grid.setVerticalSpacing(6)
+        self.permission_checks: Dict[str, QCheckBox] = {}
+        permission_labels = (
+            ("keyboard", "Keyboard and text"),
+            ("media", "Media and volume"),
+            ("clipboard", "Clipboard access"),
+            ("app_launch", "Approved app shortcuts"),
+            ("presentation", "Presentation controls"),
+            ("power", "Power actions (off by default)"),
+        )
+        for position, (permission, label) in enumerate(permission_labels):
+            checkbox = QCheckBox(label)
+            checkbox.setChecked(self.remote_permissions.get(permission, False))
+            checkbox.toggled.connect(
+                lambda enabled, key=permission: self._on_remote_permission_changed(key, enabled)
+            )
+            self.permission_checks[permission] = checkbox
+            permissions_grid.addWidget(checkbox, position // 3, position % 3)
+
         layout.addWidget(self.ip_label)
+        layout.addWidget(self.fingerprint_label)
         layout.addWidget(self.clients_label)
         layout.addWidget(self.clients_list)
         layout.addWidget(self.trusted_label)
         layout.addWidget(self.trusted_list)
+        layout.addWidget(permissions_group)
         layout.addWidget(self.button)
 
         self.setLayout(layout)
@@ -501,6 +557,13 @@ class ServerPage(QWidget):
         )
 
 
+        self.setMinimumSize(760, 600)
+        self.setStyleSheet(self.styleSheet() + """
+            #tlsFingerprintLabel { font-size: 10px; color: #94a3b8; }
+            QGroupBox { margin-top: 5px; padding-top: 8px; }
+            QCheckBox { spacing: 6px; padding: 2px; }
+        """)
+
         # Connect signals
         self.signals.client_connected.connect(self._on_client_connected_ui)
         self.signals.client_disconnected.connect(self._on_client_disconnected_ui)
@@ -518,6 +581,24 @@ class ServerPage(QWidget):
         self.auth_timer = QTimer(self)
         self.auth_timer.timeout.connect(self._on_auth_timer_tick)
         self.auth_timer.start(1000)  # 1 second
+
+    # ---------- Remote action permissions ----------
+
+    def _on_remote_permission_changed(self, permission: str, enabled: bool) -> None:
+        if permission not in self.remote_permissions:
+            return
+        previous = self.remote_permissions[permission]
+        self.remote_permissions[permission] = bool(enabled)
+        try:
+            save_remote_permissions(dict(self.remote_permissions))
+        except OSError as exc:
+            self.remote_permissions[permission] = previous
+            checkbox = self.permission_checks.get(permission)
+            if checkbox is not None:
+                checkbox.blockSignals(True)
+                checkbox.setChecked(previous)
+                checkbox.blockSignals(False)
+            QMessageBox.warning(self, "Permission Settings", f"Could not save permissions: {exc}")
 
     # ---------- Trusted List UI ----------
 
