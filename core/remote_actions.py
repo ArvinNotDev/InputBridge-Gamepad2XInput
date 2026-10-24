@@ -194,7 +194,7 @@ class RemoteActionSession:
             return {"characters": len(payload["text"])}
         if action == "clipboard_get":
             value = _clipboard_paste()
-            return {"text": value[:4096], "truncated": len(value) > 4096}
+            return {"text": value[:3000], "truncated": len(value) > 3000}
         if action == "pc_status":
             return _pc_status(permissions)
         if action == "launch_app":
