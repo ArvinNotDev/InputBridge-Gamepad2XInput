@@ -709,6 +709,28 @@ class ServerPage(QWidget):
     # ---------- Networking / Client Handling ----------
 
     def _handle_client(self, conn: socket.socket, addr: tuple):
+        raw_conn = conn
+        secure_conn = None
+        try:
+            if self.tls_context is None:
+                raise RuntimeError("TLS is not initialized")
+            secure_conn = self.tls_context.wrap_socket(
+                raw_conn, server_side=True, do_handshake_on_connect=False
+            )
+            secure_conn.settimeout(5.0)
+            secure_conn.do_handshake()
+            secure_conn.settimeout(0.5)
+            conn = secure_conn
+        except Exception as exc:
+            try:
+                self._close_connection(secure_conn or raw_conn)
+            except Exception:
+                pass
+            with self._state_lock:
+                self.client_threads.pop(addr, None)
+            print(f"[Server] Rejected remote client TLS handshake ({type(exc).__name__}).")
+            return
+
         conn_key = addr
         buffer = bytearray()
         uuid = "unknown"
@@ -736,6 +758,8 @@ class ServerPage(QWidget):
         mapper: Optional[Phone_mapper] = None
         active_output_mode: Optional[str] = None
         auth_failures = 0
+        remote_session = RemoteActionSession()
+        last_authenticated_input = time.monotonic()
 
         try:
             while not self.stop_event.is_set():
@@ -749,6 +773,13 @@ class ServerPage(QWidget):
                 try:
                     data = conn.recv(4096)
                 except socket.timeout:
+                    if (
+                        authenticated
+                        and time.monotonic() - last_authenticated_input
+                        > INPUT_WATCHDOG_SECONDS
+                    ):
+                        print("[Server] Remote client input watchdog expired; releasing session state.")
+                        break
                     continue
                 except ConnectionResetError:
                     break
@@ -866,6 +897,7 @@ class ServerPage(QWidget):
                             if not authenticated:
                                 continue
 
+                    last_authenticated_input = time.monotonic()
                     with self._state_lock:
                         emulation_enabled = self.emulation_states.get(conn_key, False)
                         mouse_enabled = self.mouse_states.get(conn_key, False)
@@ -895,11 +927,49 @@ class ServerPage(QWidget):
                         elif output_mode == "mouse":
                             mapper.handle_mouse_data(msg["mouse"])
 
+                    remote_request = msg.get("remote_request")
+                    if remote_request is not None and authenticated:
+                        try:
+                            with self._state_lock:
+                                permissions = dict(self.remote_permissions)
+                            result = remote_session.execute(remote_request, permissions)
+                            response = make_remote_response(
+                                remote_request["request_id"],
+                                remote_request["action"],
+                                ok=True,
+                                result=result,
+                            )
+                        except PermissionError as exc:
+                            response = make_remote_response(
+                                remote_request["request_id"],
+                                remote_request["action"],
+                                ok=False,
+                                error=str(exc),
+                            )
+                        except Exception as exc:
+                            print(
+                                f"[Server] Remote action {remote_request.get('action')} "
+                                f"failed ({type(exc).__name__})."
+                            )
+                            response = make_remote_response(
+                                remote_request["request_id"],
+                                remote_request["action"],
+                                ok=False,
+                                error=str(exc) or "Remote action failed",
+                            )
+                        try:
+                            conn.sendall(encode_json_line(response))
+                        except OSError:
+                            return
+
                 if len(buffer) > MAX_FRAME_BYTES:
                     return
         finally:
+            remote_session.close()
             if mapper is not None:
                 try:
+                    mapper.reset_gamepad()
+                    mapper.release_mouse_buttons()
                     mapper.shutdown()
                 except Exception as exc:
                     print(f"[Server] Failed to shutdown phone mapper: {exc}")
@@ -920,6 +990,8 @@ class ServerPage(QWidget):
     def _server_loop(self):
         listener = None
         try:
+            if self.tls_context is None:
+                raise RuntimeError("TLS must be initialized before accepting remote clients.")
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind((HOST, PORT))
@@ -979,6 +1051,21 @@ class ServerPage(QWidget):
         if not self.server_running:
             self._is_shutting_down = False
             self.stop_event.clear()
+            try:
+                self.tls_context, self.tls_fingerprint = create_server_ssl_context()
+            except Exception as exc:
+                self.tls_context = None
+                QMessageBox.critical(
+                    self,
+                    "Secure Server Unavailable",
+                    "InputBridge could not initialize TLS. The remote server was not started.\n\n"
+                    + str(exc),
+                )
+                return
+            self.fingerprint_label.setText(
+                "TLS SHA-256 fingerprint — enter this exact value on the phone before pairing:\n"
+                + self.tls_fingerprint
+            )
             self.button.setEnabled(False)
             self.button.setText("Starting...")
             self.server_thread = threading.Thread(
