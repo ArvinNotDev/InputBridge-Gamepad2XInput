@@ -6,9 +6,10 @@ def _request(action, payload=None, request_id="req_01"):
     return {"protocol_version": 1, "request_id": request_id, "action": action, "payload": payload or {}}
 
 
-def test_power_actions_are_disabled_by_default():
-    assert DEFAULT_REMOTE_PERMISSIONS["power"] is False
-    assert remote_capabilities()["power"] is False
+def test_remote_permissions_are_disabled_by_default():
+    assert all(value is False for value in DEFAULT_REMOTE_PERMISSIONS.values())
+    assert all(value is False for name, value in remote_capabilities().items() if name != "pc_status")
+    assert remote_capabilities()["pc_status"] is True
 
 
 def test_status_is_available_and_reports_real_machine_values():
