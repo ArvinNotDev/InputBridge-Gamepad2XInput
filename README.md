@@ -61,9 +61,10 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Portable/self-contained Windows executable
 * Separate writable user configuration from bundled application resources
 
-Keyboard emulation is intentionally not enabled in the current release. The
-keyboard target remains reserved for a future implementation; controller
-hotkeys and media/custom commands are available independently.
+The physical-controller-to-keyboard mapping target remains reserved for future
+work. This is separate from **phone-to-PC remote keyboard input**, which is
+available through the companion phone client's Remote screen after explicit
+permission is enabled on the PC.
 
 ## Download
 
@@ -101,7 +102,7 @@ However, the **ViGEmBus driver itself may need to be installed separately**, esp
 ### For mouse control and hotkeys
 
 If you only use mouse mode or controller hotkeys, the virtual gamepad driver is
-not required. Keyboard emulation itself is not enabled in the current release.
+not required. Direct physical-controller-to-keyboard mapping is not enabled; phone remote-keyboard input is a separate feature and requires its PC permission.
 
 ## Quick Start
 
@@ -208,20 +209,61 @@ Custom controller hotkeys can be configured to trigger actions from controller i
 
 Hotkeys can be used independently of standard controller mappings and are stored in the application's persistent configuration.
 
-## Remote Gamepad Support
+## Phone-to-PC Remote Control
 
-InputBridge-Gamepad2XInput includes a remote input server for the companion
-phone client. After pairing a phone, choose **Emulate** for an XInput gamepad or
-**Mouse** for direct mouse output in that phone's row on the Server page. The
-phone's **Mouse** tab provides a touchpad, held left/right/middle buttons,
-scroll controls, and adjustable touch sensitivity. Drag with one finger to move
-the pointer, tap for a left click, and swipe with two fingers to scroll. Tap to
-click can be disabled, and the mouse sensitivity and tap setting are saved on
-the phone. To send mouse input, select **Mouse** for that phone in the desktop
-Server page.
+The companion Kivy client remains a separate application at
+`phone_client_with_auth.py`. The existing **Gamepad** and **Mouse** screens
+continue to send controller and touchpad state; use the desktop Server page to
+select **Emulate** or **Mouse** for the connected phone.
 
-The phone and PC must be on the same reachable network, the desktop server must
-be running, and the phone must be paired with the desktop application.
+### Secure connection and first pairing
+
+1. Install the updated desktop dependencies and start InputBridge.
+2. Open the desktop **Server** page and start the server. It creates a persistent
+   TLS certificate and displays its SHA-256 fingerprint.
+3. On the phone, open **Connect**, enter the PC's IP address and port (default
+   `5000`), and paste the complete fingerprint shown on the PC. Compare the
+   value carefully. The phone verifies the certificate fingerprint before it
+   sends device identity or pairing information.
+4. Tap **Connect**. If the phone is not trusted yet, copy the short pairing code
+   shown beside the connected client on the PC into the phone and submit it.
+5. Open **Remote** and refresh PC status. On the PC, explicitly enable the
+   individual remote-action permissions required by your workflow.
+
+The TLS certificate and private key are stored in the desktop app's writable
+`remote_security/` data directory. The server fingerprint is saved on the phone
+per host and port; later connections use that pin. If the PC certificate is
+replaced, compare and enter the newly displayed fingerprint deliberately. Do not
+accept a fingerprint sent through an untrusted channel.
+
+### Remote actions currently implemented
+
+* Remote text input, common special keys, modifier keys, and allowlisted shortcuts.
+* System media keys for volume, mute, playback, previous/next track, and stop.
+* Explicit clipboard send/read actions (automatic background clipboard
+  synchronization is not implemented).
+* Fixed, approved app shortcuts (browser, File Explorer, Calculator, Notepad,
+  and the Downloads folder); arbitrary shell commands are not accepted.
+* Presentation key controls, PC name/OS/local-time status, and permission-gated
+  power actions. Disruptive power actions require confirmation on the phone.
+* A desktop permission panel. All remote-action permissions, including power,
+  start disabled and must be enabled by the PC user.
+
+### Current scope and compatibility
+
+This update changes the remote transport from raw TCP to TLS. **The desktop
+server and phone client must be updated together**; an older phone client that
+expects an unencrypted connection will not connect to the updated server.
+The existing pairing code still establishes device trust after the TLS pin is
+verified. The TLS certificate pin provides transport identity, while the
+pairing flow provides the app's trusted-device authorization.
+
+Automatic LAN discovery, automatic reconnection, bidirectional file transfers,
+URL sharing/history, screenshots/live screen preview, Windows notification
+forwarding, battery/CPU/RAM telemetry, custom user-defined app shortcuts, and
+a dedicated presentation UI are not implemented by this milestone and are not
+advertised as available features. Clipboard synchronization is explicit only;
+there is no background clipboard polling.
 
 ## Configuration Files
 

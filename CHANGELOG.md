@@ -3,6 +3,39 @@
 All notable user-facing changes to InputBridge-Gamepad2XInput are documented
 here. Version numbers follow semantic-versioning conventions where practical.
 
+## [Unreleased]
+
+### Phone remote-control foundation
+
+- Added a versioned, bounded request/response schema for allowlisted remote
+  actions while preserving the existing gamepad and touchpad state payload.
+- Added a per-installation TLS identity on the desktop and SHA-256 certificate
+  pin verification on the phone. The desktop exposes the fingerprint needed
+  for first-time connection setup; both clients must be updated together.
+- Added PC-side permission controls. All remote-action permissions default to
+  disabled; power actions additionally require confirmation on the phone.
+- Added remote keyboard/text input, special keys and approved shortcuts,
+  Windows media keys, explicit clipboard send/read, approved app launching,
+  presentation key commands, and PC status information.
+- Added bounded response frames, request IDs, server-side input validation,
+  timeout/error feedback, and cleanup of held remote modifiers and controller
+  state when a session ends.
+- Added protocol, action-dispatch, TLS identity, and saved-fingerprint tests.
+- Updated dependencies and both PyInstaller specifications for TLS and clipboard
+  support.
+
+### Scope note
+
+Automatic discovery/reconnection, file transfer, URL sharing, screenshots/live
+screen viewing, notification forwarding, automatic clipboard synchronization,
+system telemetry beyond basic identity/time, and configurable custom shortcuts
+remain future work; they are not represented as implemented here.
+
+### Validation
+
+- Test and compile commands must be run in a Python environment with the
+  project's dependencies before this change is considered verified.
+
 ## [2.0.8] — 2026-09-26
 
 ### What's new
