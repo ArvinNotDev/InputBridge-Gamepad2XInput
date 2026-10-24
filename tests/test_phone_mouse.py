@@ -13,7 +13,13 @@ PHONE_CLIENT_TREE = ast.parse(PHONE_CLIENT_PATH.read_text(encoding="utf-8"))
 _HELPER_NAMES = {
     "clamp",
     "MOUSE_SETTINGS_FILE",
+    "SERVER_FINGERPRINTS_FILE",
     "DEFAULT_MOUSE_SENSITIVITY",
+    "normalize_server_fingerprint",
+    "_fingerprint_key",
+    "load_server_fingerprints",
+    "load_server_fingerprint",
+    "save_server_fingerprint",
     "load_mouse_preferences",
     "save_mouse_preferences",
     "MouseGestureTracker",
@@ -192,3 +198,29 @@ def test_mouse_sender_chunks_large_motion_instead_of_clamping_it_away():
     assert state._send_mouse_state()
     assert sent == [2048, 2048]
     assert state._mouse_pending_x == 1
+
+
+
+def test_server_fingerprint_helpers_round_trip_per_host_and_port(tmp_path):
+    path = tmp_path / "server_fingerprints.json"
+    fingerprint = "ab" * 32
+    save_server_fingerprint("PC.local", 5000, fingerprint.upper(), path)
+    assert load_server_fingerprint("pc.local", 5000, path) == fingerprint
+    assert load_server_fingerprint("pc.local", 5001, path) == ""
+    assert load_server_fingerprints(path) == {"pc.local:5000": fingerprint}
+
+
+def test_server_fingerprint_helpers_reject_invalid_pins_and_ignore_bad_entries(tmp_path):
+    path = tmp_path / "server_fingerprints.json"
+    try:
+        save_server_fingerprint("pc", 5000, "not-a-certificate-pin", path)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Invalid fingerprints must not be persisted")
+    path.write_text(
+        json.dumps({"pc:5000": "ab" * 32, "pc:5001": "short", "other": 7}),
+        encoding="utf-8",
+    )
+    assert load_server_fingerprints(path) == {"pc:5000": "ab" * 32}
+    assert normalize_server_fingerprint("AB:" * 31 + "AB") == "ab" * 32
