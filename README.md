@@ -247,6 +247,16 @@ The mobile client retries a transient TCP/TLS establishment failure up to two
 times automatically, keeps longer TLS-handshake timeouts for slower phones, and
 prevents duplicate connect taps while one attempt is in progress.
 
+### Building the Android phone client
+
+The repository now includes `buildozer.spec` with the mobile entry point and
+`INTERNET`/`CAMERA` manifest permissions. On Linux or macOS (or Linux under
+WSL), install Buildozer and build from the repository root with
+`buildozer android debug`. The generated APK is placed in `bin/`. The spec
+uses python-for-android `v2026.05.09`, which includes the `pyzbar` recipe
+needed for camera QR decoding. Building an APK has not been run as part of this
+change; use the Android build output to verify the toolchain and target device.
+
 ### Remote actions currently implemented
 
 * Remote text input, common special keys, modifier keys, and allowlisted shortcuts.
