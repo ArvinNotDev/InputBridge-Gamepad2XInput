@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QListWidget,
+    QTabBar,
     QWidget,
 )
 
@@ -22,17 +23,23 @@ LANGUAGE_NAMES = {
 
 _TRANSLATIONS = {
     "fa": {
-        "Controller Studio": "🎮 استودیو دسته",
-        "Mobile Controller": "📱 کنترلر موبایل",
-        "Hotkey Mapping": "⌨️ نگاشت میانبرها",
-        "Diagnostics": "🧪 عیب‌یابی ورودی",
-        "Preferences": "⚙️ تنظیمات",
-        "Controller Emulation": "🎮 شبیه‌سازی دسته",
+        "Mobile Controller": "کنترلر موبایل",
+        "Input Test": "تست ورودی",
+        "Controller Emulation": "شبیه‌سازی دسته",
         "Remote Gamepad": "📱 دستهٔ راه دور",
-        "Hotkeys": "⌨️ میانبرها",
+        "Hotkeys": "میانبرها",
         "Profiles": "🗂️ پروفایل‌ها",
         "Test XInput": "🧪 تست XInput",
-        "Settings": "⚙️ تنظیمات",
+        "Settings": "تنظیمات",
+        "Remote action permissions": "مجوزهای کنترل از راه دور",
+        "Keyboard and text": "صفحه‌کلید و متن",
+        "Media and volume": "رسانه و صدا",
+        "Clipboard access": "دسترسی به کلیپ‌بورد",
+        "Approved app shortcuts": "میانبرهای برنامهٔ مجاز",
+        "Presentation controls": "کنترل ارائه",
+        "Power actions (off by default)": "عملیات برق (به‌طور پیش‌فرض خاموش)",
+        "TLS fingerprint: start the server to create this PC's identity.": "اثر انگشت TLS: برای ساخت هویت این رایانه، سرور را شروع کنید.",
+        "TLS SHA-256 fingerprint — enter this exact value on the phone before pairing:": "اثر انگشت SHA-256 گواهی — پیش از جفت‌سازی، همین مقدار را در گوشی وارد کنید:",
         "About": "ℹ️ دربارهٔ برنامه",
         "About": "ℹ️ دربارهٔ برنامه",
         "Quit": "🚪 خروج",
@@ -161,17 +168,23 @@ _TRANSLATIONS = {
         "Español": "اسپانیایی",
     },
     "es": {
-        "Controller Studio": "🎮 Centro de mandos",
-        "Mobile Controller": "📱 Mando móvil",
-        "Hotkey Mapping": "⌨️ Asignación de atajos",
-        "Diagnostics": "🧪 Diagnóstico",
-        "Preferences": "⚙️ Preferencias",
-        "Controller Emulation": "🎮 Emulación de mandos",
+        "Mobile Controller": "Mando móvil",
+        "Input Test": "Prueba de entrada",
+        "Controller Emulation": "Emulación de mandos",
         "Remote Gamepad": "📱 Gamepad remoto",
-        "Hotkeys": "⌨️ Atajos",
+        "Hotkeys": "Atajos",
         "Profiles": "🗂️ Perfiles",
         "Test XInput": "🧪 Probar XInput",
-        "Settings": "⚙️ Ajustes",
+        "Settings": "Ajustes",
+        "Remote action permissions": "Permisos de control remoto",
+        "Keyboard and text": "Teclado y texto",
+        "Media and volume": "Multimedia y volumen",
+        "Clipboard access": "Acceso al portapapeles",
+        "Approved app shortcuts": "Accesos a aplicaciones aprobadas",
+        "Presentation controls": "Controles de presentación",
+        "Power actions (off by default)": "Acciones de energía (desactivadas por defecto)",
+        "TLS fingerprint: start the server to create this PC's identity.": "Huella TLS: inicia el servidor para crear la identidad de este PC.",
+        "TLS SHA-256 fingerprint — enter this exact value on the phone before pairing:": "Huella SHA-256 TLS: introduce este valor exacto en el teléfono antes de emparejar.",
         "About": "ℹ️ Acerca de",
         "About": "ℹ️ Acerca de",
         "Quit": "🚪 Salir",
@@ -310,6 +323,14 @@ def _translate_widget(widget: QWidget, language: str) -> None:
                 item_source = item.text()
                 item.setData(Qt.UserRole + 1000, item_source)
             item.setText(tr(item_source, language))
+
+    if isinstance(widget, QTabBar):
+        for index in range(widget.count()):
+            tab_source = widget.tabData(index)
+            if tab_source is None:
+                tab_source = widget.tabText(index)
+                widget.setTabData(index, tab_source)
+            widget.setTabText(index, tr(tab_source, language))
 
 
 def apply_translations(root: QWidget, language: str) -> None:

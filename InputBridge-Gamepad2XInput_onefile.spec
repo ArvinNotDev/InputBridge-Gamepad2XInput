@@ -25,6 +25,10 @@ hiddenimports = [
     "vgamepad.win.virtual_gamepad",
     "keyboard",
     "pyautogui",
+    "pyperclip",
+    "cryptography.hazmat.bindings._rust",
+    "qrcode",
+    "qrcode.image.pil",
 ]
 
 

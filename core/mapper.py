@@ -310,10 +310,21 @@ class Mapper:
 
         return percent, is_charging
 
-    def _battery_report_index(self, configured_index):
-        """The BT full report has a two-byte header; USB has a one-byte header."""
+    def _battery_report_index(self, configured_index, report=None):
+        """Resolve the battery byte using the report ID before transport metadata."""
         if self.controller_type != "Dualsense":
             return configured_index
+
+        # Use the actual HID input report when available: DualSense USB uses
+        # report ID 0x01 (one-byte header), while Bluetooth uses 0x31 (two-byte
+        # header). Transport metadata can be missing or stale when the cable is
+        # connected, so it should only be a fallback.
+        if report:
+            report_id = report[0]
+            if report_id == 0x01:
+                return max(0, configured_index - 1)
+            if report_id == 0x31:
+                return configured_index
 
         transport = getattr(self.controller, "transport", None)
         if transport == 1 or str(transport) == "1":  # HIDAPI USB bus type
@@ -364,7 +375,7 @@ class Mapper:
         if battery_percent_cfg.get("byte") is not None:
             raw_battery = self._read_byte_safe(
                 report,
-                self._battery_report_index(battery_percent_cfg.get("byte")),
+                self._battery_report_index(battery_percent_cfg.get("byte"), report=report),
             )
             battery_percent, is_charging = self._interpret_battery(raw_battery)
             self._publish_battery(battery_percent, is_charging)

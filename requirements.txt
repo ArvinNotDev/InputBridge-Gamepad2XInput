@@ -8,3 +8,6 @@ hidapi
 pyautogui
 keyboard
 pyinstaller>=6.11
+cryptography>=42.0
+pyperclip>=1.8.2
+qrcode[pil]>=7.4

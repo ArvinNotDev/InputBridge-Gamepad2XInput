@@ -195,3 +195,8 @@ profiles/user/
 
 # UV (Uncomment if using UV)
 # uv.lock
+
+# InputBridge secure remote-control runtime state
+server_fingerprints.json
+remote_permissions.json
+remote_security/

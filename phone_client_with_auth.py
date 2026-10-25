@@ -9,6 +9,9 @@ import uuid
 import json
 import math
 import socket
+import ssl
+import hashlib
+import hmac
 import tempfile
 import threading
 import time
@@ -32,6 +35,11 @@ from kivy.uix.widget import Widget
 from kivy.uix.popup import Popup
 
 try:
+    from kivy.uix.camera import Camera
+except Exception:
+    Camera = None
+
+try:
     from plyer import accelerometer
 except Exception:
     accelerometer = None
@@ -41,19 +49,24 @@ UUID_FILE = "gamepad_uuid.txt"
 LAST_IP_FILE = "last_ip.txt"
 NAME_FILE = "device_name.txt"
 MOUSE_SETTINGS_FILE = "mouse_settings.json"
+SERVER_FINGERPRINTS_FILE = "server_fingerprints.json"
+REMOTE_PROTOCOL_VERSION = 1
+REMOTE_MAX_FRAME_BYTES = 16 * 1024
+PAIRING_QR_SCHEMA = "inputbridge-pairing"
+PAIRING_QR_VERSION = 1
 DEFAULT_MOUSE_SENSITIVITY = 1.8
 
 
 THEME = {
-    "bg":          (0.07, 0.09, 0.12, 1),
-    "surface":     (0.11, 0.14, 0.19, 1),
-    "surface2":    (0.15, 0.18, 0.24, 1),
-    "border":      (0.22, 0.28, 0.38, 1),
-    "text":        (0.95, 0.97, 1.00, 1),
-    "muted":       (0.68, 0.74, 0.84, 1),
-    "subtle":      (0.48, 0.54, 0.64, 1),
-    "accent":      (0.22, 0.60, 1.00, 1),
-    "accent2":     (0.96, 0.62, 0.18, 1),
+    "bg":          (0.035, 0.052, 0.082, 1),
+    "surface":     (0.075, 0.105, 0.16, 1),
+    "surface2":    (0.105, 0.145, 0.21, 1),
+    "border":      (0.19, 0.27, 0.39, 1),
+    "text":        (0.96, 0.975, 1.00, 1),
+    "muted":       (0.70, 0.77, 0.88, 1),
+    "subtle":      (0.50, 0.58, 0.70, 1),
+    "accent":      (0.22, 0.66, 0.98, 1),
+    "accent2":     (0.58, 0.43, 0.96, 1),
     "success":     (0.20, 0.74, 0.42, 1),
     "danger":      (0.92, 0.28, 0.30, 1),
     "warn":        (0.94, 0.74, 0.16, 1),
@@ -137,6 +150,106 @@ def save_name(name):
     except Exception:
         pass
 
+
+
+
+def normalize_server_fingerprint(value):
+    """Normalize a displayed SHA-256 certificate pin."""
+    if not isinstance(value, str):
+        return ""
+    normalized = "".join(c for c in value.lower() if c in "0123456789abcdef")
+    return normalized if len(normalized) == 64 else ""
+
+
+def parse_pairing_qr_payload(raw_payload):
+    """Validate an InputBridge pairing QR and return its endpoint and TLS pin."""
+    if isinstance(raw_payload, bytes):
+        try:
+            raw_payload = raw_payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+    if not isinstance(raw_payload, str) or len(raw_payload) > 2048:
+        return None
+    try:
+        payload = json.loads(raw_payload)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("schema") != PAIRING_QR_SCHEMA:
+        return None
+    if type(payload.get("version")) is not int or payload["version"] != PAIRING_QR_VERSION:
+        return None
+
+    host = payload.get("host")
+    port = payload.get("port")
+    fingerprint = normalize_server_fingerprint(payload.get("tls_sha256"))
+    if (
+        not isinstance(host, str)
+        or not host
+        or len(host) > 253
+        or any(not (char.isalnum() or char in ".-") for char in host)
+        or host.startswith(".")
+        or host.endswith(".")
+        or type(port) is not int
+        or not 1 <= port <= 65535
+        or not fingerprint
+    ):
+        return None
+    return {"host": host, "port": str(port), "fingerprint": fingerprint}
+
+
+def _fingerprint_key(host, port):
+    return f"{str(host).strip().lower()}:{int(port)}"
+
+
+def load_server_fingerprints(path=SERVER_FINGERPRINTS_FILE):
+    try:
+        with open(path, "r", encoding="utf-8") as stream:
+            stored = json.load(stream)
+        if not isinstance(stored, dict):
+            return {}
+        return {
+            str(key): normalize_server_fingerprint(value)
+            for key, value in stored.items()
+            if isinstance(key, str) and normalize_server_fingerprint(value)
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def load_server_fingerprint(host, port, path=SERVER_FINGERPRINTS_FILE):
+    try:
+        return load_server_fingerprints(path).get(_fingerprint_key(host, port), "")
+    except (TypeError, ValueError):
+        return ""
+
+
+def save_server_fingerprint(host, port, fingerprint, path=SERVER_FINGERPRINTS_FILE):
+    """Atomically persist a pinned certificate for one host/port pair."""
+    fingerprint = normalize_server_fingerprint(fingerprint)
+    if not fingerprint:
+        raise ValueError("A valid SHA-256 server fingerprint is required")
+    stored = load_server_fingerprints(path)
+    stored[_fingerprint_key(host, port)] = fingerprint
+    directory = os.path.dirname(os.fspath(path)) or "."
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=directory,
+            prefix="server_fingerprints.", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary_path = stream.name
+            json.dump(stored, stream, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except OSError:
+                pass
 
 def load_mouse_preferences(path=MOUSE_SETTINGS_FILE):
     """Load and sanitize mouse preferences, falling back safely on bad data."""
@@ -920,8 +1033,11 @@ class AppState:
         self.connect_screen = None
         self.control_screen = None
         self.mouse_screen = None
+        self.remote_screen = None
         self.settings_screen = None
         self.keyboard_screen = None
+        self._pending_remote_lock = threading.RLock()
+        self._pending_remote_requests = {}
 
         self._periodic_send_ev = Clock.schedule_interval(
             self.periodic_send,
@@ -935,9 +1051,9 @@ class AppState:
 
     # -------------------- Networking --------------------
 
-    def request_connect(self, ip, port_text, name):
+    def request_connect(self, ip, port_text, name, fingerprint=None):
         if self.connected:
-            self.disconnect()
+            self._ui_status("Already connected. Disconnect before connecting to another PC.")
             return
 
         if self.authenticating:
@@ -966,13 +1082,26 @@ class AppState:
             self._ui_status("Invalid IP or device name")
             return
 
+        submitted_fingerprint = (fingerprint or "").strip()
+        if submitted_fingerprint:
+            expected_fingerprint = normalize_server_fingerprint(submitted_fingerprint)
+            if not expected_fingerprint:
+                self._ui_status("The PC fingerprint must be a 64-character SHA-256 value")
+                return
+        else:
+            expected_fingerprint = load_server_fingerprint(ip, port)
+        if not expected_fingerprint:
+            self._ui_status(
+                "Enter the PC TLS fingerprint shown in the desktop server window. "
+                "This verifies the PC before pairing."
+            )
+            return
+
         save_last_ip(ip)
         save_name(name)
 
         with self._connection_lock:
-            if self.connected:
-                return
-            if self.authenticating:
+            if self.connected or self.authenticating:
                 self._ui_status("Already connecting...")
                 return
             self.device_name = name
@@ -987,77 +1116,131 @@ class AppState:
 
         threading.Thread(
             target=self._connect_thread,
-            args=(ip, port, generation),
+            args=(ip, port, generation, expected_fingerprint),
             daemon=True,
         ).start()
 
-    def _connect_thread(self, ip, port, generation):
-        s = None
+    def _connect_thread(self, ip, port, generation, expected_fingerprint):
+        raw_socket = None
+        secure_socket = None
         try:
-            s = socket.socket(
-                socket.AF_INET,
-                socket.SOCK_STREAM,
-            )
-
-            s.settimeout(5.0)
-
-            s.connect(
-                (ip, port)
-            )
-
+            tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            tls_context.check_hostname = False
+            tls_context.verify_mode = ssl.CERT_NONE
             try:
-                s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            except OSError:
+                tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+            except AttributeError:
                 pass
 
-            s.settimeout(1.0)
+            last_error = None
+            for attempt in range(3):
+                with self._connection_lock:
+                    if generation != self._connection_generation or not self.authenticating:
+                        return
+
+                try:
+                    raw_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    # Short TCP timeout makes a stale server address fail quickly;
+                    # TLS gets a longer timeout for slower phones and busy PCs.
+                    raw_socket.settimeout(3.5)
+                    raw_socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                    try:
+                        raw_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    except OSError:
+                        pass
+                    raw_socket.connect((ip, port))
+                    raw_socket.settimeout(8.0)
+
+                    secure_socket = tls_context.wrap_socket(raw_socket, server_hostname=ip)
+                    raw_socket = None
+                    certificate_der = secure_socket.getpeercert(binary_form=True)
+                    actual_fingerprint = hashlib.sha256(certificate_der).hexdigest()
+                    if not hmac.compare_digest(actual_fingerprint, expected_fingerprint):
+                        raise ValueError(
+                            "PC certificate fingerprint mismatch. Scan the QR shown on the PC "
+                            "again or compare the desktop fingerprint. The saved pin was not changed."
+                        )
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    for candidate in (secure_socket, raw_socket):
+                        if candidate is not None:
+                            try:
+                                candidate.close()
+                            except Exception:
+                                pass
+                    secure_socket = None
+                    raw_socket = None
+
+                    # Never retry a pin mismatch or a local/programming error.
+                    if isinstance(exc, ValueError) or not isinstance(
+                        exc, (OSError, socket.timeout, ssl.SSLError)
+                    ):
+                        raise
+                    if attempt >= 2:
+                        raise
+                    with self._connection_lock:
+                        is_current = (
+                            generation == self._connection_generation
+                            and self.authenticating
+                        )
+                    if not is_current:
+                        return
+                    time.sleep(0.35 * (attempt + 1))
+
+            if secure_socket is None:
+                raise last_error or ConnectionError("Could not establish a secure PC connection")
+
+            save_server_fingerprint(ip, port, actual_fingerprint)
+            secure_socket.settimeout(2.0)
+
             with self._connection_lock:
                 if (
                     generation != self._connection_generation
                     or not self.authenticating
                 ):
-                    s.close()
+                    secure_socket.close()
                     return
-                self.sock = s
+                self.sock = secure_socket
                 self.connected = True
                 self.authenticating = False
                 self._rx_stop.clear()
 
             Clock.schedule_once(
-                lambda dt, g=generation: self._on_connected_ui(
-                    True, generation=g
-                ),
+                lambda dt, g=generation: self._on_connected_ui(True, generation=g),
                 0,
             )
-
             self._rx_thread = threading.Thread(
                 target=self._rx_loop,
-                args=(generation, s),
+                args=(generation, secure_socket),
+                name="RemoteResponseReceiver",
                 daemon=True,
             )
-
             self._rx_thread.start()
-            self._send(self.build_state_message(), generation=generation, sock=s)
+            if not self._send(self.build_state_message(), generation=generation, sock=secure_socket):
+                self._disconnect_session(
+                    generation, secure_socket, "Connected, but the initial state could not be sent"
+                )
 
-        except Exception:
-            try:
-                if s is not None:
-                    s.close()
-            except Exception:
-                pass
-
+        except Exception as exc:
+            for candidate in (secure_socket, raw_socket):
+                if candidate is not None:
+                    try:
+                        candidate.close()
+                    except Exception:
+                        pass
             with self._connection_lock:
                 is_current = generation == self._connection_generation
                 if is_current:
-                    if self.sock is s:
+                    if self.sock is secure_socket or self.sock is raw_socket:
                         self.sock = None
                     self.connected = False
                     self.authenticating = False
-
             if is_current:
+                detail = str(exc).strip() or "Connection failed"
                 Clock.schedule_once(
-                    lambda dt, g=generation: self._on_connected_ui(
-                        False, "Connection failed", generation=g
+                    lambda dt, g=generation, m=detail: self._on_connected_ui(
+                        False, m, generation=g
                     ),
                     0,
                 )
@@ -1076,6 +1259,8 @@ class AppState:
                 "connected" if connected else "disconnected",
                 message,
             )
+            if connected:
+                self.connect_screen.show_status("Secure TLS connection established. Pairing may still be required.")
 
         if self.control_screen:
             self.control_screen.refresh_top_bar()
@@ -1083,6 +1268,8 @@ class AppState:
             self.mouse_screen.update_status()
         if self.keyboard_screen:
             self.keyboard_screen.update_status()
+        if self.remote_screen:
+            self.remote_screen.update_status()
 
         if not connected:
             self._stop_gyro_for_disconnect()
@@ -1124,6 +1311,7 @@ class AppState:
         )
 
     def _rx_loop(self, generation, sock):
+        buffer = bytearray()
         try:
             while not self._rx_stop.is_set():
                 with self._connection_lock:
@@ -1135,14 +1323,40 @@ class AppState:
                 if not is_current:
                     break
                 try:
-                    data = sock.recv(2048)
-
+                    data = sock.recv(4096)
                     if not data:
                         break
-
+                    buffer.extend(data)
+                    while b"\n" in buffer:
+                        newline = buffer.find(b"\n")
+                        if newline > REMOTE_MAX_FRAME_BYTES:
+                            return
+                        raw_line = bytes(buffer[:newline]).strip()
+                        del buffer[:newline + 1]
+                        if not raw_line:
+                            continue
+                        try:
+                            message = json.loads(raw_line.decode("utf-8"))
+                        except (UnicodeDecodeError, json.JSONDecodeError):
+                            continue
+                        if (
+                            isinstance(message, dict)
+                            and message.get("message_type") == "remote_response"
+                            and message.get("protocol_version") == REMOTE_PROTOCOL_VERSION
+                            and isinstance(message.get("request_id"), str)
+                            and isinstance(message.get("ok"), bool)
+                        ):
+                            with self._pending_remote_lock:
+                                self._pending_remote_requests.pop(message["request_id"], None)
+                            Clock.schedule_once(
+                                lambda dt, response=message: self._apply_remote_response(response),
+                                0,
+                            )
+                    if len(buffer) > REMOTE_MAX_FRAME_BYTES:
+                        return
                 except socket.timeout:
+                    self._expire_remote_requests()
                     continue
-
                 except Exception:
                     break
 
@@ -1156,6 +1370,68 @@ class AppState:
 
     def _disconnect_if_current(self, generation, sock):
         self._disconnect_session(generation, sock, "Disconnected")
+
+    def _expire_remote_requests(self):
+        now = time.monotonic()
+        expired = []
+        with self._pending_remote_lock:
+            for request_id, pending in list(self._pending_remote_requests.items()):
+                if now - pending["sent_at"] >= 12.0:
+                    expired.append((request_id, pending["action"]))
+                    self._pending_remote_requests.pop(request_id, None)
+        for request_id, action in expired:
+            response = {
+                "message_type": "remote_response",
+                "protocol_version": REMOTE_PROTOCOL_VERSION,
+                "request_id": request_id,
+                "action": action,
+                "ok": False,
+                "error": "Request timed out. Check the PC connection and permissions.",
+            }
+            Clock.schedule_once(
+                lambda dt, item=response: self._apply_remote_response(item),
+                0,
+            )
+
+    def _apply_remote_response(self, response):
+        screen = getattr(self, "remote_screen", None)
+        if screen is not None:
+            screen.handle_response(response)
+
+    def send_remote_action(self, action, payload=None):
+        """Send one validated-by-server action request over the pinned TLS session."""
+        allowed = {
+            "keyboard_text", "keyboard_key", "keyboard_shortcut", "keyboard_modifier",
+            "clipboard_set", "clipboard_get", "media", "pc_status", "launch_app",
+            "presentation", "power_action",
+        }
+        if action not in allowed or not self.connected:
+            return None
+        request_id = uuid.uuid4().hex
+        request = {
+            "protocol_version": REMOTE_PROTOCOL_VERSION,
+            "request_id": request_id,
+            "action": action,
+            "payload": payload or {},
+        }
+        message = self.build_state_message()
+        message["remote_request"] = request
+        with self._pending_remote_lock:
+            if len(self._pending_remote_requests) >= 32:
+                oldest = min(
+                    self._pending_remote_requests,
+                    key=lambda key: self._pending_remote_requests[key]["sent_at"],
+                )
+                self._pending_remote_requests.pop(oldest, None)
+            self._pending_remote_requests[request_id] = {
+                "sent_at": time.monotonic(),
+                "action": action,
+            }
+        if not self._send(message):
+            with self._pending_remote_lock:
+                self._pending_remote_requests.pop(request_id, None)
+            return None
+        return request_id
 
     def on_submit_code(self, code):
         code = (code or "").strip()
@@ -1217,6 +1493,8 @@ class AppState:
             self._mouse_pending_scroll = 0
             for button in self.mouse_buttons:
                 self.mouse_buttons[button] = 0
+        with self._pending_remote_lock:
+            self._pending_remote_requests.clear()
 
         if old_sock is not None:
             try:
@@ -1241,6 +1519,8 @@ class AppState:
         target_sock = None
         try:
             data = (json.dumps(obj) + "\n").encode("utf-8")
+            if not data or len(data) > REMOTE_MAX_FRAME_BYTES:
+                return False
             with self._connection_lock:
                 expected_generation = (
                     self._connection_generation if generation is None else generation
@@ -1281,6 +1561,8 @@ class AppState:
                 **self.mouse_buttons,
             }
         return {
+            "protocol_version": REMOTE_PROTOCOL_VERSION,
+            "message_type": "state",
             "uuid": self.device_uuid,
             "name": self.device_name or "UnknownDevice",
             "mode": self.mode,
@@ -1712,75 +1994,33 @@ class AppState:
 
 
 class TabBar(BoxLayout):
-    def __init__(self, app_ref=None, **kwargs):
-        kwargs.setdefault(
-            "size_hint_y",
-            None,
-        )
-        kwargs.setdefault(
-            "height",
-            dp(56),
-        )
+    """Compact bottom navigation with a clearly selected, touch-friendly tab."""
 
+    def __init__(self, app_ref=None, **kwargs):
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(62))
         super().__init__(**kwargs)
 
         self.app_ref = app_ref
         self.tabs = {}
 
         with self.canvas.before:
-            Color(*THEME["surface"])
-
-            self._bg = RoundedRectangle(
-                pos=self.pos,
-                size=self.size,
-                radius=[0],
-            )
-
+            Color(*THEME["bg"])
+            self._bg = RoundedRectangle(pos=self.pos, size=self.size, radius=[0])
             Color(*THEME["border"])
+            self._topline = Line(points=[], width=1)
 
-            self._topline = Line(
-                points=[],
-                width=1,
-            )
-
-        self.bind(
-            pos=self._redraw,
-            size=self._redraw,
-        )
+        self.bind(pos=self._redraw, size=self._redraw)
 
         for name, icon, label in (
-            (
-                "control",
-                "\U0001F3AE",
-                "Controller",
-            ),
-            (
-                "mouse",
-                "\U0001F5B1",
-                "Mouse",
-            ),
-            (
-                "keyboard",
-                "\u2328\ufe0f",
-                "Keyboard",
-            ),
-            (
-                "connect",
-                "\U0001F4E1",
-                "Connect",
-            ),
-            (
-                "settings",
-                "\u2699\ufe0f",
-                "Settings",
-            ),
+            ("control", "🎮", "Gamepad"),
+            ("mouse", "🖱️", "Mouse"),
+            ("keyboard", "⌨️", "Keyboard"),
+            ("remote", "💻", "Remote"),
+            ("connect", "📡", "Connect"),
+            ("settings", "⚙️", "Settings"),
         ):
-            tab = self._make_tab(
-                name,
-                icon,
-                label,
-            )
-
+            tab = self._make_tab(name, icon, label)
             self.tabs[name] = tab
             self.add_widget(tab)
 
@@ -1790,50 +2030,34 @@ class TabBar(BoxLayout):
             markup=True,
             background_normal="",
             background_down="",
-            background_color=THEME["surface"],
+            background_color=THEME["bg"],
             color=THEME["muted"],
-            font_size=sp(13),
+            font_size=sp(12),
+            bold=False,
             size_hint_x=1,
         )
-
         tab._name = name
         tab._underline_color = THEME["border"]
-        tab._underline_width = 1.0
+        tab._underline_width = 0.7
 
         with tab.canvas.after:
             Color(*tab._underline_color)
+            tab._underline = Line(points=[], width=tab._underline_width)
 
-            tab._underline = Line(
-                points=[],
-                width=tab._underline_width,
-            )
-
-        # FIX:
-        # _draw_underline is a TabBar method, not a Button method.
-        tab.bind(
-            pos=self._draw_underline,
-            size=self._draw_underline,
-        )
-
-        tab.bind(
-            on_press=lambda inst, n=name:
-                self._on_tab(n)
-        )
-
+        tab.bind(pos=self._draw_underline, size=self._draw_underline)
+        tab.bind(on_press=lambda _inst, tab_name=name: self._on_tab(tab_name))
         return tab
 
     def _draw_underline(self, widget, *args):
         widget.canvas.after.clear()
-
         with widget.canvas.after:
             Color(*widget._underline_color)
-
             widget._underline = Line(
                 points=[
-                    widget.x,
-                    widget.y + dp(1),
-                    widget.x + widget.width,
-                    widget.y + dp(1),
+                    widget.x + dp(12),
+                    widget.y + dp(2),
+                    widget.x + widget.width - dp(12),
+                    widget.y + dp(2),
                 ],
                 width=widget._underline_width,
             )
@@ -1844,34 +2068,21 @@ class TabBar(BoxLayout):
 
     def set_active(self, name):
         for key, tab in self.tabs.items():
-            if key == name:
-                tab.color = THEME["accent"]
-                tab._underline_color = THEME["accent"]
-                tab._underline_width = 3.0
-            else:
-                tab.color = THEME["muted"]
-                tab._underline_color = THEME["border"]
-                tab._underline_width = 1.0
-
-            # FIX:
-            # _draw_underline belongs to TabBar.
+            active = key == name
+            tab.color = THEME["accent"] if active else THEME["muted"]
+            tab.background_color = THEME["surface2"] if active else THEME["bg"]
+            tab.bold = active
+            tab._underline_color = THEME["accent"] if active else THEME["border"]
+            tab._underline_width = 2.5 if active else 0.7
             self._draw_underline(tab)
 
     def _redraw(self, *args):
         self._bg.pos = self.pos
         self._bg.size = self.size
-
         self._topline.points = [
-            self.x,
-            self.y + self.height,
-            self.x + self.width,
-            self.y + self.height,
+            self.x, self.y + self.height,
+            self.x + self.width, self.y + self.height,
         ]
-
-
-# ============================================================
-# Screens
-# ============================================================
 
 
 class ControlScreen(Screen):
@@ -2756,6 +2967,546 @@ class KeyboardScreen(Screen):
         self.status_label.text = "Connected" if connected else "Disconnected"
         self.status_label.color = THEME["success"] if connected else THEME["danger"]
 
+class RemoteScreen(Screen):
+    """PC remote controls backed by authenticated server requests and acknowledgements."""
+
+    def __init__(self, state, **kwargs):
+        self.state = state
+        self.capabilities = {
+            "pc_status": True,
+            "keyboard": False,
+            "media": False,
+            "clipboard": False,
+            "app_launch": False,
+            "presentation": False,
+            "power": False,
+        }
+        self._capability_controls = []
+        super().__init__(**kwargs)
+
+        scroll = ScrollView(bar_width=0, do_scroll_x=False, do_scroll_y=True)
+        content = BoxLayout(
+            orientation="vertical",
+            spacing=dp(9),
+            size_hint_y=None,
+            padding=(dp(10), dp(10), dp(10), dp(12)),
+        )
+        content.bind(minimum_height=content.setter("height"))
+        scroll.add_widget(content)
+
+        header = Card(size_hint_y=None, height=dp(154), spacing=dp(6))
+        title_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(30))
+        title_row.add_widget(SectionTitle(text="PC Remote Control"))
+        self.connection_badge = Pill(text="Disconnected")
+        self.connection_badge.set_color(THEME["danger"])
+        title_row.add_widget(self.connection_badge)
+        header.add_widget(title_row)
+        self.pc_info = fit_label(Label(
+            text="Connect to your PC, then refresh its status.",
+            color=THEME["muted"],
+            font_size=sp(12),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(40),
+        ))
+        header.add_widget(self.pc_info)
+        self.refresh_status_button = make_button(
+            "Refresh PC Status", accent=THEME["accent"], height=dp(38)
+        )
+        self.refresh_status_button.bind(on_release=lambda *_: self.refresh_pc_status())
+        header.add_widget(self.refresh_status_button)
+        content.add_widget(header)
+
+        self.result_label = fit_label(Label(
+            text="Remote actions are sent only after the PC connection is authenticated.",
+            color=THEME["muted"],
+            font_size=sp(12),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(38),
+        ))
+        content.add_widget(self.result_label)
+
+        keyboard_card = Card(size_hint_y=None, height=dp(340))
+        keyboard_card.add_widget(SectionTitle(text="Keyboard and Text"))
+        self.text_input = TextInput(
+            text="",
+            hint_text="Type text to send to the active PC application",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(74),
+            background_color=THEME["panel_alt"],
+            foreground_color=THEME["text"],
+            hint_text_color=THEME["subtle"],
+            cursor_color=THEME["accent"],
+            padding=(dp(10), dp(8)),
+        )
+        keyboard_card.add_widget(self.text_input)
+        send_text_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(42), spacing=dp(7))
+        send_text = make_button("Send Text", accent=THEME["accent"], height=dp(42))
+        send_text.bind(on_release=lambda *_: self._request(
+            "keyboard_text", {"text": self.text_input.text}, "keyboard"
+        ))
+        clear_text = make_button("Clear", height=dp(42))
+        clear_text.bind(on_release=lambda *_: setattr(self.text_input, "text", ""))
+        send_text_row.add_widget(send_text)
+        send_text_row.add_widget(clear_text)
+        keyboard_card.add_widget(send_text_row)
+        self._capability_controls.append((send_text, "keyboard"))
+
+        key_grid = GridLayout(
+            cols=4,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(100),
+            row_default_height=dp(45),
+            row_force_default=True,
+        )
+        for label, key in (
+            ("Enter", "ENTER"), ("Tab", "TAB"), ("Esc", "ESCAPE"), ("⌫", "BACKSPACE"),
+            ("←", "LEFT"), ("↑", "UP"), ("↓", "DOWN"), ("→", "RIGHT"),
+        ):
+            button = make_button(label, height=dp(45))
+            button.bind(on_release=lambda _button, k=key: self._request(
+                "keyboard_key", {"key": k}, "keyboard"
+            ))
+            key_grid.add_widget(button)
+            self._capability_controls.append((button, "keyboard"))
+        keyboard_card.add_widget(key_grid)
+        modifiers = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(38))
+        for label, key in (("Ctrl", "CTRL"), ("Shift", "SHIFT"), ("Alt", "ALT"), ("Win", "WIN")):
+            button = make_button(label, height=dp(38))
+            button.bind(
+                on_press=lambda _button, k=key: self._request(
+                    "keyboard_modifier", {"key": k, "pressed": True}, "keyboard"
+                ),
+                on_release=lambda _button, k=key: self._request(
+                    "keyboard_modifier", {"key": k, "pressed": False}, "keyboard"
+                ),
+            )
+            modifiers.add_widget(button)
+            self._capability_controls.append((button, "keyboard"))
+        keyboard_card.add_widget(modifiers)
+        content.add_widget(keyboard_card)
+
+        shortcuts_card = Card(size_hint_y=None, height=dp(220))
+        shortcuts_card.add_widget(SectionTitle(text="Keyboard Shortcuts"))
+        shortcut_grid = GridLayout(
+            cols=3,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(128),
+            row_default_height=dp(38),
+            row_force_default=True,
+        )
+        for label, shortcut in (
+            ("Copy", "copy"), ("Paste", "paste"), ("Cut", "cut"),
+            ("Undo", "undo"), ("Select All", "select_all"), ("Save", "save"),
+            ("Alt + Tab", "alt_tab"), ("Show Desktop", "show_desktop"), ("Find", "find"),
+        ):
+            button = make_button(label, height=dp(38))
+            button.bind(on_release=lambda _button, key=shortcut: self._request(
+                "keyboard_shortcut", {"shortcut": key}, "keyboard"
+            ))
+            shortcut_grid.add_widget(button)
+            self._capability_controls.append((button, "keyboard"))
+        shortcuts_card.add_widget(shortcut_grid)
+        content.add_widget(shortcuts_card)
+
+        media_card = Card(size_hint_y=None, height=dp(152))
+        media_card.add_widget(SectionTitle(text="Media and Volume"))
+        media_grid = GridLayout(
+            cols=4,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(82),
+            row_default_height=dp(38),
+            row_force_default=True,
+        )
+        for label, command in (
+            ("Vol −", "volume_down"), ("Mute", "mute"), ("Vol +", "volume_up"),
+            ("Prev", "previous_track"), ("Play / Pause", "play_pause"),
+            ("Next", "next_track"), ("Stop", "stop"),
+        ):
+            button = make_button(label, height=dp(38))
+            button.bind(on_release=lambda _button, cmd=command: self._request(
+                "media", {"command": cmd}, "media"
+            ))
+            media_grid.add_widget(button)
+            self._capability_controls.append((button, "media"))
+        media_card.add_widget(media_grid)
+        content.add_widget(media_card)
+
+        clipboard_card = Card(size_hint_y=None, height=dp(184))
+        clipboard_card.add_widget(SectionTitle(text="Clipboard Sharing"))
+        self.clipboard_input = TextInput(
+            text="",
+            hint_text="Text to copy to the PC, or text read from the PC",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(78),
+            background_color=THEME["panel_alt"],
+            foreground_color=THEME["text"],
+            hint_text_color=THEME["subtle"],
+            cursor_color=THEME["accent"],
+            padding=(dp(10), dp(8)),
+        )
+        clipboard_card.add_widget(self.clipboard_input)
+        clipboard_buttons = BoxLayout(orientation="horizontal", spacing=dp(6), size_hint_y=None, height=dp(42))
+        clipboard_set = make_button("Copy to PC", accent=THEME["accent"], height=dp(42))
+        clipboard_set.bind(on_release=lambda *_: self._request(
+            "clipboard_set", {"text": self.clipboard_input.text}, "clipboard"
+        ))
+        clipboard_get = make_button("Read PC Clipboard", height=dp(42))
+        clipboard_get.bind(on_release=lambda *_: self._request("clipboard_get", {}, "clipboard"))
+        clipboard_buttons.add_widget(clipboard_set)
+        clipboard_buttons.add_widget(clipboard_get)
+        clipboard_card.add_widget(clipboard_buttons)
+        self._capability_controls.extend(((clipboard_set, "clipboard"), (clipboard_get, "clipboard")))
+        content.add_widget(clipboard_card)
+
+        apps_card = Card(size_hint_y=None, height=dp(104))
+        apps_card.add_widget(SectionTitle(text="Approved Apps"))
+        apps_row = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(44))
+        for label, app_id in (("Browser", "browser"), ("Explorer", "explorer"), ("Calculator", "calculator"), ("Notepad", "notepad")):
+            button = make_button(label, height=dp(44))
+            button.bind(on_release=lambda _button, name=app_id: self._request(
+                "launch_app", {"app": name}, "app_launch"
+            ))
+            apps_row.add_widget(button)
+            self._capability_controls.append((button, "app_launch"))
+        apps_card.add_widget(apps_row)
+        content.add_widget(apps_card)
+
+        presentation_card = Card(size_hint_y=None, height=dp(104))
+        presentation_card.add_widget(SectionTitle(text="Presentation"))
+        presentation_row = BoxLayout(orientation="horizontal", spacing=dp(5), size_hint_y=None, height=dp(44))
+        for label, command in (("Previous", "previous"), ("Next", "next"), ("Start", "start"), ("End", "end"), ("Black", "black_screen")):
+            button = make_button(label, height=dp(44))
+            button.bind(on_release=lambda _button, cmd=command: self._request(
+                "presentation", {"command": cmd}, "presentation"
+            ))
+            presentation_row.add_widget(button)
+            self._capability_controls.append((button, "presentation"))
+        presentation_card.add_widget(presentation_row)
+        content.add_widget(presentation_card)
+
+        power_card = Card(size_hint_y=None, height=dp(150))
+        power_card.add_widget(SectionTitle(text="System Power"))
+        power_grid = GridLayout(
+            cols=3,
+            spacing=dp(5),
+            size_hint_y=None,
+            height=dp(92),
+            row_default_height=dp(42),
+            row_force_default=True,
+        )
+        for label, command in (
+            ("Lock", "lock"), ("Sleep", "sleep"), ("Display Off", "display_off"),
+            ("Log Off", "logoff"), ("Restart", "restart"), ("Shut Down", "shutdown"),
+        ):
+            button = make_button(label, height=dp(42))
+            button.bind(on_release=lambda _button, cmd=command: self._confirm_power_action(cmd))
+            power_grid.add_widget(button)
+            self._capability_controls.append((button, "power"))
+        power_card.add_widget(power_grid)
+        content.add_widget(power_card)
+
+        content.add_widget(Widget(size_hint_y=None, height=dp(6)))
+        self.add_widget(scroll)
+        self.update_status()
+
+    def _request(self, action, payload, capability=None):
+        if not self.state.connected:
+            self.result_label.text = "Not connected. Connect and pair with the PC first."
+            return
+        request_id = self.state.send_remote_action(action, payload)
+        if request_id:
+            self.result_label.text = f"Waiting for PC confirmation: {action.replace('_', ' ')}…"
+        else:
+            self.result_label.text = "The request could not be sent. Check the connection."
+
+    def refresh_pc_status(self):
+        self._request("pc_status", {})
+
+    def update_status(self):
+        connected = bool(self.state.connected)
+        self.connection_badge.text = "Connected" if connected else "Disconnected"
+        self.connection_badge.set_color(THEME["success"] if connected else THEME["danger"])
+        self.refresh_status_button.disabled = not connected
+        for button, capability in self._capability_controls:
+            button.disabled = not connected or not self.capabilities.get(capability, False)
+        if not connected:
+            self.pc_info.text = "Connect to your PC to inspect status and use remote controls."
+            self.capabilities = {
+                "pc_status": True, "keyboard": False, "media": False, "clipboard": False,
+                "app_launch": False, "presentation": False, "power": False,
+            }
+
+    def handle_response(self, response):
+        action = response.get("action", "remote action")
+        if not response.get("ok"):
+            self.result_label.text = f"PC rejected {action.replace('_', ' ')}: {response.get('error', 'Unknown error')}"
+            return
+        result = response.get("result") or {}
+        if action == "pc_status":
+            self.capabilities.update({
+                key: bool(value) for key, value in result.get("capabilities", {}).items()
+                if key in self.capabilities
+            })
+            self.pc_info.text = (
+                f"{result.get('computer_name', 'PC')}  ·  {result.get('operating_system', 'OS unavailable')}\n"
+                f"PC time: {result.get('local_time', 'Unavailable')}"
+            )
+            self.update_status()
+            self.result_label.text = "PC status received from the connected computer."
+        elif action == "clipboard_get":
+            self.clipboard_input.text = result.get("text", "")
+            suffix = " (truncated to 3,000 characters)" if result.get("truncated") else ""
+            self.result_label.text = "PC clipboard received" + suffix
+        else:
+            self.result_label.text = f"PC confirmed: {action.replace('_', ' ')}"
+
+    def _confirm_power_action(self, command):
+        if command == "lock":
+            self._request("power_action", {"command": command}, "power")
+            return
+        descriptions = {
+            "sleep": "Put the PC into sleep mode.",
+            "display_off": "Turn off the PC display.",
+            "logoff": "Sign out of the current Windows session.",
+            "restart": "Restart Windows. Unsaved work may be lost.",
+            "shutdown": "Shut down Windows. Unsaved work may be lost.",
+        }
+        content = BoxLayout(orientation="vertical", spacing=dp(10), padding=dp(12))
+        detail = fit_label(Label(
+            text=descriptions.get(command, "Perform this system action?"),
+            color=THEME["text"], halign="left", valign="middle",
+        ))
+        content.add_widget(detail)
+        buttons = BoxLayout(orientation="horizontal", spacing=dp(8), size_hint_y=None, height=dp(42))
+        cancel = make_button("Cancel", height=dp(42))
+        confirm = make_button("Confirm", accent=THEME["danger"], height=dp(42))
+        buttons.add_widget(cancel)
+        buttons.add_widget(confirm)
+        content.add_widget(buttons)
+        popup = Popup(
+            title="Confirm PC action",
+            content=content,
+            size_hint=(0.88, 0.32),
+            auto_dismiss=False,
+        )
+        cancel.bind(on_release=lambda *_: popup.dismiss())
+        confirm.bind(on_release=lambda *_: (popup.dismiss(), self._request(
+            "power_action", {"command": command}, "power"
+        )))
+        popup.open()
+
+
+class PairingQRScannerPopup(Popup):
+    """Camera-based pairing QR scanner with a paste fallback for minimal builds."""
+
+    def __init__(self, on_pairing, **kwargs):
+        self._on_pairing = on_pairing
+        self._camera = None
+        self._scan_event = None
+        self._decoder = None
+        self._numpy = None
+        self._finished = False
+        try:
+            import numpy as np
+            from pyzbar.pyzbar import decode as decode_barcodes
+            self._numpy = np
+            self._decoder = decode_barcodes
+        except Exception:
+            self._numpy = None
+            self._decoder = None
+
+        root = BoxLayout(
+            orientation="vertical",
+            spacing=dp(9),
+            padding=(dp(12), dp(12), dp(12), dp(12)),
+        )
+        title = fit_label(Label(
+            text="[b]Pair securely with your PC[/b]",
+            markup=True,
+            color=THEME["text"],
+            font_size=sp(18),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(34),
+        ))
+        root.add_widget(title)
+
+        if Camera is not None and self._decoder is not None:
+            try:
+                self._camera = Camera(
+                    index=0,
+                    resolution=(640, 480),
+                    play=False,
+                    size_hint_y=0.72,
+                )
+                root.add_widget(self._camera)
+                scanner_hint = "Point the camera at the QR shown by InputBridge on your PC."
+            except Exception:
+                self._camera = None
+                scanner_hint = "Camera could not be initialized. Paste the scanned QR text below."
+        else:
+            scanner_hint = (
+                "Live QR decoding is not included in this build. Scan the desktop QR "
+                "with a QR reader and paste its complete text below."
+            )
+
+        self.status_label = fit_label(Label(
+            text=scanner_hint,
+            color=THEME["muted"],
+            font_size=sp(12),
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(38),
+        ))
+        root.add_widget(self.status_label)
+
+        self.payload_input = TextInput(
+            text="",
+            hint_text="Paste the complete InputBridge QR text (JSON)",
+            multiline=True,
+            size_hint_y=None,
+            height=dp(68),
+            background_color=THEME["surface2"],
+            foreground_color=THEME["text"],
+            hint_text_color=THEME["subtle"],
+            cursor_color=THEME["accent"],
+            padding=(dp(10), dp(8)),
+        )
+        root.add_widget(self.payload_input)
+
+        actions = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(42),
+        )
+        use_qr_button = make_button(
+            "Use QR Text",
+            accent=THEME["accent"],
+            height=dp(42),
+        )
+        use_qr_button.bind(on_release=self._use_pasted_payload)
+        close_button = make_button("Cancel", height=dp(42))
+        close_button.bind(on_release=lambda *_: self.dismiss())
+        actions.add_widget(use_qr_button)
+        actions.add_widget(close_button)
+        root.add_widget(actions)
+
+        super().__init__(
+            title="Secure pairing",
+            content=root,
+            size_hint=(0.96, 0.88),
+            auto_dismiss=False,
+        )
+        self.bind(on_open=self._start_camera, on_dismiss=self._cleanup)
+
+    def _start_camera(self, *_):
+        if self._camera is None or self._decoder is None:
+            return
+        try:
+            from android.permissions import Permission, request_permissions
+            request_permissions([Permission.CAMERA], self._on_camera_permission_result)
+        except Exception:
+            try:
+                self._camera.play = True
+                self._scan_event = Clock.schedule_interval(self._scan_frame, 0.25)
+            except Exception as exc:
+                self.status_label.text = f"Camera unavailable: {exc}"
+
+    def _on_camera_permission_result(self, permissions, grants):
+        if grants and all(grants):
+            Clock.schedule_once(lambda _dt: self._enable_camera(), 0)
+        else:
+            Clock.schedule_once(
+                lambda _dt: setattr(
+                    self.status_label,
+                    "text",
+                    "Camera permission was denied. Paste the QR text below instead.",
+                ),
+                0,
+            )
+
+    def _enable_camera(self):
+        if self._camera is None or self._finished:
+            return
+        try:
+            self._camera.play = True
+            if self._scan_event is None:
+                self._scan_event = Clock.schedule_interval(self._scan_frame, 0.25)
+        except Exception as exc:
+            self.status_label.text = f"Camera unavailable: {exc}"
+
+    def _scan_frame(self, _dt):
+        if (
+            self._finished
+            or self._camera is None
+            or self._decoder is None
+            or self._numpy is None
+        ):
+            return
+        texture = self._camera.texture
+        if texture is None:
+            return
+        try:
+            width, height = (int(texture.size[0]), int(texture.size[1]))
+            if width < 1 or height < 1:
+                return
+            pixels = self._numpy.frombuffer(texture.pixels, dtype=self._numpy.uint8)
+            pixel_count = width * height
+            channels = pixels.size // pixel_count
+            if channels not in (3, 4):
+                return
+            frame = pixels.reshape((height, width, channels))[:, :, :3]
+            frame = self._numpy.ascontiguousarray(self._numpy.flipud(frame))
+            for barcode in self._decoder(frame):
+                pairing = parse_pairing_qr_payload(getattr(barcode, "data", b""))
+                if pairing:
+                    self._finish(pairing)
+                    return
+        except Exception:
+            # Camera texture formats can differ by platform; keep scanning rather
+            # than dropping the user back to the Connect screen on one bad frame.
+            return
+
+    def _use_pasted_payload(self, *_):
+        pairing = parse_pairing_qr_payload(self.payload_input.text)
+        if not pairing:
+            self.status_label.text = (
+                "That text is not a valid InputBridge pairing QR. "
+                "Paste the complete QR contents, not just the fingerprint."
+            )
+            return
+        self._finish(pairing)
+
+    def _finish(self, pairing):
+        if self._finished:
+            return
+        self._finished = True
+        self._cleanup()
+        self.dismiss()
+        Clock.schedule_once(lambda _dt, data=pairing: self._on_pairing(data), 0)
+
+    def _cleanup(self, *_):
+        if self._scan_event is not None:
+            self._scan_event.cancel()
+            self._scan_event = None
+        if self._camera is not None:
+            try:
+                self._camera.play = False
+            except Exception:
+                pass
+
 
 class ConnectScreen(Screen):
     """Connection, authentication and device identity screen."""
@@ -2840,7 +3591,7 @@ class ConnectScreen(Screen):
 
         subtitle = fit_label(
             Label(
-                text="Gamepad Controller",
+                text="Secure PC connection · Gamepad and remote control",
                 color=THEME["muted"],
                 halign="left",
                 valign="middle",
@@ -2857,70 +3608,57 @@ class ConnectScreen(Screen):
 
         server_card = Card(
             size_hint_y=None,
-            height=dp(214),
+            height=dp(408),
             spacing=dp(8),
         )
 
         server_card.add_widget(
-            SectionTitle(text="Server")
+            SectionTitle(text="Secure PC pairing")
         )
+
+        self.scan_qr_btn = make_button(
+            "Scan Pairing QR",
+            accent=THEME["accent2"],
+            height=dp(42),
+        )
+        self.scan_qr_btn.bind(on_release=self._on_scan_qr)
+        server_card.add_widget(self.scan_qr_btn)
 
         name_row = BoxLayout(
             orientation="horizontal",
             spacing=dp(8),
             size_hint_y=None,
-            height=dp(66),
+            height=dp(62),
         )
-
-        self.name_input = make_text_input(
-            load_name(),
-            "Device name",
-        )
-
-        self.ip_input = make_text_input(
-            load_last_ip(),
-            "Server IP",
-        )
-
-        name_row.add_widget(
-            field_box(
-                "Device Name",
-                self.name_input,
-            )
-        )
-
-        name_row.add_widget(
-            field_box(
-                "Server IP",
-                self.ip_input,
-            )
-        )
-
+        self.name_input = make_text_input(load_name(), "Device name")
+        self.ip_input = make_text_input(load_last_ip(), "Server IP")
+        name_row.add_widget(field_box("Device Name", self.name_input))
+        name_row.add_widget(field_box("Server IP", self.ip_input))
         server_card.add_widget(name_row)
 
         port_row = BoxLayout(
             orientation="horizontal",
             spacing=dp(8),
             size_hint_y=None,
-            height=dp(66),
+            height=dp(60),
         )
-
-        self.port_input = make_text_input(
-            "5000",
-            "Port",
-            input_filter="int",
-        )
-
-        port_row.add_widget(
-            field_box(
-                "Port",
-                self.port_input,
-            )
-        )
-
+        self.port_input = make_text_input("5000", "Port", input_filter="int")
+        port_row.add_widget(field_box("Port", self.port_input))
         port_row.add_widget(Widget())
-
         server_card.add_widget(port_row)
+
+        fingerprint_row = BoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(68),
+        )
+        self.fingerprint_input = make_text_input(
+            load_server_fingerprint(load_last_ip(), 5000),
+            "Paste SHA-256 fingerprint shown on PC",
+        )
+        fingerprint_row.add_widget(field_box("PC TLS Fingerprint", self.fingerprint_input))
+        server_card.add_widget(fingerprint_row)
 
         self.connect_btn = make_button(
             "Connect",
@@ -3102,15 +3840,32 @@ class ConnectScreen(Screen):
 
     # ---------- actions ----------
 
+    def _on_scan_qr(self, *_):
+        PairingQRScannerPopup(self._on_pairing_qr).open()
+
+    def _on_pairing_qr(self, pairing):
+        self.ip_input.text = pairing["host"]
+        self.port_input.text = pairing["port"]
+        self.fingerprint_input.text = pairing["fingerprint"]
+        self.show_status("QR read successfully. Verifying the PC TLS certificate…")
+        self.state.request_connect(
+            pairing["host"],
+            pairing["port"],
+            self.name_input.text.strip() or load_name(),
+            pairing["fingerprint"],
+        )
+
     def _on_connect(self, *_):
         if self.state.connected:
             self.state.disconnect()
+        elif self.state.authenticating:
+            self.show_status("Connection attempt is already in progress…")
         else:
             self.state.request_connect(
                 self.ip_input.text.strip(),
                 self.port_input.text.strip(),
-                self.name_input.text.strip()
-                or load_name(),
+                self.name_input.text.strip() or load_name(),
+                self.fingerprint_input.text.strip(),
             )
 
     def _on_submit_code(self, *_):
@@ -3168,6 +3923,8 @@ class ConnectScreen(Screen):
                 THEME["success"]
             )
 
+            self.connect_btn.disabled = False
+            self.scan_qr_btn.disabled = True
             self.connect_btn.text = "Disconnect"
 
             self.connect_btn._accent_color = (
@@ -3185,8 +3942,10 @@ class ConnectScreen(Screen):
             self.name_input.disabled = True
             self.ip_input.disabled = True
             self.port_input.disabled = True
+            self.fingerprint_input.disabled = True
 
         elif status == "authenticating":
+            self.scan_qr_btn.disabled = True
             self.badge.text = "Connecting"
 
             self.badge.set_color(
@@ -3197,6 +3956,7 @@ class ConnectScreen(Screen):
             self.connect_btn.disabled = True
 
         else:
+            self.scan_qr_btn.disabled = False
             self.badge.text = "Disconnected"
 
             self.badge.set_color(
@@ -3222,6 +3982,7 @@ class ConnectScreen(Screen):
             self.name_input.disabled = False
             self.ip_input.disabled = False
             self.port_input.disabled = False
+            self.fingerprint_input.disabled = False
 
         if message:
             self.show_status(message)
@@ -3658,6 +4419,10 @@ class InputBridgeApp(App):
             self.state,
             name="keyboard",
         )
+        self.state.remote_screen = RemoteScreen(
+            self.state,
+            name="remote",
+        )
 
         self.state.connect_screen = ConnectScreen(
             self.state,
@@ -3683,6 +4448,9 @@ class InputBridgeApp(App):
 
         self.sm.add_widget(
             self.state.keyboard_screen
+        )
+        self.sm.add_widget(
+            self.state.remote_screen
         )
 
         self.sm.add_widget(
@@ -3720,6 +4488,8 @@ class InputBridgeApp(App):
             self.tabbar.set_active(name)
 
         screen = self.sm.get_screen(name)
+        if name == "remote" and self.state.connected and self.state.remote_screen:
+            self.state.remote_screen.refresh_pc_status()
 
         update_status = getattr(screen, "update_status", None)
         if update_status:

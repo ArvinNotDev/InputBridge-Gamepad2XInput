@@ -600,9 +600,21 @@ class X360TestCard(QFrame):
         self.name_label.setText(name)
 
     def set_battery(self, percent: int | None, charging: bool = False) -> None:
-        self.battery_label.setText(
-            "Battery: —" if percent is None else f"Battery: {percent}%{' · charging' if charging else ''}"
-        )
+        if percent is None:
+            self.battery_label.setText("🔋 Battery: —")
+            self.battery_label.setStyleSheet("color:#aabbd2;")
+            return
+
+        percent = max(0, min(100, int(percent)))
+        if charging:
+            self.battery_label.setText(f"🔋 {percent}%  ⚡ Charging")
+            self.battery_label.setStyleSheet("color:#4ade80; font-weight:700;")
+        elif percent >= 100:
+            self.battery_label.setText("🔋 100%  ✓ Fully charged")
+            self.battery_label.setStyleSheet("color:#75e0ad; font-weight:700;")
+        else:
+            self.battery_label.setText(f"🔋 {percent}%")
+            self.battery_label.setStyleSheet("color:#aabbd2;")
 
     def set_vibration_enabled(self, enabled: bool) -> None:
         self._vibration_enabled = bool(enabled)
