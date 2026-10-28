@@ -116,3 +116,21 @@ body.layout-compact .centers{margin:8px 0}
   body.focus-mode .focus-tools{top:4px;right:5px}
   body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{min-height:29px;padding:4px 8px}
 }
+
+
+/* The face cluster and D-pad are real 3×3 grids so every key can be rearranged. */
+.faces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));align-items:center;justify-items:center}
+.faces .face{position:static;inset:auto;place-self:center;grid-area:auto}
+.dpad .pad-key{grid-area:auto}
+.dpad #dpadCenter{grid-area:auto;place-self:center;display:grid;place-items:center}
+body.layout-edit .faces .face,body.layout-edit .dpad .pad-key{touch-action:none}
+body.layout-edit [data-layout-id]{position:relative}
+body.layout-edit [data-layout-id]:not(.layout-dragging):not(.layout-drop-target)::after{content:"";position:absolute;inset:-4px;border-radius:inherit;pointer-events:none}
+@media(max-width:420px){
+  .faces{width:125px;height:125px}
+  .faces .face{width:41px;height:41px;min-height:41px}
+}
+@media(orientation:landscape) and (max-height:560px){
+  body.focus-mode .faces{width:108px;height:108px}
+  body.focus-mode .faces .face{width:35px;height:35px;min-height:35px}
+}
