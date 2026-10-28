@@ -1,7 +1,7 @@
 # VPadConnect
 
 <p align="center">
-  <img src="ui/assets/vpadconnect-icon.ico" alt="VPadConnect application icon" width="88">
+  <img src="ui/assets/vpadconnect-icon.png" alt="VPadConnect application icon" width="88">
 </p>
 
 <p align="center">
