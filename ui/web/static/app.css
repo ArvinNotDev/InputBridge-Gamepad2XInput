@@ -73,75 +73,93 @@ body.focus-mode .face.b{right:0;left:auto}
 }
 
 
-/* Fast, touch-first controller layouts */
-.focus-tools{display:flex;align-items:center;gap:7px;flex-shrink:0}
-.focus-tools #editLayout,.focus-tools .layout-preset{display:none}
-body.focus-mode .focus-tools{position:fixed;z-index:40;top:max(7px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;align-items:center;gap:6px}
-body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{display:inline-flex;min-height:35px;padding:7px 11px;background:#111d31eF;border-color:#40577a;box-shadow:0 5px 18px #0006;backdrop-filter:blur(12px)}
-body.layout-edit .focus-tools .layout-preset{display:block;width:auto;min-height:35px;max-width:138px;padding:6px 28px 6px 9px;border-radius:10px;background:#121e33;border-color:#586f9e;font-size:12px;box-shadow:0 5px 18px #0006}
-body.layout-edit .focus-tools #editLayout{background:linear-gradient(135deg,#5a64ff,#2c9cdb);border-color:#84adff}
-body.layout-edit .focus-tools #editLayout[aria-pressed="true"]{background:#174b42;border-color:#4bcaa2}
-body.focus-mode .toolbar{padding-top:1px}
-body.focus-mode .toolbar>div:first-child h2{margin:0}
-body.focus-mode .toolbar>div:first-child{padding-right:0}
-#controller{align-items:stretch}
-#controller>.zone{min-width:0}
-#stickZone{display:flex;align-items:stretch}
-#stickZone .stickwrap{flex:1 1 0;min-width:0}
-#buttonsZone{display:flex;flex-direction:column;gap:0}
-.layout-edit [data-layout-id]{outline:1px dashed #657fc0;outline-offset:2px;cursor:grab}
-.layout-edit [data-layout-id]:active{cursor:grabbing}
-.layout-edit .stick{touch-action:none}
-.layout-edit .pad-key,.layout-edit .trigger input{touch-action:none}
-[data-layout-id].layout-dragging{opacity:.42;filter:saturate(.7)}
-[data-layout-id].layout-drop-target{outline:2px solid #35cfe3;outline-offset:4px;background-color:#162b43}
-body.layout-edit .controller-footer{color:#8eb8ff}
-body.layout-edit #editLayout::after{content:""}
-body.layout-compact .zone{padding:11px}
-body.layout-compact .stick{width:min(100%,178px);margin:7px auto 3px}
-body.layout-compact .face-row{min-height:164px;gap:6px}
-body.layout-compact .dpad{grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px);gap:3px}
-body.layout-compact .faces{width:126px;height:126px}
-body.layout-compact .face{width:42px;height:42px;min-height:42px}
-body.layout-compact .face.y,body.layout-compact .face.a{left:42px}
-body.layout-compact .face.x,body.layout-compact .face.b{top:42px}
-body.layout-compact .centers{margin:8px 0}
+
+/* Native-looking console layouts: Xbox is asymmetrical, PlayStation is symmetrical. */
+.controller{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  grid-template-rows:auto minmax(0,1fr);
+  align-items:stretch;
+  gap:12px;
+}
+.controller .zone{background:linear-gradient(145deg,#16243a,#0c1525 58%,#17172e);border-color:#304563}
+.console-top{
+  grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;gap:16px;padding:12px 15px;
+  background:linear-gradient(110deg,#202e49 0%,#18253d 48%,#2a2044 100%)!important;
+  border-color:#405779!important;
+}
+.console-top .shoulders{min-width:0;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.console-top .centers{margin:0;gap:7px}
+.console-top .pad-key.small{min-width:54px}
+.console-left{
+  display:grid;grid-template-rows:minmax(0,1fr) auto;
+  grid-template-areas:"stick" "dpad";align-content:stretch;align-items:center;justify-items:center;gap:12px;
+}
+.console-left #leftStickWrap{grid-area:stick;width:100%;align-self:center}
+.console-left #dpad{grid-area:dpad;align-self:center;margin:6px 0 2px}
+.console-right{
+  display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-areas:"faces" "stick" "stick-buttons";
+  align-content:stretch;align-items:center;justify-items:center;gap:6px;
+}
+.console-right #faceButtons{grid-area:faces;margin:0 auto}
+.console-right #rightStickWrap{grid-area:stick;width:100%;align-self:center}
+.console-right #stickButtons{grid-area:stick-buttons;margin:0 auto 2px}
+.controller.playstation-layout .console-left{grid-template-rows:auto minmax(0,1fr);grid-template-areas:"dpad" "stick"}
+.controller.playstation-layout .console-right{grid-template-rows:auto minmax(0,1fr) auto}
+.controller.playstation-layout .console-top{background:linear-gradient(110deg,#1d2844 0%,#171d34 52%,#25305a 100%)!important;border-color:#455c8b!important}
+.controller.playstation-layout .knob{border-color:#8d9cff;background:radial-gradient(circle at 35% 28%,#7d83ed,#292f67 70%)}
+.controller.playstation-layout .guide-button{background:linear-gradient(135deg,#394a82,#262d52);border-color:#7686d8;color:#f1f2ff}
+#controllerStyle{white-space:nowrap;min-width:112px;background:linear-gradient(135deg,#263b5a,#352953);border-color:#536b9a}
+#controllerStyle[aria-pressed="true"]{background:linear-gradient(135deg,#293b79,#563d80);border-color:#8d91ff}
+#controllerStyle:hover{filter:brightness(1.13)}
+.console-left .stick,#rightControlsZone .stick{box-shadow:inset 0 0 28px #050a14aa,0 8px 24px #0003}
+.console-top .shoulder,.console-top .trigger{min-width:0}
+.console-top .trigger{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:5px}
+.console-top .trigger input{width:100%;max-width:100px}
 @media(max-width:760px){
-  body.focus-mode .focus-tools{top:max(6px,env(safe-area-inset-top));right:max(6px,env(safe-area-inset-right));gap:4px}
-  body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{min-height:32px;padding:6px 8px;font-size:11px}
-  body.layout-edit .focus-tools .layout-preset{max-width:112px;min-height:32px;font-size:11px}
-  body.focus-mode .toolbar{padding-top:0}
+  .console-top{grid-template-columns:minmax(0,1fr);gap:8px;padding:10px}
+  .console-top .centers{margin:1px auto}
+  .console-top .pad-key.small{min-width:48px}
+  .console-left,.console-right{padding:10px 7px;gap:8px}
+  .console-left .stick,.console-right .stick{width:min(100%,38vw);max-width:178px;margin:5px auto}
+  .console-left .dpad{grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px);gap:2px}
+  .console-right .faces{width:132px;height:132px}
+  .console-right .face{width:43px;height:43px;min-height:43px}
+  .console-right .face.y,.console-right .face.a{left:44px}
+  .console-right .face.x,.console-right .face.b{top:44px}
 }
-@media(orientation:landscape) and (max-height:560px){
-  body.focus-mode .focus-tools{top:4px;right:5px}
-  body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{min-height:29px;padding:4px 8px}
-}
-
-
-/* The face cluster and D-pad are real 3×3 grids so every key can be rearranged. */
-.faces{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(3,minmax(0,1fr));align-items:center;justify-items:center}
-.faces .face{position:static;inset:auto;place-self:center;grid-area:auto}
-.dpad .pad-key{grid-area:auto}
-.dpad #dpadCenter{grid-area:auto;place-self:center;display:grid;place-items:center}
-body.layout-edit .faces .face,body.layout-edit .dpad .pad-key{touch-action:none}
-body.layout-edit [data-layout-id]{position:relative}
-body.layout-edit [data-layout-id]:not(.layout-dragging):not(.layout-drop-target)::after{content:"";position:absolute;inset:-4px;border-radius:inherit;pointer-events:none}
 @media(max-width:420px){
-  .faces{width:125px;height:125px}
-  .faces .face{width:41px;height:41px;min-height:41px}
+  .console-top .shoulders{gap:4px}
+  .console-top .pad-key{padding:7px 4px;font-size:11px}
+  .console-top .trigger{font-size:9px}
+  .console-left .dpad{grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px)}
+  .console-right .faces{width:120px;height:120px}
+  .console-right .face{width:39px;height:39px;min-height:39px}
+  .console-right .face.y,.console-right .face.a{left:40px}
+  .console-right .face.x,.console-right .face.b{top:40px}
+  .motion-row #controllerStyle{min-width:100px}
 }
-@media(orientation:landscape) and (max-height:560px){
-  body.focus-mode .faces{width:108px;height:108px}
-  body.focus-mode .faces .face{width:35px;height:35px;min-height:35px}
+body.focus-mode .controller{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:7px}
+body.focus-mode .controller .console-top{grid-column:1/-1;padding:6px 9px;gap:10px}
+body.focus-mode .controller .console-left,body.focus-mode .controller .console-right{padding:8px;gap:6px}
+body.focus-mode .controller .console-left .stick,body.focus-mode .controller .console-right .stick{width:min(100%,min(25vw,160px));margin:4px auto}
+body.focus-mode .controller .console-left .dpad{grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px);gap:2px}
+body.focus-mode .controller .console-right .faces{width:126px;height:126px}
+body.focus-mode .controller .console-right .face{width:41px;height:41px;min-height:41px}
+body.focus-mode .controller .console-right .face.y,body.focus-mode .controller .console-right .face.a{left:42px}
+body.focus-mode .controller .console-right .face.x,body.focus-mode .controller .console-right .face.b{top:42px}
+body.focus-mode .controller .console-top .pad-key.small{min-width:44px;padding:6px}
+body.focus-mode .focus-exit{position:fixed;z-index:50;inset:8px 8px auto auto}
+body.focus-mode .motion-row{gap:6px;padding:7px 8px}
+body.focus-mode .motion-row #controllerStyle{min-width:100px;padding:7px 8px}
+@media(max-width:760px){
+  body.focus-mode .controller .console-top{grid-template-columns:minmax(0,1fr);gap:6px}
+  body.focus-mode .controller .console-top .centers{margin:0 auto}
+  body.focus-mode .controller .console-left,body.focus-mode .controller .console-right{padding:7px 5px}
+  body.focus-mode .controller .console-left .dpad{grid-template-columns:repeat(3,32px);grid-template-rows:repeat(3,32px);gap:1px}
+  body.focus-mode .controller .console-right .faces{width:108px;height:108px}
+  body.focus-mode .controller .console-right .face{width:35px;height:35px;min-height:35px}
+  body.focus-mode .controller .console-right .face.y,body.focus-mode .controller .console-right .face.a{left:36px}
+  body.focus-mode .controller .console-right .face.x,body.focus-mode .controller .console-right .face.b{top:36px}
 }
-
-
-body.layout-edit #controller,body.layout-edit #controller [data-layout-id]{touch-action:none;overscroll-behavior:contain}
-
-
-/* Keep both focus controls in one visible cluster; Exit Focus must not overlap Edit. */
-body.focus-mode .focus-tools{position:fixed!important;inset-inline:auto max(8px,env(safe-area-inset-right));width:max-content;max-width:calc(100vw - 16px);isolation:isolate}
-body.focus-mode .focus-tools .focus-exit{position:static!important;inset:auto!important;z-index:auto!important;flex:0 0 auto;margin:0}
-body.focus-mode .focus-tools #editLayout{position:static!important;inset:auto!important;flex:0 0 auto;margin:0}
-body.layout-edit .focus-tools{max-width:calc(100vw - 12px)}
-body.layout-edit .focus-tools .layout-preset{flex:0 1 auto;min-width:0}
