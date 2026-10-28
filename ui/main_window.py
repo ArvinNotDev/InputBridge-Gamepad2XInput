@@ -21,11 +21,9 @@ from ui.theme_manager import ThemeManager
 from ui.pages.controller_emulation import ControllerEmulation
 from ui.pages.controllers import ControllersPage
 from ui.pages.settings import SettingsPage
-from ui.pages.server import ServerPage
 from ui.pages.web_remote import WebRemotePage
 from ui.pages.hotkey import HotkeyPage
 from ui.pages.profiles import ProfilesPage
-from ui.pages.about import AboutPage
 from core.settings import SettingsManager
 from core.profile_manager import ProfileManager
 
@@ -37,19 +35,15 @@ from core.version import APP_NAME
 class MainWindow(QMainWindow):
 
     WINDOW_TITLE = APP_NAME
-    WINDOW_WIDTH = 1100
-    WINDOW_HEIGHT = 700
-
-    # Menu indices (must match the order items are added to self.menu)
+    WINDOW_WIDTH = 1040
+    WINDOW_HEIGHT = 640
+    NAV_PAGE_INDICES = (0, 1, 2, 4)
     IDX_CONTROLLER_EMULATION = 0
-    IDX_REMOTE_GAMEPAD = 1
+    IDX_WEB_REMOTE = 1
     IDX_HOTKEY = 2
-    IDX_PROFILES = 3
-    IDX_TEST_XINPUT = 4
-    IDX_SETTINGS = 5
-    IDX_ABOUT = 6
-    IDX_WEB_REMOTE = 7
-    IDX_QUIT = 8
+    IDX_INPUT_TEST = 3
+    IDX_PROFILES_PAGE = 3
+    IDX_SETTINGS_PAGE = 5
 
     def __init__(self, app: QApplication) -> None:
         super().__init__()
@@ -74,8 +68,13 @@ class MainWindow(QMainWindow):
         # quitting flag
         self._is_quitting = False
 
+        self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle(self.WINDOW_TITLE)
+        self.setMinimumSize(900, 560)
         self.resize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
+        app_icon = QIcon(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
+        self.setWindowIcon(app_icon)
+        app.setWindowIcon(app_icon)
 
         self._shown_tray_hint = False
 
@@ -87,59 +86,93 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(14)
         self.setCentralWidget(central)
 
-        # Compact application header
-        header = QWidget()
+        # Compact, frameless title bar inspired by macOS.
+        header = _DraggableTitleBar(self)
         header.setObjectName("app_header")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(2, 0, 2, 0)
-        header_layout.setSpacing(12)
+        header_layout.setContentsMargins(4, 2, 4, 8)
+        header_layout.setSpacing(10)
 
-        brand = QWidget()
-        brand_layout = QHBoxLayout(brand)
-        brand_layout.setContentsMargins(0, 0, 0, 0)
-        brand_layout.setSpacing(12)
+        window_controls = QHBoxLayout()
+        window_controls.setContentsMargins(3, 0, 4, 0)
+        window_controls.setSpacing(7)
+        self._window_minimize = QPushButton()
+        self._window_minimize.setObjectName("window_minimize")
+        self._window_minimize.setFixedSize(13, 13)
+        self._window_minimize.setToolTip("Minimize")
+        self._window_minimize.clicked.connect(self.showMinimized)
+        self._window_maximize = QPushButton()
+        self._window_maximize.setObjectName("window_maximize")
+        self._window_maximize.setFixedSize(13, 13)
+        self._window_maximize.setToolTip("Maximize / restore")
+        self._window_maximize.clicked.connect(self._toggle_window_maximized)
+        self._window_close = QPushButton()
+        self._window_close.setObjectName("window_close")
+        self._window_close.setFixedSize(13, 13)
+        self._window_close.setToolTip("Close")
+        self._window_close.clicked.connect(self.close)
+        for control in (self._window_minimize, self._window_maximize, self._window_close):
+            window_controls.addWidget(control)
+        header_layout.addLayout(window_controls)
 
-        self._brand_mark = QLabel("IB")
+        self._brand_mark = QLabel()
         self._brand_mark.setObjectName("brand_mark")
-        self._brand_mark.setAlignment(Qt.AlignCenter)
-        self._brand_mark.setFixedSize(44, 44)
-        brand_layout.addWidget(self._brand_mark)
+        self._brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._brand_mark.setFixedSize(42, 42)
+        logo = QPixmap(str(resource_path("ui", "assets", "vpadconnect-icon.png")))
+        if logo.isNull():
+            logo = QPixmap(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
+        if not logo.isNull():
+            self._brand_mark.setPixmap(logo.scaled(
+                42, 42, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            ))
+        header_layout.addWidget(self._brand_mark)
 
         brand_title = QLabel("VPadConnect")
         brand_title.setObjectName("brand_title")
-        brand_layout.addWidget(brand_title)
-        header_layout.addWidget(brand)
+        header_layout.addWidget(brand_title)
         header_layout.addStretch(1)
 
-        # Active profile chip (kept compact so navigation remains the focus)
-        self._avatar_container = QWidget()
+        self._avatar_container = QPushButton()
         self._avatar_container.setObjectName("profile_chip")
+        self._avatar_container.setFlat(True)
+        self._avatar_container.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._avatar_container.setToolTip("Open profiles")
+        self._avatar_container.clicked.connect(
+            lambda: self._show_special_page(self.IDX_PROFILES_PAGE)
+        )
         avatar_layout = QHBoxLayout(self._avatar_container)
-        avatar_layout.setContentsMargins(0, 0, 0, 0)
+        avatar_layout.setContentsMargins(8, 4, 10, 4)
         avatar_layout.setSpacing(8)
 
-        self._sidebar_avatar = _SidebarAvatar(32)
-        avatar_layout.addWidget(self._sidebar_avatar, alignment=Qt.AlignVCenter)
-
+        self._sidebar_avatar = _SidebarAvatar(30)
+        avatar_layout.addWidget(self._sidebar_avatar, alignment=Qt.AlignmentFlag.AlignVCenter)
         profile_copy = QVBoxLayout()
         profile_copy.setContentsMargins(0, 0, 0, 0)
         profile_copy.setSpacing(1)
         self._sidebar_profile_name = QLabel("")
         self._sidebar_profile_name.setObjectName("sidebar_profile_name")
-        self._sidebar_profile_name.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self._sidebar_profile_label = QLabel("No profile active")
         self._sidebar_profile_label.setObjectName("sidebar_profile_label")
-        self._sidebar_profile_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         profile_copy.addWidget(self._sidebar_profile_name)
         profile_copy.addWidget(self._sidebar_profile_label)
         avatar_layout.addLayout(profile_copy)
         header_layout.addWidget(self._avatar_container)
 
+        self._settings_button = QPushButton("⚙")
+        self._settings_button.setObjectName("settings_gear")
+        self._settings_button.setToolTip("Settings")
+        self._settings_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._settings_button.setFixedSize(38, 38)
+        self._settings_button.clicked.connect(
+            lambda: self._show_special_page(self.IDX_SETTINGS_PAGE)
+        )
+        header_layout.addWidget(self._settings_button)
+
         main_layout.addWidget(header)
 
-        # Native horizontal tabs keep each label at its natural width.
-        # Unlike a QListWidget flow, tabs are never forced to share the first
-        # item's width, so longer names and translated labels remain readable.
+        # The feature list contains only the pages used directly during normal work.
         self.menu = QTabBar()
         self.menu.setObjectName("top_navigation")
         self.menu.setDocumentMode(True)
@@ -147,20 +180,16 @@ class MainWindow(QMainWindow):
         self.menu.setExpanding(False)
         self.menu.setMovable(False)
         self.menu.setUsesScrollButtons(True)
-        self.menu.setElideMode(Qt.ElideNone)
+        self.menu.setElideMode(Qt.TextElideMode.ElideNone)
         self.menu.setShape(QTabBar.Shape.RoundedNorth)
-        self.menu.addTab("Controller Emulation")                       # 0
-        self.menu.addTab("Remote Controllers")                         # 1
-        self.menu.addTab("Hotkeys")                                    # 2
-        self.menu.addTab("Profiles")                                   # 3
-        self.menu.addTab("Input Test")                                 # 4
-        self.menu.addTab("Settings")                                   # 5
-        self.menu.addTab("About")                                      # 6
-        self.menu.addTab("Web Companion")                               # 7
-        self.menu.setMinimumHeight(44)
+        self.menu.addTab("Controller Emulation")
+        self.menu.addTab("Web Companion")
+        self.menu.addTab("Hotkeys")
+        self.menu.addTab("Input Test")
+        self.menu.setMinimumHeight(38)
         main_layout.addWidget(self.menu)
 
-        # Pages
+        # Pages are kept in one stack; Profiles and Settings open from the title bar.
         self.pages = QStackedWidget()
         self.pages.setObjectName("content_stack")
 
@@ -168,26 +197,29 @@ class MainWindow(QMainWindow):
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
-        # The stacked page order must match menu indices 0..7.
-        # 0: Controller Emulation
+
         self.controller_emulation_page = ControllerEmulation(
             self.settings, controllers_page, hotkey_page
         )
         self.pages.addWidget(self.controller_emulation_page)
-        # 1: Remote Gamepad (server page)
-        self.server_page = ServerPage(self.settings, controllers_page, hotkey_page)
-        self.pages.addWidget(self.server_page)
-        # 2: Hotkeys page
+
+        self.web_remote_page = WebRemotePage(
+            self.settings, controllers_page, hotkey_page,
+            status_changed=self._refresh_tray_menu,
+        )
+        self.pages.addWidget(self.web_remote_page)
         self.pages.addWidget(hotkey_page)
-        # 3: Profiles
+
         self.profiles_page = ProfilesPage(self.profile_manager, self.settings)
         self.profiles_page.profile_loaded.connect(self._on_profile_loaded)
         self.profiles_page.profile_changed.connect(self._refresh_sidebar_avatar)
         self.pages.addWidget(self.profiles_page)
-        # 4: Test XInput
+
         self.pages.addWidget(controllers_page)
-        # 5: Settings
-        self.settings_page = SettingsPage(self.theme_manager, self.settings, self.profile_manager)
+
+        self.settings_page = SettingsPage(
+            self.theme_manager, self.settings, self.profile_manager
+        )
         self.pages.addWidget(self.settings_page)
         self.settings_page.combo_lang.currentIndexChanged.connect(
             lambda _index: self._apply_language()
@@ -195,21 +227,12 @@ class MainWindow(QMainWindow):
         self.settings_page.vibration_enabled_changed.connect(
             self.controllers_page.set_vibration_enabled
         )
-        self.about_page = AboutPage()
-        self.pages.addWidget(self.about_page)
-        # Browser controllers share the existing mapper registration path, so
-        # each paired browser appears as its own XInput device alongside
-        # physical controllers.
-        self.web_remote_page = WebRemotePage(
-            self.settings, controllers_page, hotkey_page, self.server_page,
-            status_changed=self._refresh_tray_menu,
-        )
-        self.pages.addWidget(self.web_remote_page)
 
         main_layout.addWidget(self.pages, 1)
 
         self.menu.currentChanged.connect(self._on_menu_index_changed)
         self.menu.setCurrentIndex(self.IDX_CONTROLLER_EMULATION)
+        self.pages.setCurrentIndex(0)
 
         # Initialize sidebar avatar
         self._refresh_sidebar_avatar()
@@ -227,54 +250,44 @@ class MainWindow(QMainWindow):
     # --------------------
 
     def _on_menu_index_changed(self, index: int) -> None:
-        # If Quit item selected
-        if index == self.IDX_QUIT:
-            self._is_quitting = True
-            QApplication.quit()
-            return
+        if 0 <= index < len(self.NAV_PAGE_INDICES):
+            self.pages.setCurrentIndex(self.NAV_PAGE_INDICES[index])
 
-        # For all remaining tabs, show the matching stacked page (indices 0..7).
-        if 0 <= index < self.pages.count():
-            self.pages.setCurrentIndex(index)
+    def _show_special_page(self, page_index: int) -> None:
+        self.menu.setCurrentIndex(-1)
+        self.pages.setCurrentIndex(page_index)
+
+    def _toggle_window_maximized(self) -> None:
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
 
     # --------------------
     # Tray
     # --------------------
 
     def _init_tray_icon(self) -> None:
-
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
         tray_icon = QSystemTrayIcon(self)
-
-        icon = QIcon(str(resource_path("ui", "assets", "tray.png")))
+        icon = QIcon(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
         if icon.isNull():
             icon = QIcon.fromTheme("applications-system")
-
         tray_icon.setIcon(icon)
         tray_icon.setToolTip(self.WINDOW_TITLE)
-
         self.tray_icon = tray_icon
         self._create_tray_menu()
-
         tray_icon.activated.connect(self._on_tray_activated)
         tray_icon.show()
-        self.server_page.tray_status_callback = self._refresh_tray_menu
-        self.server_page.signals.client_connected.connect(
-            lambda _addr: self._refresh_tray_menu()
-        )
-        self.server_page.signals.client_disconnected.connect(
-            lambda _addr: self._refresh_tray_menu()
-        )
+        QApplication.setQuitOnLastWindowClosed(False)
 
     def _create_tray_menu(self) -> None:
-
         if self.tray_icon is None:
             return
-
         menu = QMenu(self)
-
         self._tray_menu = menu
-
-        self._tray_status_action = QAction("Server: stopped", menu)
+        self._tray_status_action = QAction("Web Companion: stopped", menu)
         self._tray_status_action.setEnabled(False)
         menu.addAction(self._tray_status_action)
         menu.addSeparator()
@@ -282,24 +295,19 @@ class MainWindow(QMainWindow):
         self._tray_show_action = QAction("Show window", menu)
         self._tray_show_action.triggered.connect(self._show_from_tray)
         menu.addAction(self._tray_show_action)
-
         self._tray_hide_action = QAction("Hide window", menu)
         self._tray_hide_action.triggered.connect(self.hide)
         menu.addAction(self._tray_hide_action)
-
-        self._tray_server_action = QAction("Start server", menu)
+        self._tray_server_action = QAction("Start Web Companion", menu)
         self._tray_server_action.triggered.connect(self._toggle_server_from_tray)
         menu.addAction(self._tray_server_action)
 
         menu.addSeparator()
         for label, index in (
             ("Controller Emulation", self.IDX_CONTROLLER_EMULATION),
-            ("Remote Controllers", self.IDX_REMOTE_GAMEPAD),
-            ("Hotkeys", self.IDX_HOTKEY),
-            ("Profiles", self.IDX_PROFILES),
-            ("Settings", self.IDX_SETTINGS),
-            ("About", self.IDX_ABOUT),
             ("Web Companion", self.IDX_WEB_REMOTE),
+            ("Hotkeys", self.IDX_HOTKEY),
+            ("Input Test", self.IDX_INPUT_TEST),
         ):
             action = QAction(label, menu)
             action.triggered.connect(
@@ -318,28 +326,28 @@ class MainWindow(QMainWindow):
     def _refresh_tray_menu(self) -> None:
         if self.tray_icon is None:
             return
-        running = bool(getattr(self.server_page, "server_running", False))
-        client_count = len(getattr(self.server_page, "clients", {}))
         web_server = getattr(getattr(self, "web_remote_page", None), "web_server", None)
-        web_running = bool(getattr(web_server, "running", False))
-        web_count = int(getattr(web_server, "client_count", 0)) if web_server else 0
+        web_running = bool(web_server and web_server.running)
+        web_count = int(web_server.client_count) if web_server else 0
         mapped_count = len(getattr(self.controller_emulation_page, "mappers", {}))
         self._tray_status_action.setText(
-            f"Remote server: {'on' if running else 'off'} · Web: {'on' if web_running else 'off'} · "
-            f"Clients: {client_count}+{web_count} · Mapped: {mapped_count}"
+            f"Web Companion: {'running' if web_running else 'stopped'} · "
+            f"Browsers: {web_count} · Mapped: {mapped_count}"
         )
-        self._tray_server_action.setText("Stop remote server" if running else "Start remote server")
+        self._tray_server_action.setText(
+            "Stop Web Companion" if web_running else "Start Web Companion"
+        )
         self.tray_icon.setToolTip(
-            f"{self.WINDOW_TITLE} — Remote server {'running' if running else 'stopped'}, "
-            f"Web Companion {'running' if web_running else 'stopped'}"
+            f"{self.WINDOW_TITLE} — Web Companion "
+            f"{'running' if web_running else 'stopped'}"
         )
         self._tray_hide_action.setEnabled(self.isVisible())
 
     def _toggle_server_from_tray(self) -> None:
-        self.server_page.toggle_server()
+        self.web_remote_page._toggle_server()
         self._refresh_tray_menu()
 
-    def _on_profile_loaded(self, profile_name: str) -> None:
+        def _on_profile_loaded(self, profile_name: str) -> None:
         """Called when a profile is activated from the Profiles page."""
         self._refresh_sidebar_avatar()
         self.settings_page.reload_from_settings()
@@ -427,10 +435,6 @@ class MainWindow(QMainWindow):
             return
         self._shutdown_complete = True
         try:
-            self.server_page.shutdown()
-        except Exception as exc:
-            print(f"[MainWindow] Server shutdown failed: {exc}")
-        try:
             self.web_remote_page.shutdown()
         except Exception as exc:
             print(f"[MainWindow] Web Companion shutdown failed: {exc}")
@@ -477,6 +481,42 @@ class MainWindow(QMainWindow):
         else:
             self.shutdown()
             super().closeEvent(event)
+
+
+# ------------------------------------------------------------------
+# Frameless title bar drag behavior
+# ------------------------------------------------------------------
+
+class _DraggableTitleBar(QWidget):
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
+        self._window = window
+        self._drag_offset = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and not self._window.isMaximized():
+            self._drag_offset = event.globalPosition().toPoint() - self._window.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self._window.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._window._toggle_window_maximized()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
 
 # ------------------------------------------------------------------
