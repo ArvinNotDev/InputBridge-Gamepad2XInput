@@ -1,5 +1,7 @@
 import json
+import re
 import unittest
+from unittest.mock import Mock, patch
 
 from main import BridgeClient, normalize_fingerprint, parse_pairing_qr_payload
 
@@ -108,6 +110,38 @@ class ControllerStateTests(unittest.TestCase):
             self.assertEqual((self.client._mouse_dx, self.client._mouse_dy, self.client._mouse_scroll), (0, 0, 0))
             self.assertEqual(self.client.mouse_buttons, {"left": 0, "right": 0, "middle": 0})
 
+    def test_send_state_uses_bounded_newline_delimited_json_and_keeps_unsent_delta(self):
+        sock = Mock()
+        self.client.connected = True
+        self.client.sock = sock
+        with self.client._mouse_lock:
+            self.client._mouse_dx = 3000
+            self.client._mouse_dy = -12
+
+        self.assertTrue(self.client.send_state())
+
+        frame = sock.sendall.call_args.args[0]
+        self.assertTrue(frame.endswith(b"\n"))
+        state = json.loads(frame.decode("utf-8"))
+        self.assertEqual(state["mouse"]["dx"], 2048)
+        self.assertEqual(state["mouse"]["dy"], -12)
+        with self.client._mouse_lock:
+            self.assertEqual(self.client._mouse_dx, 952)
+            self.assertEqual(self.client._mouse_dy, 0)
+
+    def test_remote_action_is_versioned_and_registered_until_response(self):
+        self.client.connected = True
+        with patch.object(self.client, "send_state", return_value=True) as send_state:
+            request_id = self.client.send_remote_action("pc_status", {})
+
+        self.assertIsNotNone(request_id)
+        self.assertRegex(request_id, re.compile(r"^[0-9a-f]{32}$"))
+        request = send_state.call_args.args[0]["remote_request"]
+        self.assertEqual(request["protocol_version"], 1)
+        self.assertEqual(request["request_id"], request_id)
+        self.assertEqual(request["action"], "pc_status")
+        self.assertEqual(request["payload"], {})
+        self.assertIn(request_id, self.client._pending)
 
 if __name__ == "__main__":
     unittest.main()

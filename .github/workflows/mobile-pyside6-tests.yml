@@ -1,15 +1,15 @@
-name: Validate PySide6 mobile source (no APK)
+name: Test PySide6 mobile source (no APK)
 
 on:
   push:
     branches: [main]
     paths:
       - "mobile_pyside6/**"
-      - ".github/workflows/mobile-pyside6-android.yml"
+      - ".github/workflows/mobile-pyside6-tests.yml"
   pull_request:
     paths:
       - "mobile_pyside6/**"
-      - ".github/workflows/mobile-pyside6-android.yml"
+      - ".github/workflows/mobile-pyside6-tests.yml"
   workflow_dispatch:
 
 permissions:
