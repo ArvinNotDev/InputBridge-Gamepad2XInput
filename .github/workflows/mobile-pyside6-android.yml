@@ -63,28 +63,29 @@ jobs:
           python tools/cross_compile_android/main.py \
             --plat-name aarch64 --download-only --skip-update --auto-accept-license
 
-      - name: Cross-compile open-source PySide6 and Shiboken Android wheels
+      - name: Download official PySide6 and Shiboken Android wheels
+        env:
+          QT_FOR_PYTHON_VERSION: "6.11.0"
         run: |
-          cd "$RUNNER_TEMP/pyside-setup"
-          NDK_PATH="$(find "$HOME/.pyside6_android_deploy/android-ndk" -mindepth 1 -maxdepth 1 -type d -name 'android-ndk-r*' -print -quit)"
-          SDK_PATH="$(find "$HOME/.pyside6_android_deploy" -maxdepth 1 -type d -name 'android-sdk' -print -quit)"
-          test -n "$NDK_PATH"
-          test -n "$SDK_PATH"
-          python tools/cross_compile_android/main.py \
-            --plat-name aarch64 \
-            --qt-install-path "$RUNNER_TEMP/Qt/6.11.0" \
-            --ndk-path "$NDK_PATH" \
-            --sdk-path "$SDK_PATH" \
-            --skip-update --auto-accept-license
-          find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -name '*.whl' -print
-          test -n "$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
-          test -n "$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
+          WHEEL_DIR="$RUNNER_TEMP/android-wheels"
+          mkdir -p "$WHEEL_DIR"
+          PYSIDE_WHEEL="$WHEEL_DIR/pyside6-6.11.0-6.11.0-cp311-cp311-android_aarch64.whl"
+          SHIBOKEN_WHEEL="$WHEEL_DIR/shiboken6-6.11.0-6.11.0-cp311-cp311-android_aarch64.whl"
+          curl --fail --location --show-error --retry 4 --retry-all-errors --connect-timeout 30 \
+            "https://download.qt.io/official_releases/QtForPython/pyside6/pyside6-6.11.0-6.11.0-cp311-cp311-android_aarch64.whl" \
+            --output "$PYSIDE_WHEEL"
+          curl --fail --location --show-error --retry 4 --retry-all-errors --connect-timeout 30 \
+            "https://download.qt.io/official_releases/QtForPython/shiboken6/shiboken6-6.11.0-6.11.0-cp311-cp311-android_aarch64.whl" \
+            --output "$SHIBOKEN_WHEEL"
+          python -m zipfile -t "$PYSIDE_WHEEL"
+          python -m zipfile -t "$SHIBOKEN_WHEEL"
+          sha256sum "$PYSIDE_WHEEL" "$SHIBOKEN_WHEEL"
 
       - name: Package Android APK
         working-directory: mobile_pyside6
         run: |
-          PYSIDE_WHEEL="$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
-          SHIBOKEN_WHEEL="$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
+          PYSIDE_WHEEL="$RUNNER_TEMP/android-wheels/pyside6-6.11.0-6.11.0-cp311-cp311-android_aarch64.whl"
+          SHIBOKEN_WHEEL="$RUNNER_TEMP/android-wheels/shiboken6-6.11.0-6.11.0-cp311-cp311-android_aarch64.whl"
           python deploy_android.py "$PYSIDE_WHEEL" "$SHIBOKEN_WHEEL"
 
       - name: Stage APK

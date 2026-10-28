@@ -12,6 +12,8 @@ This is the current Android companion client. The previous Kivy implementation i
 
 Every successful Android workflow run publishes a replacement APK to the rolling `mobile-latest` prerelease. The workflow also retains a downloadable artifact for 14 days. You do not need to install the Android build toolchain locally.
 
+The build downloads the official Qt for Python Android ARM64 wheels for the same pinned Qt/PySide6 version used by the host deployment tool. It does not rebuild CPython or the host Shiboken generator from source; this avoids the unrelated Android `_ctypes/libffi` and host LLVM/Clang generator failures seen in the previous workflow.
+
 ## Included screens and features
 
 - Secure connection with TLS certificate pinning, retry handling, saved PC endpoint, and persistent phone identity.

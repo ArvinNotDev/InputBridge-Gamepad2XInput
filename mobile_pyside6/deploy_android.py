@@ -10,8 +10,11 @@ python-for-android commit.
 from __future__ import annotations
 
 import logging
+import re
 import sys
+import zipfile
 from configparser import ConfigParser
+from email.parser import BytesParser
 from pathlib import Path
 
 import PySide6
@@ -42,6 +45,46 @@ import android_deploy  # noqa: E402
 
 
 _original_create_executable = Buildozer.create_executable
+
+
+def _normalise_distribution(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _validate_android_wheel(path: Path, expected_distribution: str, expected_version: str) -> None:
+    """Reject corrupt, wrong-architecture, or mismatched Qt Android wheels early."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Android wheel not found: {path}")
+    if not path.name.lower().endswith("-android_aarch64.whl"):
+        raise ValueError(f"Expected an ARM64 Android wheel, got: {path.name}")
+    if not path.name.lower().startswith(f"{expected_distribution}-{expected_version}-"):
+        raise ValueError(f"Expected {expected_distribution} {expected_version}, got: {path.name}")
+
+    try:
+        with zipfile.ZipFile(path) as archive:
+            corrupt_member = archive.testzip()
+            if corrupt_member:
+                raise ValueError(f"Corrupt wheel member in {path.name}: {corrupt_member}")
+            metadata_paths = [
+                item for item in archive.namelist()
+                if item.lower().endswith(".dist-info/metadata")
+            ]
+            if not metadata_paths:
+                raise ValueError(f"No wheel metadata found in {path.name}")
+            metadata = BytesParser().parsebytes(archive.read(metadata_paths[0]))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"Downloaded wheel is not a valid ZIP archive: {path.name}") from exc
+
+    actual_name = _normalise_distribution(metadata.get("Name", ""))
+    actual_version = metadata.get("Version", "")
+    if actual_name != _normalise_distribution(expected_distribution):
+        raise ValueError(
+            f"Wheel distribution mismatch in {path.name}: expected {expected_distribution}, got {actual_name or 'missing'}"
+        )
+    if actual_version != expected_version:
+        raise ValueError(
+            f"Wheel version mismatch in {path.name}: expected {expected_version}, got {actual_version or 'missing'}"
+        )
 
 
 def _create_executable_with_runtime_packages(mode: str) -> None:
@@ -83,8 +126,9 @@ def main() -> int:
     if len(sys.argv) != 3:
         raise SystemExit("Usage: python deploy_android.py PATH_TO_PYSIDE_WHEEL PATH_TO_SHIBOKEN_WHEEL")
     pyside_wheel, shiboken_wheel = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
-    if not pyside_wheel.is_file() or not shiboken_wheel.is_file():
-        raise FileNotFoundError("The PySide6 and Shiboken6 Android wheels must both exist.")
+    toolkit_version = PySide6.__version__
+    _validate_android_wheel(pyside_wheel, "pyside6", toolkit_version)
+    _validate_android_wheel(shiboken_wheel, "shiboken6", toolkit_version)
 
     cache = Path.home() / ".pyside6_android_deploy"
     ndk_root = cache / "android-ndk"
