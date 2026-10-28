@@ -6,7 +6,7 @@ import hashlib, hmac, json, math, os, socket, ssl, sys, threading, time, uuid
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QEvent, QObject, QPointF, QStandardPaths, Qt, QTimer, Signal
+from PySide6.QtCore import QCoreApplication, QCameraPermission, QEvent, QObject, QPointF, QStandardPaths, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFormLayout, QFrame, QGridLayout,
@@ -43,6 +43,13 @@ PALETTE = {
 
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
+
+
+def is_android_runtime() -> bool:
+    """Detect Android in both CPython and python-for-android launch environments."""
+    return sys.platform == "android" or any(
+        key in os.environ for key in ("ANDROID_ARGUMENT", "ANDROID_ROOT", "ANDROID_DATA")
+    )
 
 
 def normalize_fingerprint(value: Any) -> str:
@@ -716,6 +723,7 @@ class PairingScanner(QDialog):
         self.setMinimumSize(300, 440)
         self.camera = self.session = self.preview = None
         self.last_scan = 0.0
+        self.decoder_failure_shown = False
         root = QVBoxLayout(self)
         root.addWidget(label("Secure PC pairing", "pageTitle"))
         root.addWidget(label("Aim the camera at the QR displayed in InputBridge → Server. The QR contains the PC address and public certificate fingerprint.", "muted"))
@@ -727,38 +735,83 @@ class PairingScanner(QDialog):
             self._start_camera()
         else:
             root.addWidget(label("Qt Multimedia camera support is not available in this runtime.", "warning"))
-        self.status = label("Camera decoding needs NumPy and pyzbar. If decoding is unavailable, paste the complete QR JSON below.", "muted")
+        if decode_qr is None or np is None:
+            status_text = "QR decoding support is unavailable in this runtime. Paste the complete pairing JSON below."
+        else:
+            status_text = "When you scan, Android will ask for camera access. Keep the full pairing QR centred in the frame."
+        self.status = label(status_text, "muted")
         root.addWidget(self.status)
         self.text = QPlainTextEdit()
         self.text.setPlaceholderText("Paste complete InputBridge pairing JSON here")
         self.text.setMaximumHeight(95)
         root.addWidget(self.text)
         row = QHBoxLayout()
-        use, cancel = button("Use QR text", "primary"), button("Cancel")
+        use, paste, cancel = button("Use QR text", "primary"), button("Paste"), button("Cancel")
         use.clicked.connect(self._use_text)
+        paste.clicked.connect(lambda: self.text.setPlainText(QApplication.clipboard().text()))
         cancel.clicked.connect(self.reject)
-        row.addWidget(use)
-        row.addWidget(cancel)
+        row.addWidget(use, 2)
+        row.addWidget(paste, 1)
+        row.addWidget(cancel, 1)
         root.addLayout(row)
 
     def _start_camera(self):
-        if QCamera is None or self.preview is None:
+        if QCamera is None or QMediaCaptureSession is None or QMediaDevices is None or self.preview is None:
+            self.status.setText("This build does not include Qt Multimedia camera support. Paste the pairing JSON below.")
+            return
+
+        # Android permissions must be declared in the APK and requested only
+        # after the user taps Scan. The CI-built package declares CAMERA.
+        if is_android_runtime():
+            app = QCoreApplication.instance()
+            if app is None:
+                self.status.setText("Camera permission service is unavailable. Paste the pairing JSON below.")
+                return
+            try:
+                permission = QCameraPermission()
+                status = app.checkPermission(permission)
+                if status != Qt.PermissionStatus.Granted:
+                    self.status.setText("Camera access is required to scan the pairing QR. Approve the Android permission prompt.")
+                    app.requestPermission(permission, self, self._camera_permission_result)
+                    return
+            except Exception as exc:
+                self.status.setText(f"Could not request camera permission: {exc}. Paste the pairing JSON below.")
+                return
+
+        self._open_camera()
+
+    def _camera_permission_result(self, permission):
+        if permission.status() != Qt.PermissionStatus.Granted:
+            self.status.setText("Camera permission was denied. Enable Camera in Android app settings, or paste the complete pairing JSON below.")
+            return
+        self._open_camera()
+
+    def _open_camera(self):
+        if not self.isVisible() or self.camera is not None:
             return
         try:
             device = QMediaDevices.defaultVideoInput()
             if device.isNull():
-                self.status.setText("No camera found. Paste the complete pairing QR JSON below.")
+                self.status.setText("No camera was found. Paste the complete pairing QR JSON below.")
                 return
             self.camera = QCamera(self)
             self.camera.setCameraDevice(device)
+            self.camera.errorOccurred.connect(self._camera_error)
             self.session = QMediaCaptureSession(self)
             self.session.setCamera(self.camera)
             self.session.setVideoOutput(self.preview)
             self.preview.videoSink().videoFrameChanged.connect(self._scan_frame)
             self.camera.start()
-            self.status.setText("Camera started. Keep the full QR in view.")
+            if decode_qr is None or np is None:
+                self.status.setText("Camera preview is running, but QR decoding is missing from this package. Paste the complete pairing JSON below.")
+            else:
+                self.status.setText("Camera active — centre the full QR code and hold the phone steady.")
         except Exception as exc:
-            self.status.setText(f"Camera unavailable: {exc}. Paste the QR JSON below.")
+            self.status.setText(f"Camera unavailable: {exc}. Paste the pairing JSON below.")
+
+    def _camera_error(self, error, error_string):
+        message = str(error_string).strip() or "The camera reported an error."
+        self.status.setText(f"{message} Use the complete pairing JSON below if the camera cannot start.")
 
     def _scan_frame(self, frame):
         if decode_qr is None or np is None or time.monotonic()-self.last_scan < .3:
@@ -779,7 +832,13 @@ class PairingScanner(QDialog):
                     self.pairingFound.emit(payload)
                     self.accept()
                     return
-        except Exception:
+        except Exception as exc:
+            # Some Android builds can import pyzbar but lack its native zbar
+            # dependency. Make this actionable instead of silently failing on
+            # every video frame.
+            if not self.decoder_failure_shown:
+                self.decoder_failure_shown = True
+                self.status.setText(f"QR decoding failed: {exc}. Paste the complete pairing JSON below.")
             return
 
     def _use_text(self):

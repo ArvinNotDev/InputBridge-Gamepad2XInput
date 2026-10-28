@@ -214,17 +214,17 @@ Hotkeys can be used independently of standard controller mappings and are stored
 InputBridge now provides two separately named mobile clients:
 
 - **PySide6 Mobile (recommended):** the modern Qt for Python client in `mobile_pyside6/`. It contains Connect, Gamepad, Mouse, Remote and Settings screens with a touch-first dark interface.
-- **Legacy Kivy Mobile:** the previous client is preserved in `mobile_kivy/main.py`, along with its legacy Buildozer configuration and dependency list. It is kept separate so the two approaches cannot be confused.
+- **Legacy Kivy Mobile:** the previous client is preserved in `mobile_kivy_legacy/main.py`, along with its legacy Buildozer configuration and dependency list. It is kept separate so the two approaches cannot be confused.
 
 ### Install the PySide6 APK without building locally
 
-1. Open the repository’s **Actions** tab.
-2. Open the latest successful **Build PySide6 Android client** run.
-3. Download the **InputBridge-Mobile-Android-arm64** artifact and install the APK on your Android phone.
+**Recommended: download the prebuilt APK from the [latest mobile release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/mobile-latest).** Install `InputBridge-Mobile-Android-arm64.apk` on an ARM64 Android phone. Android may ask you to allow installation from the browser or file manager.
 
-The workflow starts automatically after relevant changes land on `main`, and can also be started manually. Workflow artifacts are retained for 14 days by GitHub. This lets users download the generated APK instead of setting up the Android build toolchain on their own computer.
+A successful build also appears in the [Build PySide6 Android client workflow](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/actions/workflows/mobile-pyside6-android.yml). Open its latest successful run and download the `InputBridge-Mobile-Android-arm64` artifact if you need the raw CI artifact.
 
-Android requires an APK that bundles the Qt and Python runtimes; the `.py` source alone is not an installable Android app. The workflow uses Qt for Python’s Android deployment tool and targets ARM64 Android devices. Camera and motion-sensor use depend on the device, packaged Qt modules, and Android permissions.
+The APK is built on GitHub Actions after relevant changes land on `main`; you do **not** need to install Qt, the Android SDK/NDK, or build the APK on your own computer. The workflow packages the Python, Qt, multimedia, sensor, and QR-decoding runtime into the APK. The Python source alone is not an installable Android application.
+
+The first time you choose **Scan pairing QR**, Android should ask for camera permission. Approve it to use the built-in scanner. If you deny permission, or a device's camera/decoder is unavailable, the scanner provides a paste field and a **Paste** button as a fallback.
 
 ### Secure pairing and connection
 
@@ -247,7 +247,7 @@ The QR contains only the PC endpoint and public certificate fingerprint; the pri
 
 ### Legacy Kivy client
 
-The previous Kivy implementation lives at `mobile_kivy/main.py`. Its Buildozer file and phone dependencies were moved with it. Use this legacy directory only if you specifically want the Kivy version; the recommended client is `mobile_pyside6/`.
+The previous Kivy implementation lives at `mobile_kivy_legacy/main.py`. Its Buildozer file and phone dependencies were moved with it. Use this legacy directory only if you specifically want the Kivy version; the recommended client is `mobile_pyside6/`.
 
 ### Remote actions currently implemented
 
@@ -533,7 +533,7 @@ the build artifact without setting up the Android toolchain on their own
 computer. The workflow is available from the repository's Actions tab.
 
 The previous Kivy implementation remains available separately in
-`mobile_kivy/main.py` as the **Legacy Kivy Mobile** version. The two clients
+`mobile_kivy_legacy/main.py` as the **Legacy Kivy Mobile** version. The two clients
 share the desktop protocol, while the PySide6 interface provides Connect,
 Gamepad, Mouse, Remote and Settings screens, secure QR pairing, and one-finger
 pointer movement, two-finger scrolling, optional tap-to-click and adjustable
