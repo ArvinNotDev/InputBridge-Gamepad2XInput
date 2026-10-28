@@ -90,6 +90,7 @@ def main() -> int:
         name="InputBridge Mobile",
         pyside_wheel=pyside_wheel,
         shiboken_wheel=shiboken_wheel,
+        config_file=Path.cwd() / "pysidedeploy.spec",
         loglevel=logging.INFO,
         force=True,
         extra_modules_grouped="Network,Multimedia,MultimediaWidgets,Sensors",
