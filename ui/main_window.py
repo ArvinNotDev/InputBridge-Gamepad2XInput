@@ -275,7 +275,9 @@ class MainWindow(QMainWindow):
         self._create_tray_menu()
         tray_icon.activated.connect(self._on_tray_activated)
         tray_icon.show()
-        QApplication.setQuitOnLastWindowClosed(False)
+        app = QApplication.instance()
+        if app is not None:
+            app.setQuitOnLastWindowClosed(False)
 
     def _create_tray_menu(self) -> None:
         if self.tray_icon is None:
