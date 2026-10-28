@@ -117,10 +117,9 @@ def _ensure_windows_firewall_rule(port: int) -> None:
         else:
             # Windows displays the standard UAC prompt; no elevation is requested without consent.
             command = (
-                "$args = @('advfirewall','firewall','add','rule',"
-                f"'name={rule_name}','dir=in','action=allow','protocol=TCP',"
-                f"'localport={port}','profile=private','enable=yes'); "
-                "Start-Process -FilePath 'netsh.exe' -ArgumentList $args "
+                "Start-Process -FilePath 'netsh.exe' "
+                f"-ArgumentList 'advfirewall firewall add rule name=\\"{rule_name}\\" "
+                f"dir=in action=allow protocol=TCP localport={port} profile=private enable=yes' "
                 "-Verb RunAs -WindowStyle Hidden -Wait"
             )
             subprocess.run(
