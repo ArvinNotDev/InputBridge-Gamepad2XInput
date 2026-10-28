@@ -288,15 +288,7 @@ test("browser control preferences restore and persist without storing the sessio
     steeringSensitivity: 2,
     tapToClick: true,
     preset: "standard",
-    layoutPreset: "classic",
-    layoutOrders: {
-      controller: ["sticks", "buttons-zone"],
-      stickZone: ["left-stick", "right-stick"],
-      buttonsZone: ["shoulders", "menu-buttons", "face-row", "stick-buttons"],
-      faceRow: ["dpad", "face-buttons"],
-      dpad: ["dpad-up", "dpad-left", "dpad-center", "dpad-right", "dpad-down"],
-      faceButtons: ["face-y", "face-x", "face-b", "face-a"],
-    },
+    controllerStyle: "xbox",
   });
   assert.equal(harness.sessionValues.get("ib.web.token"), "test-session-token");
   assert.equal(harness.preferenceValues.has("ib.web.token"), false);
@@ -558,20 +550,43 @@ test("Driving mode enables motion steering and maps orientation changes to the l
   assert.ok(stateRequests(harness).at(-1).joystick.left_x > 128);
 });
 
-test("focus edit mode exposes layout presets and persists a left-handed layout", async () => {
+
+test("landscape gyro steering uses the corrected left-right direction", async () => {
+  const harness = createHarness();
+  harness.window.screen = { orientation: { type: "landscape-primary", angle: 90 } };
+  await settle();
+
+  harness.elements.get("driving").dispatch("click");
+  await settle();
+  harness.dispatchWindow("deviceorientation", { beta: 0, gamma: 0 });
+  harness.dispatchWindow("deviceorientation", { beta: 15, gamma: 0 });
+  await settle();
+
+  assert.ok(stateRequests(harness).at(-1).joystick.left_x > 128);
+});
+
+test("controller layout toggles between authentic Xbox and PlayStation labels and persists", async () => {
   const harness = createHarness();
   await settle();
 
+  assert.equal(harness.elements.get("controllerStyle").textContent, "Xbox layout");
+  assert.equal(harness.elements.get("faceY").textContent, "Y");
   harness.elements.get("focus").dispatch("click");
-  harness.elements.get("editLayout").dispatch("click");
-  assert.equal(harness.document.body.classList.contains("layout-edit"), true);
-  assert.equal(harness.elements.get("editLayout").getAttribute("aria-pressed"), "true");
+  harness.elements.get("controllerStyle").dispatch("click");
 
-  harness.elements.get("layoutPreset").value = "left-handed";
-  harness.elements.get("layoutPreset").dispatch("change");
+  assert.equal(harness.document.body.classList.contains("focus-mode"), true);
+  assert.equal(harness.elements.get("controllerStyle").textContent, "PlayStation layout");
+  assert.equal(harness.elements.get("controller").classList.contains("playstation-layout"), true);
+  assert.equal(harness.elements.get("faceY").textContent, "△");
+  assert.equal(harness.elements.get("faceX").textContent, "□");
+  assert.equal(harness.elements.get("faceB").textContent, "○");
+  assert.equal(harness.elements.get("faceA").textContent, "×");
   const saved = JSON.parse(harness.preferenceValues.get("ib.web.preferences"));
-  assert.equal(saved.layoutPreset, "left-handed");
-  assert.deepEqual(saved.layoutOrders.faceRow, ["face-buttons", "dpad"]);
+  assert.equal(saved.controllerStyle, "playstation");
+
+  harness.elements.get("controllerStyle").dispatch("click");
+  assert.equal(harness.elements.get("controllerStyle").textContent, "Xbox layout");
+  assert.equal(harness.elements.get("faceY").textContent, "Y");
 });
 
 
