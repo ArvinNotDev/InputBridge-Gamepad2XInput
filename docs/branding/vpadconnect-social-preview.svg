@@ -38,5 +38,5 @@
     <text x="88" y="557">WINDOWS DESKTOP</text><text x="340" y="557">VIRTUAL XINPUT</text><text x="575" y="557">SECURE WEB COMPANION</text>
   </g>
   <g stroke="#304765" stroke-width="2"><path d="M88 580H1192"/></g>
-  <text x="88" y="612" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" fill="#7287a8">ArvinNotDev · Open-source controller and remote-control project</text>
+  <text x="88" y="612" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" fill="#7287a8">ArvinNotDev · Windows controller and remote-control project</text>
 </svg>
