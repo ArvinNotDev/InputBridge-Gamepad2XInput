@@ -1,12 +1,13 @@
 import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QLabel, QPushButton, QSlider, QFrame, QTabBar, QStackedWidget,
+    QLabel, QPushButton, QSlider, QFrame,
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QAbstractSpinBox
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from ui.i18n import LANGUAGE_NAMES, tr
+from ui.animations import AnimatedStackedWidget, AnimatedTabBar
 
 
 class SettingsPage(QWidget):
@@ -34,7 +35,7 @@ class SettingsPage(QWidget):
         root.setSpacing(0)
 
         # Compact horizontal sections, with the settings content directly underneath.
-        self.menu = QTabBar()
+        self.menu = AnimatedTabBar()
         self.menu.setObjectName("settings_navigation")
         self.menu.setDocumentMode(True)
         self.menu.setDrawBase(False)
@@ -47,7 +48,7 @@ class SettingsPage(QWidget):
         self.menu.setMinimumHeight(36)
         root.addWidget(self.menu)
 
-        self.pages = QStackedWidget()
+        self.pages = AnimatedStackedWidget()
         self.pages.setObjectName("settings_pages")
         root.addWidget(self.pages, 1)
 
