@@ -5,6 +5,15 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
 
+
+### Web Companion motion polish
+
+- Added smooth animated transitions when switching tabs and entering content panels,
+  plus subtle press, hover, focus, and mode-selection feedback across interactive controls.
+- Added lightweight staggered entrances for remote-action and Settings cards, with a
+  reduced-motion mode for users who prefer minimal animation.
+
+
 ### Mobile Settings and touchpad scrolling
 
 - Added a dedicated mobile Settings tab with pointer sensitivity, scroll sensitivity,
