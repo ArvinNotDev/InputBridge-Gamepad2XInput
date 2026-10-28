@@ -7,8 +7,4 @@ qtpip download PySide6==6.12.0 --android --arch aarch64
 PYSIDE_WHEEL="$(find . -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
 SHIBOKEN_WHEEL="$(find . -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
 test -n "$PYSIDE_WHEEL" && test -n "$SHIBOKEN_WHEEL"
-pyside6-android-deploy --name "InputBridge Mobile" \
-  --wheel-pyside="$PYSIDE_WHEEL" \
-  --wheel-shiboken="$SHIBOKEN_WHEEL" \
-  --extra-modules=Network,Multimedia,MultimediaWidgets,Sensors \
-  --force
+python deploy_android.py "$PYSIDE_WHEEL" "$SHIBOKEN_WHEEL"
