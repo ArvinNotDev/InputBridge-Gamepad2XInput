@@ -18,18 +18,32 @@ _PERMISSION_LOCK = threading.RLock()
 _MEDIA_VKEYS = {"volume_up": 0xAF, "volume_down": 0xAE, "mute": 0xAD, "play_pause": 0xB3, "previous_track": 0xB1, "next_track": 0xB0, "stop": 0xB2}
 
 
+PERMISSION_SCHEMA_VERSION = 2
+
+
 def load_remote_permissions(path: str | Path = PERMISSION_FILE) -> dict[str, bool]:
     import json
     result = dict(DEFAULT_REMOTE_PERMISSIONS)
+    target = Path(path)
     try:
-        with Path(path).open("r", encoding="utf-8") as stream:
+        with target.open("r", encoding="utf-8") as stream:
             loaded = json.load(stream)
-        if isinstance(loaded, dict):
-            for name in result:
-                if isinstance(loaded.get(name), bool):
-                    result[name] = loaded[name]
     except (OSError, ValueError, TypeError):
-        pass
+        return result
+
+    if not isinstance(loaded, dict):
+        return result
+
+    # Files created by older VPadConnect versions had no schema version and
+    # defaulted every remote permission to off. Migrate them once to the new
+    # defaults; subsequent user edits are stored with the current schema version.
+    if loaded.get("schema_version") != PERMISSION_SCHEMA_VERSION:
+        save_remote_permissions(result, target)
+        return result
+
+    for name in result:
+        if isinstance(loaded.get(name), bool):
+            result[name] = loaded[name]
     return result
 
 
@@ -46,7 +60,7 @@ def save_remote_permissions(permissions: dict[str, bool], path: str | Path = PER
     try:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target.parent, prefix=target.name + ".", suffix=".tmp", delete=False) as stream:
             temporary = Path(stream.name)
-            json.dump(normalized, stream, indent=2)
+            json.dump({"schema_version": PERMISSION_SCHEMA_VERSION, **normalized}, stream, indent=2)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, target)
