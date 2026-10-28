@@ -9,6 +9,11 @@ const appSource = fs.readFileSync(
   "utf8",
 );
 
+const appCss = fs.readFileSync(
+  path.join(__dirname, "../ui/web/static/app.css"),
+  "utf8",
+);
+
 function createElement(id, attributes = {}) {
   const classes = new Set();
   const listeners = new Map();
@@ -664,4 +669,14 @@ test("paired controller streams input over one persistent WebSocket without stat
   harness.tickFrame();
   snapshots = socket.sent.filter((packet) => packet.type === "state");
   assert.equal(snapshots.at(-1).state.joystick.left_x, 128);
+});
+
+
+test("web companion navigation and controls use reduced-motion-aware animations", () => {
+  assert.match(appCss, /\.tab\.active\s*\{[^}]*animation:\s*vpad-tab-select/s);
+  assert.match(appCss, /\.view\.active\s*\{[^}]*animation:\s*vpad-view-enter/s);
+  assert.match(appCss, /vpad-card-enter/);
+  assert.match(appCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  assert.match(appCss, /transition-duration:\s*\.01ms\s*!important/);
+  assert.match(appCss, /animation-duration:\s*\.01ms\s*!important/);
 });
