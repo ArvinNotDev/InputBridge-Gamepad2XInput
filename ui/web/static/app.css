@@ -137,3 +137,11 @@ body.layout-edit [data-layout-id]:not(.layout-dragging):not(.layout-drop-target)
 
 
 body.layout-edit #controller,body.layout-edit #controller [data-layout-id]{touch-action:none;overscroll-behavior:contain}
+
+
+/* Keep both focus controls in one visible cluster; Exit Focus must not overlap Edit. */
+body.focus-mode .focus-tools{position:fixed!important;inset-inline:auto max(8px,env(safe-area-inset-right));width:max-content;max-width:calc(100vw - 16px);isolation:isolate}
+body.focus-mode .focus-tools .focus-exit{position:static!important;inset:auto!important;z-index:auto!important;flex:0 0 auto;margin:0}
+body.focus-mode .focus-tools #editLayout{position:static!important;inset:auto!important;flex:0 0 auto;margin:0}
+body.layout-edit .focus-tools{max-width:calc(100vw - 12px)}
+body.layout-edit .focus-tools .layout-preset{flex:0 1 auto;min-width:0}
