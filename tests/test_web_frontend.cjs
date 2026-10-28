@@ -274,6 +274,8 @@ test("browser control preferences restore and persist without storing the sessio
       stickZone: ["left-stick", "right-stick"],
       buttonsZone: ["shoulders", "menu-buttons", "face-row", "stick-buttons"],
       faceRow: ["dpad", "face-buttons"],
+      dpad: ["dpad-up", "dpad-left", "dpad-center", "dpad-right", "dpad-down"],
+      faceButtons: ["face-y", "face-x", "face-b", "face-a"],
     },
   });
   assert.equal(harness.sessionValues.get("ib.web.token"), "test-session-token");
