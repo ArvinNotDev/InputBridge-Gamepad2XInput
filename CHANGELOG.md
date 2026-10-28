@@ -5,6 +5,15 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
 
+### PySide6 desktop motion polish
+
+- Added short slide-and-crossfade transitions between the main desktop pages and the
+  Device/UI/Developer sections in Settings.
+- Added a smoothly moving indigo-to-cyan active-tab indicator and subtle animated
+  hover glow for buttons in the desktop interface.
+- Added a reduced-motion override via `VPADCONNECT_REDUCED_MOTION=1`.
+
+
 
 ### Web Companion motion polish
 
