@@ -5,6 +5,7 @@ import ipaddress
 import logging
 import secrets
 import socket
+import subprocess
 import threading
 import time
 import uuid
@@ -87,6 +88,49 @@ def validate_web_controller_state(candidate: Any) -> dict[str, Any] | None:
             "joystick": full_sticks, "mouse": mouse}
 
 
+def _ensure_windows_firewall_rule(port: int) -> None:
+    """Request a narrowly scoped private-network rule when Windows Firewall lacks one."""
+    if os.name != "nt":
+        return
+    rule_name = "VPadConnect Web Companion"
+    try:
+        check = subprocess.run(
+            ["netsh", "advfirewall", "firewall", "show", "rule", f"name={rule_name}"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        details = (check.stdout + check.stderr).lower()
+        if rule_name.lower() in details and "no rules match" not in details:
+            return
+        rule_args = (
+            "advfirewall firewall add rule "
+            f'name="{rule_name}" dir=in action=allow protocol=TCP '
+            f"localport={port} profile=private enable=yes"
+        )
+        if hasattr(__import__("ctypes").windll.shell32, "IsUserAnAdmin") and __import__("ctypes").windll.shell32.IsUserAnAdmin():
+            subprocess.run(
+                ["netsh", "advfirewall", "firewall", "add", "rule",
+                 f"name={rule_name}", "dir=in", "action=allow", "protocol=TCP",
+                 f"localport={port}", "profile=private", "enable=yes"],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+        else:
+            # Windows displays the standard UAC prompt; no elevation is requested without consent.
+            command = (
+                "$args = @('advfirewall','firewall','add','rule',"
+                f"'name={rule_name}','dir=in','action=allow','protocol=TCP',"
+                f"'localport={port}','profile=private','enable=yes'); "
+                "Start-Process -FilePath 'netsh.exe' -ArgumentList $args "
+                "-Verb RunAs -WindowStyle Hidden -Wait"
+            )
+            subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", command],
+                capture_output=True, text=True, timeout=60, check=False,
+            )
+    except (OSError, subprocess.SubprocessError, AttributeError):
+        # The listener can still be used locally if the optional firewall change is unavailable.
+        return
+
+
 def get_lan_ip() -> str:
     """Resolve the preferred LAN IPv4 address without sending application data."""
     try:
@@ -145,6 +189,15 @@ class WebRemoteServer:
             return len(self._sessions)
 
     @property
+    def connected_clients(self) -> list[str]:
+        """Return stable, display-safe names for the currently paired browsers."""
+        with self._lock:
+            return sorted(
+                session["name"] for session in self._sessions.values()
+                if isinstance(session.get("name"), str)
+            )
+
+    @property
     def local_url(self) -> str:
         host = self._advertised_host or get_lan_ip()
         return "https://" + host + ":" + str(self.port) + "/"
@@ -168,6 +221,7 @@ class WebRemoteServer:
                 raise ValueError("The HTTPS port must be between 1024 and 65535.")
             self.port = port
         self._advertised_host = get_lan_ip()
+        _ensure_windows_firewall_rule(self.port)
         tls_context, self.fingerprint = create_web_server_ssl_context([self._advertised_host])
         self._stop_event.clear()
         self.rotate_pairing_code()
