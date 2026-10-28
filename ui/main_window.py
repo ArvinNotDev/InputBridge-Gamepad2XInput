@@ -168,7 +168,7 @@ class MainWindow(QMainWindow):
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
-        # The order here must match indices 0..5
+        # The stacked page order must match menu indices 0..7.
         # 0: Controller Emulation
         self.controller_emulation_page = ControllerEmulation(
             self.settings, controllers_page, hotkey_page
@@ -201,7 +201,8 @@ class MainWindow(QMainWindow):
         # the TLS phone client, so each paired browser appears as its own XInput
         # device alongside mobile and physical controllers.
         self.web_remote_page = WebRemotePage(
-            self.settings, controllers_page, hotkey_page, self.server_page
+            self.settings, controllers_page, hotkey_page, self.server_page,
+            status_changed=self._refresh_tray_menu,
         )
         self.pages.addWidget(self.web_remote_page)
 

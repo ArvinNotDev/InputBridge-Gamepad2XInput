@@ -26,9 +26,11 @@ from core.web_remote import WebRemoteServer
 class WebRemotePage(QWidget):
     """Start/stop the HTTPS browser companion and display short-lived pairing credentials."""
 
-    def __init__(self, settings, controllers_page, hotkey_page, server_page):
+    def __init__(self, settings, controllers_page, hotkey_page, server_page, status_changed=None):
         super().__init__()
         self.setObjectName("webCompanionPage")
+        self._status_changed = status_changed
+        self._last_client_count = -1
         self.web_server = WebRemoteServer(
             settings,
             controllers_page,
@@ -216,6 +218,7 @@ class WebRemotePage(QWidget):
         if self.web_server.running:
             self.web_server.stop()
             self._set_running(False)
+            self._notify_status_changed()
             return
         try:
             self.web_server.start(self.port_spin.value())
@@ -229,6 +232,7 @@ class WebRemotePage(QWidget):
         self._set_running(True)
         self._render_qr()
         self._refresh_countdown()
+        self._notify_status_changed()
 
     def _set_running(self, running: bool) -> None:
         self.status_badge.setText("●  RUNNING" if running else "●  STOPPED")
@@ -289,6 +293,9 @@ class WebRemotePage(QWidget):
         import time
         count = self.web_server.client_count
         self.clients_label.setText(f"{count} connected browser controller" + ("" if count == 1 else "s"))
+        if count != self._last_client_count:
+            self._last_client_count = count
+            self._notify_status_changed()
         remaining = max(0, int(self.web_server.pairing_deadline - time.monotonic()))
         self.expiry_label.setText(
             f"Code valid for {remaining // 60}:{remaining % 60:02d}. Generate a new code to revoke the old one."
@@ -305,3 +312,12 @@ class WebRemotePage(QWidget):
     def shutdown(self) -> None:
         self._refresh_timer.stop()
         self.web_server.stop()
+
+
+    def _notify_status_changed(self) -> None:
+        if self._status_changed is not None:
+            try:
+                self._status_changed()
+            except Exception:
+                # Tray UI should never prevent the browser server from starting.
+                pass
