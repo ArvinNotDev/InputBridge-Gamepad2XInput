@@ -46,31 +46,50 @@ jobs:
           python -m compileall -q main.py test_mobile_client.py
           python -m unittest -v
 
+      - name: Install open-source Qt SDK for Android and host
+        working-directory: mobile_pyside6
+        run: |
+          python -m pip install --upgrade aqtinstall
+          aqt install-qt linux desktop 6.12.0 gcc_64 -O "$RUNNER_TEMP/Qt" -m qtmultimedia qtsensors
+          aqt install-qt linux android 6.12.0 android_arm64_v8a -O "$RUNNER_TEMP/Qt" -m qtmultimedia qtsensors
+          test -d "$RUNNER_TEMP/Qt/6.12.0/gcc_64"
+          test -d "$RUNNER_TEMP/Qt/6.12.0/android_arm64_v8a"
+
       - name: Prepare Android SDK and NDK
         run: |
           git clone --depth 1 --branch 6.12 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
           cd "$RUNNER_TEMP/pyside-setup"
           python -m pip install -r requirements.txt -r tools/cross_compile_android/requirements.txt
           python tools/cross_compile_android/main.py \
-            --download-only --skip-update --auto-accept-license
+            --plat-name aarch64 --download-only --skip-update --auto-accept-license
 
-      - name: Download PySide6 Android wheels
-        working-directory: mobile_pyside6
+      - name: Cross-compile open-source PySide6 and Shiboken Android wheels
         run: |
-          python -m pip install qtpip
-          QT_LIB_DIR="$(python -c 'from pathlib import Path; import PySide6; print(Path(PySide6.__file__).resolve().parent / "Qt" / "lib")')"
-          export LD_LIBRARY_PATH="$QT_LIB_DIR:${LD_LIBRARY_PATH:-}"
-          qtpip download PySide6==6.12.0 --android --arch aarch64
-          find . -type f -name '*.whl' -print
-          test -n "$(find . -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
-          test -n "$(find . -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
+          cd "$RUNNER_TEMP/pyside-setup"
+          NDK_PATH="$(find "$HOME/.pyside6_android_deploy" -maxdepth 1 -type d -name 'android-ndk*' -print -quit)"
+          SDK_PATH="$(find "$HOME/.pyside6_android_deploy" -maxdepth 1 -type d -name 'android-sdk' -print -quit)"
+          test -n "$NDK_PATH"
+          test -n "$SDK_PATH"
+          python tools/cross_compile_android/main.py \
+            --plat-name aarch64 \
+            --qt-install-path "$RUNNER_TEMP/Qt/6.12.0" \
+            --ndk-path "$NDK_PATH" \
+            --sdk-path "$SDK_PATH" \
+            --skip-update --auto-accept-license
+          find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -name '*.whl' -print
+          test -n "$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
+          test -n "$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
 
       - name: Package Android APK
         working-directory: mobile_pyside6
         run: |
-          PYSIDE_WHEEL="$(find . -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
-          SHIBOKEN_WHEEL="$(find . -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
-          python deploy_android.py "$PYSIDE_WHEEL" "$SHIBOKEN_WHEEL"
+          PYSIDE_WHEEL="$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
+          SHIBOKEN_WHEEL="$(find "$RUNNER_TEMP/pyside-setup/dist_android" -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
+          pyside6-android-deploy --name "InputBridge Mobile" \
+            --wheel-pyside="$PYSIDE_WHEEL" \
+            --wheel-shiboken="$SHIBOKEN_WHEEL" \
+            --extra-modules=Network,Multimedia,MultimediaWidgets,Sensors \
+            --force
 
       - name: Stage APK
         run: |
