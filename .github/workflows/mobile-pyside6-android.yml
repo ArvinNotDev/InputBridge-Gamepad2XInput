@@ -1,0 +1,89 @@
+name: Build PySide6 Android client
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile_pyside6/**"
+      - ".github/workflows/mobile-pyside6-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up host Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: mobile_pyside6/requirements.txt
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openjdk-17-jdk zip unzip build-essential libffi-dev libssl-dev git
+          java -version
+
+      - name: Install Qt for Python and QR dependencies
+        working-directory: mobile_pyside6
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate source and pairing protocol
+        working-directory: mobile_pyside6
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m compileall -q main.py test_mobile_client.py
+          python -m unittest -v
+
+      - name: Prepare Android SDK and NDK
+        run: |
+          git clone --depth 1 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
+          cd "$RUNNER_TEMP/pyside-setup"
+          python "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/main.py" \
+            --download-only --skip-update --auto-accept-license
+
+      - name: Download PySide6 Android wheels
+        working-directory: mobile_pyside6
+        run: |
+          qtpip download PySide6 --android --arch aarch64
+          find . -type f -name '*.whl' -print
+          test -n "$(find . -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
+          test -n "$(find . -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
+
+      - name: Package Android APK
+        working-directory: mobile_pyside6
+        run: |
+          PYSIDE_WHEEL="$(find . -type f -iname 'PySide6-*-android_aarch64.whl' -print -quit)"
+          SHIBOKEN_WHEEL="$(find . -type f -iname 'shiboken6-*-android_aarch64.whl' -print -quit)"
+          pyside6-android-deploy --name "InputBridge Mobile" \
+            --wheel-pyside="$PYSIDE_WHEEL" \
+            --wheel-shiboken="$SHIBOKEN_WHEEL" \
+            --extra-modules=Network,Multimedia,MultimediaWidgets,Sensors \
+            --force
+
+      - name: Stage APK
+        run: |
+          mkdir -p mobile_pyside6/dist
+          APK="$(find mobile_pyside6 -type f -name '*.apk' -not -path '*/.venv/*' -print -quit)"
+          test -n "$APK"
+          cp "$APK" mobile_pyside6/dist/InputBridge-Mobile-Android-arm64.apk
+          sha256sum mobile_pyside6/dist/InputBridge-Mobile-Android-arm64.apk
+
+      - name: Upload installable Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: InputBridge-Mobile-Android-arm64
+          path: mobile_pyside6/dist/InputBridge-Mobile-Android-arm64.apk
+          if-no-files-found: error
+          retention-days: 14

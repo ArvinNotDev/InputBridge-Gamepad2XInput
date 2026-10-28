@@ -211,51 +211,43 @@ Hotkeys can be used independently of standard controller mappings and are stored
 
 ## Phone-to-PC Remote Control
 
-The companion Kivy client remains a separate application at
-`phone_client_with_auth.py`. The existing **Gamepad** and **Mouse** screens
-continue to send controller and touchpad state; use the desktop Server page to
-select **Emulate** or **Mouse** for the connected phone.
+InputBridge now provides two separately named mobile clients:
 
-### Secure connection and first pairing
+- **PySide6 Mobile (recommended):** the modern Qt for Python client in `mobile_pyside6/`. It contains Connect, Gamepad, Mouse, Remote and Settings screens with a touch-first dark interface.
+- **Legacy Kivy Mobile:** the previous client is preserved in `mobile_kivy/main.py`, along with its legacy Buildozer configuration and dependency list. It is kept separate so the two approaches cannot be confused.
 
-1. Install the updated desktop dependencies and start InputBridge.
-2. Open the desktop **Server** page and start the server. It creates a persistent
-   TLS certificate. Once the server is listening, click **Show Phone Pairing QR**.
-3. On the phone, open **Connect** and tap **Scan Pairing QR**. The QR transfers
-   the PC's LAN address, port, and public SHA-256 certificate fingerprint; the
-   phone compares the live TLS certificate against that fingerprint before
-   sending device identity or pairing information. Install the dependencies in
-   `requirements-phone.txt`; for Android packaging, include `numpy` and
-   `pyzbar` in the python-for-android requirements and declare `CAMERA` and
-   `INTERNET` in the Android manifest. If the current mobile build does not
-   include its QR decoder or camera permission, scan the QR with a compatible
-   QR reader and paste its complete text into the fallback field.
-4. If the phone is not trusted yet, copy the short pairing code shown beside the
-   connected client on the PC into the phone and submit it.
-5. Open **Remote** and refresh PC status. On the PC, explicitly enable the
-   individual remote-action permissions required by your workflow.
+### Install the PySide6 APK without building locally
 
-The TLS certificate and private key are stored in the desktop app's writable
-`remote_security/` data directory. The QR contains only the PC endpoint and
-the public certificate fingerprint; **the private TLS key is never exported**.
-The server fingerprint is saved on the phone per host and port; later connections
-use that pin. If the PC certificate is replaced, scan the new QR or compare and
-enter the newly displayed fingerprint deliberately. Do not accept a fingerprint
-sent through an untrusted channel.
+1. Open the repository’s **Actions** tab.
+2. Open the latest successful **Build PySide6 Android client** run.
+3. Download the **InputBridge-Mobile-Android-arm64** artifact and install the APK on your Android phone.
 
-The mobile client retries a transient TCP/TLS establishment failure up to two
-times automatically, keeps longer TLS-handshake timeouts for slower phones, and
-prevents duplicate connect taps while one attempt is in progress.
+The workflow starts automatically after relevant changes land on `main`, and can also be started manually. Workflow artifacts are retained for 14 days by GitHub. This lets users download the generated APK instead of setting up the Android build toolchain on their own computer.
 
-### Building the Android phone client
+Android requires an APK that bundles the Qt and Python runtimes; the `.py` source alone is not an installable Android app. The workflow uses Qt for Python’s Android deployment tool and targets ARM64 Android devices. Camera and motion-sensor use depend on the device, packaged Qt modules, and Android permissions.
 
-The repository now includes `buildozer.spec` with the mobile entry point and
-`INTERNET`/`CAMERA` manifest permissions. On Linux or macOS (or Linux under
-WSL), install Buildozer and build from the repository root with
-`buildozer android debug`. The generated APK is placed in `bin/`. The spec
-uses python-for-android `v2026.05.09`, which includes the `pyzbar` recipe
-needed for camera QR decoding. Building an APK has not been run as part of this
-change; use the Android build output to verify the toolchain and target device.
+### Secure pairing and connection
+
+1. Start the updated InputBridge desktop app and open **Server**.
+2. Start the server and choose **Show Phone Pairing QR**.
+3. On the phone, open **Connect → Scan pairing QR**. If scanning is unavailable, paste the complete QR JSON payload or enter the PC address, port, and SHA-256 certificate fingerprint manually.
+4. Keep the phone and PC on the same local network. The mobile client verifies the live TLS certificate against the QR/saved SHA-256 pin before it sends controller state or pairing data.
+5. If the phone has not been trusted, enter the short pairing code shown beside that device in the desktop Server page.
+6. Use **Gamepad**, **Mouse**, or **Remote**. Remote actions remain gated by the individual permissions explicitly enabled in the desktop app.
+
+The QR contains only the PC endpoint and public certificate fingerprint; the private TLS key is never exported. If the desktop certificate is replaced, verify the new fingerprint deliberately and scan the new QR. Do not accept a fingerprint sent through an untrusted channel.
+
+### PySide6 mobile features
+
+- Gamepad buttons, bumpers, menu/system buttons, D-pad, dual analogue sticks and L2/R2 triggers.
+- Standard and Driving modes with optional accelerometer steering and centre calibration when QtSensors is available.
+- Touchpad cursor movement, left/right/middle clicks, tap-to-click, scrolling and pointer sensitivity.
+- Remote text input, special keys, modifiers, approved shortcuts, media controls, explicit clipboard read/write, approved app shortcuts, presentation controls, PC status, and confirmation-gated power actions.
+- Pinned TLS transport, retry handling, device identity persistence, and server capability/permission awareness.
+
+### Legacy Kivy client
+
+The previous Kivy implementation lives at `mobile_kivy/main.py`. Its Buildozer file and phone dependencies were moved with it. Use this legacy directory only if you specifically want the Kivy version; the recommended client is `mobile_pyside6/`.
 
 ### Remote actions currently implemented
 
@@ -537,7 +529,7 @@ This separation makes it possible to extend the project with additional input an
 The repository includes the companion Kivy client source:
 
 ```text
-phone_client_with_auth.py
+mobile_kivy/main.py
 ```
 
 It can be built and run separately from the desktop application. Along with the

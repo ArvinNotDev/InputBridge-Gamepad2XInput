@@ -1,0 +1,3 @@
+PySide6==6.12.0
+numpy>=1.24
+pyzbar>=0.1.9
