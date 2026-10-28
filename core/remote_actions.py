@@ -12,7 +12,7 @@ from typing import Any
 from core.remote_protocol import ACTION_PERMISSION, KEY_NAMES, MODIFIER_KEYS, SHORTCUTS, validate_remote_request
 from core.utils.paths import data_path
 
-DEFAULT_REMOTE_PERMISSIONS = {"keyboard": False, "media": False, "clipboard": False, "app_launch": False, "presentation": False, "power": False}
+DEFAULT_REMOTE_PERMISSIONS = {"keyboard": True, "media": True, "clipboard": True, "app_launch": True, "presentation": True, "power": True}
 PERMISSION_FILE = data_path("remote_permissions.json")
 _PERMISSION_LOCK = threading.RLock()
 _MEDIA_VKEYS = {"volume_up": 0xAF, "volume_down": 0xAE, "mute": 0xAD, "play_pause": 0xB3, "previous_track": 0xB1, "next_track": 0xB0, "stop": 0xB2}
