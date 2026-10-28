@@ -342,7 +342,7 @@ class MainWindow(QMainWindow):
         self.web_remote_page._toggle_server()
         self._refresh_tray_menu()
 
-        def _on_profile_loaded(self, profile_name: str) -> None:
+    def _on_profile_loaded(self, profile_name: str) -> None:
         """Called when a profile is activated from the Profiles page."""
         self._refresh_sidebar_avatar()
         self.settings_page.reload_from_settings()
