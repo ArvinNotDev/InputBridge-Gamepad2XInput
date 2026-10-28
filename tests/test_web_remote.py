@@ -97,6 +97,57 @@ def test_bounded_touch_mouse_state_accepts_boolean_button_values():
     assert result["mouse"] == {"dx": -2048, "dy": 2048, "scroll": -20, "left": 1, "right": 0, "middle": 0}
 
 
+def test_persistent_websocket_stream_applies_states_and_releases_inputs(monkeypatch):
+    import json
+    import threading
+    import time
+
+    from simple_websocket import Client
+    from werkzeug.serving import make_server as make_test_server
+    from core.web_remote import WebRemoteServer
+
+    mappers = _install_mock_mappers(monkeypatch)
+    app_server = WebRemoteServer(object(), object(), object())
+    token = _pair_browser(app_server, "Stream test")
+    http_server = make_test_server("127.0.0.1", 0, app_server.app, threaded=True)
+    thread = threading.Thread(target=http_server.serve_forever, daemon=True)
+    thread.start()
+    client = None
+    try:
+        client = Client.connect(
+            f"ws://127.0.0.1:{http_server.server_port}/api/stream",
+            receive_timeout=2,
+        )
+        client.send(json.dumps({"type": "auth", "token": token}))
+        ready = json.loads(client.receive(timeout=2))
+        assert ready == {"type": "ready"}
+
+        client.send(json.dumps({
+            "type": "state",
+            "state": {"mode": "gamepad", "buttons": {"A": 1}, "joystick": {"left_x": 205}},
+        }))
+        deadline = time.monotonic() + 2
+        while not mappers[0].hid_inputs and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert mappers[0].hid_inputs
+        assert mappers[0].hid_inputs[-1]["buttons"]["A"] == 1
+        assert mappers[0].hid_inputs[-1]["joystick"]["left_x"] == 205
+
+        client.close()
+        client = None
+        deadline = time.monotonic() + 2
+        while "reset_gamepad" not in mappers[0].calls and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert "reset_gamepad" in mappers[0].calls
+        assert "release_mouse_buttons" in mappers[0].calls
+    finally:
+        if client is not None:
+            client.close()
+        http_server.shutdown()
+        http_server.server_close()
+        thread.join(timeout=2)
+
+
 def test_persistent_controller_stream_route_is_registered():
     from core.web_remote import WebRemoteServer
 
