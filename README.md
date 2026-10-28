@@ -239,7 +239,12 @@ no native mobile app is required.
    from the desktop.
 
 The Gamepad tab supports portrait and landscape layouts and has a full-screen
-**Gamepad Focus** mode. Browser preferences are saved for that browser origin;
+**Gamepad Focus** mode with an **Edit layout** control. Drag the sticks, D-pad,
+face buttons, and control groups to arrange them, or choose Classic, Racing,
+Left-handed, or Compact presets. Layout changes persist in that browser.
+Input updates are sent as soon as the previous state request completes; while idle,
+the browser sends only an occasional keepalive instead of continuous state traffic.
+Browser preferences are saved for that browser origin;
 the pairing token stays in per-tab session storage. Each paired browser gets an
 independent virtual controller. The server allows up to eight active browser
 sessions; pairing codes expire after five minutes, and inactive sessions release
