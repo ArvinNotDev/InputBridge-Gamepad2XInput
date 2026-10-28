@@ -274,7 +274,12 @@ class AnimatedStackedWidget(QStackedWidget):
 
 
 class ButtonHoverAnimations(QObject):
-    """Adds a restrained animated glow on hover without changing button styles."""
+    """Adds a restrained animated glow on hover without changing button styles.
+
+    A completed Qt animation group is deleted by deleteLater(). Keep no live
+    reference to that group after completion; future enter/leave events can then
+    safely start a fresh animation without touching a deleted C++ object.
+    """
 
     def __init__(self, root: QObject):
         super().__init__(root)
@@ -292,21 +297,62 @@ class ButtonHoverAnimations(QObject):
     def eventFilter(self, watched, event) -> bool:
         if not isinstance(watched, QPushButton):
             return False
-        if not self._root.isAncestorOf(watched):
+        try:
+            if not self._root.isAncestorOf(watched):
+                return False
+        except RuntimeError:
+            # A C++ widget may be destroyed while Qt is dispatching events.
             return False
 
         if event.type() == QEvent.Type.Enter:
             self._animate_hover(watched, True)
         elif event.type() == QEvent.Type.Leave:
             self._animate_hover(watched, False)
+        elif event.type() == QEvent.Type.Destroy:
+            self._discard_button(watched)
         return False
+
+    @staticmethod
+    def _stop_group(record) -> None:
+        """Stop and schedule a group for deletion, tolerating Qt-owned deletion."""
+        group = record.get("group")
+        # Clear the Python reference first so nested/queued events cannot reuse it.
+        record["group"] = None
+        if group is None:
+            return
+        try:
+            group.stop()
+        except RuntimeError:
+            pass
+        try:
+            group.deleteLater()
+        except RuntimeError:
+            pass
+
+    def _discard_button(self, button) -> None:
+        record = self._active.pop(button, None)
+        if record is None:
+            return
+        self._stop_group(record)
+
+    def _remove_effect(self, button, effect) -> None:
+        try:
+            if button.graphicsEffect() is effect:
+                button.setGraphicsEffect(None)
+        except RuntimeError:
+            # The button can disappear during window/page teardown.
+            pass
 
     def _animate_hover(self, button: QPushButton, hovered: bool) -> None:
         if hovered and (not animations_enabled() or not button.isEnabled()):
             return
-        if button.width() < 34 or button.height() < 26:
+        try:
+            if button.width() < 34 or button.height() < 26:
+                return
+            object_name = button.objectName()
+        except RuntimeError:
             return
-        if button.objectName() in {
+        if object_name in {
             "window_minimize", "window_maximize", "window_close",
         }:
             return
@@ -314,54 +360,76 @@ class ButtonHoverAnimations(QObject):
         record = self._active.get(button)
         if not hovered and not animations_enabled():
             if record is not None:
-                record["group"].stop()
-                record["group"].deleteLater()
-                if button.graphicsEffect() is record["effect"]:
-                    button.setGraphicsEffect(None)
+                self._stop_group(record)
+                self._remove_effect(button, record["effect"])
                 self._active.pop(button, None)
             return
+
         if record is None:
-            if button.graphicsEffect() is not None:
+            try:
+                # Respect effects owned by another part of the interface.
+                if button.graphicsEffect() is not None:
+                    return
+                effect = QGraphicsDropShadowEffect(button)
+                effect.setOffset(0, 2)
+                effect.setBlurRadius(0)
+                effect.setColor(QColor(99, 91, 255, 0))
+                button.setGraphicsEffect(effect)
+            except RuntimeError:
                 return
-            effect = QGraphicsDropShadowEffect(button)
-            effect.setOffset(0, 2)
-            effect.setBlurRadius(0)
-            effect.setColor(QColor(99, 91, 255, 0))
-            button.setGraphicsEffect(effect)
+            record = {"effect": effect, "group": None}
+            self._active[button] = record
         else:
             effect = record["effect"]
-            record["group"].stop()
-            record["group"].deleteLater()
+            self._stop_group(record)
+            try:
+                if button.graphicsEffect() is not effect:
+                    # The button's effect was replaced externally. Do not animate
+                    # a stale effect or overwrite the newer owner's effect.
+                    self._active.pop(button, None)
+                    return
+            except RuntimeError:
+                self._active.pop(button, None)
+                return
 
-        group = QParallelAnimationGroup(self)
-        blur = QPropertyAnimation(effect, b"blurRadius", group)
-        blur.setDuration(175)
-        blur.setStartValue(effect.blurRadius())
-        blur.setEndValue(12.0 if hovered else 0.0)
-        blur.setEasingCurve(QEasingCurve.Type.OutCubic)
+        try:
+            group = QParallelAnimationGroup(self)
+            blur = QPropertyAnimation(effect, b"blurRadius", group)
+            blur.setDuration(175)
+            blur.setStartValue(effect.blurRadius())
+            blur.setEndValue(12.0 if hovered else 0.0)
+            blur.setEasingCurve(QEasingCurve.Type.OutCubic)
 
-        color = QPropertyAnimation(effect, b"color", group)
-        color.setDuration(175)
-        color.setStartValue(effect.color())
-        color.setEndValue(
-            QColor(99, 91, 255, 85 if hovered else 0)
-        )
-        color.setEasingCurve(QEasingCurve.Type.OutCubic)
+            color = QPropertyAnimation(effect, b"color", group)
+            color.setDuration(175)
+            color.setStartValue(effect.color())
+            color.setEndValue(QColor(99, 91, 255, 85 if hovered else 0))
+            color.setEasingCurve(QEasingCurve.Type.OutCubic)
+        except RuntimeError:
+            self._active.pop(button, None)
+            return
 
-        record = {"effect": effect, "group": group}
-        self._active[button] = record
+        record["group"] = group
         group.finished.connect(
-            lambda target=button, current_effect=effect, current_group=group, active=hovered:
+            lambda target=button, current_effect=effect,
+                   current_group=group, active=hovered:
             self._finish_hover(target, current_effect, current_group, active)
         )
         group.start()
 
     def _finish_hover(self, button, effect, group, hovered: bool) -> None:
         record = self._active.get(button)
-        if record is None or record["group"] is not group:
+        if record is None or record.get("group") is not group:
             return
+
+        # Do not retain the group in the record: deleteLater() means its wrapped
+        # C++ instance may already be gone by the next mouse-enter/leave event.
+        record["group"] = None
+        try:
+            group.deleteLater()
+        except RuntimeError:
+            pass
+
         if not hovered:
-            if button.graphicsEffect() is effect:
-                button.setGraphicsEffect(None)
+            self._remove_effect(button, effect)
             self._active.pop(button, None)
-        group.deleteLater()
