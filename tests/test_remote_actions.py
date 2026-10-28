@@ -51,6 +51,23 @@ def test_invalid_request_fails_before_adapter_runs():
         )
 
 
+def test_legacy_permission_file_migrates_to_enabled_defaults_once(tmp_path):
+    import json
+    from core.remote_actions import load_remote_permissions, save_remote_permissions
+
+    path = tmp_path / "remote_permissions.json"
+    path.write_text(json.dumps({name: False for name in DEFAULT_REMOTE_PERMISSIONS}), encoding="utf-8")
+
+    migrated = load_remote_permissions(path)
+    assert all(value is True for value in migrated.values())
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 2
+
+    save_remote_permissions({"keyboard": False}, path)
+    restored = load_remote_permissions(path)
+    assert restored["keyboard"] is False
+    assert all(value is True for name, value in restored.items() if name != "keyboard")
+
+
 def test_permissions_persist_atomically_and_invalid_values_use_defaults(tmp_path):
     from core.remote_actions import load_remote_permissions, save_remote_permissions
     path = tmp_path / "remote_permissions.json"
