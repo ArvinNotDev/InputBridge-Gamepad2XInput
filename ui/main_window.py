@@ -22,6 +22,7 @@ from ui.pages.controller_emulation import ControllerEmulation
 from ui.pages.controllers import ControllersPage
 from ui.pages.settings import SettingsPage
 from ui.pages.server import ServerPage
+from ui.pages.web_remote import WebRemotePage
 from ui.pages.hotkey import HotkeyPage
 from ui.pages.profiles import ProfilesPage
 from ui.pages.about import AboutPage
@@ -47,7 +48,8 @@ class MainWindow(QMainWindow):
     IDX_TEST_XINPUT = 4
     IDX_SETTINGS = 5
     IDX_ABOUT = 6
-    IDX_QUIT = 7
+    IDX_WEB_REMOTE = 7
+    IDX_QUIT = 8
 
     def __init__(self, app: QApplication) -> None:
         super().__init__()
@@ -154,6 +156,7 @@ class MainWindow(QMainWindow):
         self.menu.addTab("Input Test")                                 # 4
         self.menu.addTab("Settings")                                   # 5
         self.menu.addTab("About")                                      # 6
+        self.menu.addTab("Web Companion")                               # 7
         self.menu.setMinimumHeight(44)
         main_layout.addWidget(self.menu)
 
@@ -194,6 +197,13 @@ class MainWindow(QMainWindow):
         )
         self.about_page = AboutPage()
         self.pages.addWidget(self.about_page)
+        # Browser controllers share the existing mapper registration path with
+        # the TLS phone client, so each paired browser appears as its own XInput
+        # device alongside mobile and physical controllers.
+        self.web_remote_page = WebRemotePage(
+            self.settings, controllers_page, hotkey_page, self.server_page
+        )
+        self.pages.addWidget(self.web_remote_page)
 
         main_layout.addWidget(self.pages, 1)
 
@@ -288,6 +298,7 @@ class MainWindow(QMainWindow):
             ("Profiles", self.IDX_PROFILES),
             ("Settings", self.IDX_SETTINGS),
             ("About", self.IDX_ABOUT),
+            ("Web Companion", self.IDX_WEB_REMOTE),
         ):
             action = QAction(label, menu)
             action.triggered.connect(
@@ -415,6 +426,10 @@ class MainWindow(QMainWindow):
             self.server_page.shutdown()
         except Exception as exc:
             print(f"[MainWindow] Server shutdown failed: {exc}")
+        try:
+            self.web_remote_page.shutdown()
+        except Exception as exc:
+            print(f"[MainWindow] Web Companion shutdown failed: {exc}")
         try:
             self.controller_emulation_page.shutdown()
         except Exception as exc:
