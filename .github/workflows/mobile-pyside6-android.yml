@@ -34,9 +34,16 @@ jobs:
           for tool in autoconf automake aclocal autoreconf libtoolize m4 pkg-config; do
             command -v "$tool"
           done
-          LIBTOOL_MACROS="$(aclocal --print-ac-dir)/libtool.m4"
-          test -f "$LIBTOOL_MACROS"
-          grep -q 'LT_SYS_SYMBOL_USCORE' "$LIBTOOL_MACROS"
+          # The pinned python-for-android libffi recipe still invokes
+          # LT_SYS_SYMBOL_USCORE, removed from modern libtool macro bundles.
+          # On the Android ELF target, symbols do not use a leading underscore.
+          MACRO_DIR="$RUNNER_TEMP/inputbridge-aclocal"
+          mkdir -p "$MACRO_DIR"
+          cat > "$MACRO_DIR/lt_sys_symbol_uscore.m4" <<'M4'
+          AC_DEFUN([LT_SYS_SYMBOL_USCORE], [sys_symbol_underscore=no])
+          M4
+          grep -q 'AC_DEFUN(\[LT_SYS_SYMBOL_USCORE\]' "$MACRO_DIR/lt_sys_symbol_uscore.m4"
+          echo "ACLOCAL_PATH=$MACRO_DIR${ACLOCAL_PATH:+:$ACLOCAL_PATH}" >> "$GITHUB_ENV"
 
       - name: Install Qt for Python and QR dependencies
         working-directory: mobile_pyside6

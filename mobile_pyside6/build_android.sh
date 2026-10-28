@@ -17,11 +17,15 @@ for tool in autoconf automake aclocal autoreconf libtoolize m4 pkg-config; do
     exit 1
   fi
 done
-LIBTOOL_MACROS="$(aclocal --print-ac-dir)/libtool.m4"
-if [ ! -f "$LIBTOOL_MACROS" ] || ! grep -q 'LT_SYS_SYMBOL_USCORE' "$LIBTOOL_MACROS"; then
-  echo "The libtool Autoconf macros are missing. Install Ubuntu packages libtool, libtool-bin, autoconf, automake and autopoint." >&2
-  exit 1
-fi
+# python-for-android's pinned libffi recipe calls LT_SYS_SYMBOL_USCORE,
+# an obsolete macro no longer shipped by current libtool. For Android's ELF
+# target, the correct answer is "no leading underscore".
+MACRO_DIR="$HOME/.cache/inputbridge-aclocal"
+mkdir -p "$MACRO_DIR"
+cat > "$MACRO_DIR/lt_sys_symbol_uscore.m4" <<'M4'
+AC_DEFUN([LT_SYS_SYMBOL_USCORE], [sys_symbol_underscore=no])
+M4
+export ACLOCAL_PATH="$MACRO_DIR${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
 
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt aqtinstall
