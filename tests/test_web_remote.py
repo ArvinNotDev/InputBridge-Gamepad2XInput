@@ -97,6 +97,16 @@ def test_bounded_touch_mouse_state_accepts_boolean_button_values():
     assert result["mouse"] == {"dx": -2048, "dy": 2048, "scroll": -20, "left": 1, "right": 0, "middle": 0}
 
 
+def test_persistent_controller_stream_route_is_registered():
+    from core.web_remote import WebRemoteServer
+
+    server = WebRemoteServer(object(), object(), object())
+    routes = {rule.rule: rule for rule in server.app.url_map.iter_rules()}
+    assert "/api/stream" in routes
+    assert getattr(routes["/api/stream"], "websocket", False) is True
+    assert "/api/state" in routes
+
+
 def test_flask_serves_responsive_ui_and_security_headers():
     from core.web_remote import WebRemoteServer
 
