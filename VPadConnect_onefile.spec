@@ -57,6 +57,7 @@ exe = EXE(
     a.datas,
     [],
     name="VPadConnect",
+    icon=str(project_root / "ui" / "assets" / "vpadconnect-icon.ico"),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
