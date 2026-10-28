@@ -213,18 +213,28 @@ class WebRemoteServer:
 
     @staticmethod
     def _close_session(session: dict[str, Any]) -> None:
-        mapper = session.get("mapper")
-        if mapper is not None:
+        # Serialize cleanup with any request already using this session's
+        # mapper. The closed flag also makes cleanup idempotent when disconnect,
+        # expiry, and server shutdown race with one another.
+        lock = session.get("lock")
+        if lock is None:
+            lock = threading.RLock()
+            session["lock"] = lock
+        with lock:
+            if session.get("closed", False):
+                return
+            session["closed"] = True
+            mapper = session.get("mapper")
+            if mapper is not None:
+                for method_name in ("reset_gamepad", "release_mouse_buttons", "shutdown"):
+                    try:
+                        getattr(mapper, method_name)()
+                    except Exception:
+                        pass
             try:
-                mapper.reset_gamepad()
-                mapper.release_mouse_buttons()
-                mapper.shutdown()
+                session.get("remote").close()
             except Exception:
                 pass
-        try:
-            session.get("remote").close()
-        except Exception:
-            pass
 
     def _authorize(self, header: str) -> tuple[str | None, dict[str, Any] | None]:
         token = header.removeprefix("Bearer ").strip()
@@ -309,7 +319,8 @@ class WebRemoteServer:
                 return jsonify({"ok": False, "error": "Could not initialize a virtual controller on this PC."}), 500
             token = secrets.token_urlsafe(32)
             session = {"uuid": session_uuid, "name": name.strip(), "mapper": mapper,
-                       "remote": RemoteActionSession(), "last_seen": time.monotonic(), "mode": "gamepad"}
+                       "remote": RemoteActionSession(), "last_seen": time.monotonic(), "mode": "gamepad",
+                       "lock": threading.RLock(), "closed": False}
             with self._lock:
                 self._pending_pairs = max(0, self._pending_pairs - 1)
                 if self._stop_event.is_set() or len(self._sessions) >= MAX_WEB_SESSIONS:
@@ -338,17 +349,20 @@ class WebRemoteServer:
             data = validate_web_controller_state(request.get_json(silent=True))
             if data is None:
                 return jsonify({"ok": False, "error": "Invalid controller state."}), 400
-            mapper, previous, current = session["mapper"], session.get("mode"), data["mode"]
-            if previous != current:
-                if previous == "gamepad":
-                    mapper.reset_gamepad()
-                if previous == "mouse":
-                    mapper.release_mouse_buttons()
-                session["mode"] = current
-            if current == "mouse":
-                mapper.handle_mouse_data(data["mouse"])
-            else:
-                mapper.handle_hid_data({"buttons": data["buttons"], "analog": data["analog"], "joystick": data["joystick"]})
+            with session["lock"]:
+                if session.get("closed", False):
+                    return jsonify({"ok": False, "error": "Session expired. Pair this browser again."}), 401
+                mapper, previous, current = session["mapper"], session.get("mode"), data["mode"]
+                if previous != current:
+                    if previous == "gamepad":
+                        mapper.reset_gamepad()
+                    if previous == "mouse":
+                        mapper.release_mouse_buttons()
+                    session["mode"] = current
+                if current == "mouse":
+                    mapper.handle_mouse_data(data["mouse"])
+                else:
+                    mapper.handle_hid_data({"buttons": data["buttons"], "analog": data["analog"], "joystick": data["joystick"]})
             return jsonify({"ok": True})
 
         @app.post("/api/action")
@@ -361,10 +375,13 @@ class WebRemoteServer:
                 return jsonify({"ok": False, "error": "Invalid remote-action request."}), 400
             name = payload.get("action")
             try:
-                result = session["remote"].execute({
-                    "protocol_version": PROTOCOL_VERSION, "request_id": payload.get("request_id"),
-                    "action": name, "payload": payload.get("payload")
-                }, load_remote_permissions())
+                with session["lock"]:
+                    if session.get("closed", False):
+                        return jsonify({"ok": False, "error": "Session expired. Pair this browser again."}), 401
+                    result = session["remote"].execute({
+                        "protocol_version": PROTOCOL_VERSION, "request_id": payload.get("request_id"),
+                        "action": name, "payload": payload.get("payload")
+                    }, load_remote_permissions())
                 return jsonify({"ok": True, "action": name, "result": result})
             except PermissionError as exc:
                 return jsonify({"ok": False, "action": name, "error": str(exc)}), 403

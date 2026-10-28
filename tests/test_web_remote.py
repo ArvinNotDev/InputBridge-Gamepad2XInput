@@ -1,6 +1,77 @@
 from core.web_remote import validate_web_controller_state
 
 
+def _install_mock_phone_mappers(monkeypatch):
+    """Provide pair-route mappers without importing Windows/HID dependencies."""
+    import sys
+    import types
+    from types import SimpleNamespace
+
+    instances = []
+
+    class MockPhoneMapper:
+        def __init__(self, uuid, _emulate_to, _controllers_page, _hotkey_page, _settings):
+            self.uuid = uuid
+            self.emulator = SimpleNamespace(device_path=uuid)
+            self.calls = []
+            self.hid_inputs = []
+            self.mouse_inputs = []
+            self.gamepad_state = None
+            self.mouse_state = {"left": 0, "right": 0, "middle": 0}
+            instances.append(self)
+
+        def handle_hid_data(self, data):
+            self.calls.append("hid")
+            self.hid_inputs.append(data)
+            self.gamepad_state = data
+
+        def handle_mouse_data(self, data):
+            self.calls.append("mouse")
+            self.mouse_inputs.append(data)
+            self.mouse_state = {key: data[key] for key in ("left", "right", "middle")}
+
+        def reset_gamepad(self):
+            self.calls.append("reset_gamepad")
+            self.gamepad_state = {
+                "buttons": {key: 0 for key in (
+                    "A", "B", "X", "Y", "LB", "RB", "BACK", "START", "GUIDE",
+                    "L3", "R3", "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT",
+                )},
+                "analog": {"L2": 0, "R2": 0},
+                "joystick": {"left_x": 128, "left_y": 128, "right_x": 128, "right_y": 128},
+            }
+
+        def release_mouse_buttons(self):
+            self.calls.append("release_mouse_buttons")
+            self.mouse_state = {"left": 0, "right": 0, "middle": 0}
+
+        def shutdown(self):
+            self.calls.append("shutdown")
+
+    mapper_module = types.ModuleType("core.mapper")
+    mapper_module.Phone_mapper = MockPhoneMapper
+    monkeypatch.setitem(sys.modules, "core.mapper", mapper_module)
+    return instances
+
+
+def _pair_browser(server, name="Test browser"):
+    import time
+
+    server.pairing_code = "123456"
+    server.pairing_deadline = time.monotonic() + 60
+    response = server.app.test_client().post(
+        "/api/pair", json={"code": server.pairing_code, "name": name}
+    )
+    assert response.status_code == 200
+    return response.get_json()["token"]
+
+
+def _send_browser_state(server, token, state):
+    return server.app.test_client().post(
+        "/api/state", headers={"Authorization": f"Bearer {token}"}, json=state
+    )
+
+
 def test_browser_state_is_normalized_with_neutral_defaults():
     result = validate_web_controller_state({"mode": "gamepad", "buttons": {"A": True}, "joystick": {"left_x": 255}})
     assert result is not None
@@ -73,6 +144,232 @@ def test_pairing_and_state_endpoints_reject_bad_or_missing_credentials():
     assert bad_code.status_code == 400
     no_token = client.post("/api/state", json={"mode": "gamepad"})
     assert no_token.status_code == 401
+
+
+def test_paired_browsers_have_distinct_mappers_and_isolated_inputs(monkeypatch):
+    from core.web_remote import WebRemoteServer
+
+    mappers = _install_mock_phone_mappers(monkeypatch)
+    registered = []
+    server = WebRemoteServer(object(), object(), object(), mapper_added=registered.append)
+    token_a = _pair_browser(server, "Browser A")
+    token_b = _pair_browser(server, "Browser B")
+
+    assert token_a != token_b
+    assert len(server._sessions) == 2
+    assert server._sessions[token_a]["uuid"] != server._sessions[token_b]["uuid"]
+    assert server._sessions[token_a]["mapper"] is not server._sessions[token_b]["mapper"]
+    assert len(mappers) == len(registered) == 2
+    assert registered[0] is mappers[0].emulator
+    assert registered[1] is mappers[1].emulator
+
+    state_a = {
+        "mode": "gamepad",
+        "buttons": {"A": True},
+        "analog": {"L2": 180, "R2": 23},
+        "joystick": {"left_x": 15, "right_y": 240},
+    }
+    state_b = {
+        "mode": "gamepad",
+        "buttons": {"B": True},
+        "analog": {"L2": 7, "R2": 225},
+        "joystick": {"left_y": 30, "right_x": 210},
+    }
+    assert _send_browser_state(server, token_a, state_a).status_code == 200
+    assert _send_browser_state(server, token_b, state_b).status_code == 200
+    assert _send_browser_state(server, token_a, {
+        "mode": "mouse", "mouse": {"dx": 17, "dy": -6, "scroll": 2, "left": True}
+    }).status_code == 200
+    assert _send_browser_state(server, token_b, {
+        "mode": "mouse", "mouse": {"dx": -9, "dy": 12, "scroll": -1, "right": True}
+    }).status_code == 200
+
+    assert len(mappers[0].hid_inputs) == len(mappers[1].hid_inputs) == 1
+    assert mappers[0].hid_inputs[0]["buttons"]["A"] == 1
+    assert mappers[0].hid_inputs[0]["buttons"]["B"] == 0
+    assert mappers[0].hid_inputs[0]["analog"] == {"L2": 180, "R2": 23}
+    assert mappers[0].hid_inputs[0]["joystick"]["left_x"] == 15
+    assert mappers[0].hid_inputs[0]["joystick"]["right_y"] == 240
+    assert mappers[1].hid_inputs[0]["buttons"]["B"] == 1
+    assert mappers[1].hid_inputs[0]["buttons"]["A"] == 0
+    assert mappers[1].hid_inputs[0]["analog"] == {"L2": 7, "R2": 225}
+    assert mappers[1].hid_inputs[0]["joystick"]["left_y"] == 30
+    assert mappers[1].hid_inputs[0]["joystick"]["right_x"] == 210
+    assert mappers[0].mouse_inputs == [{
+        "dx": 17, "dy": -6, "scroll": 2, "left": 1, "right": 0, "middle": 0,
+    }]
+    assert mappers[1].mouse_inputs == [{
+        "dx": -9, "dy": 12, "scroll": -1, "left": 0, "right": 1, "middle": 0,
+    }]
+
+
+def test_switching_one_browser_mode_does_not_reset_the_other_mapper(monkeypatch):
+    from core.web_remote import WebRemoteServer
+
+    mappers = _install_mock_phone_mappers(monkeypatch)
+    server = WebRemoteServer(object(), object(), object())
+    token_a = _pair_browser(server, "Browser A")
+    token_b = _pair_browser(server, "Browser B")
+
+    assert _send_browser_state(server, token_a, {"mode": "mouse"}).status_code == 200
+    assert mappers[0].calls == ["reset_gamepad", "mouse"]
+    assert mappers[1].calls == []
+
+    assert _send_browser_state(server, token_b, {"mode": "mouse"}).status_code == 200
+    assert _send_browser_state(server, token_b, {"mode": "gamepad"}).status_code == 200
+    assert mappers[0].calls == ["reset_gamepad", "mouse"]
+    assert mappers[1].calls == ["reset_gamepad", "mouse", "release_mouse_buttons", "hid"]
+
+
+def test_disconnect_releases_only_its_browser_and_other_browser_remains_active(monkeypatch):
+    from core.web_remote import WebRemoteServer
+
+    mappers = _install_mock_phone_mappers(monkeypatch)
+    server = WebRemoteServer(object(), object(), object())
+    token_a = _pair_browser(server, "Browser A")
+    token_b = _pair_browser(server, "Browser B")
+
+    assert _send_browser_state(server, token_a, {"mode": "mouse", "mouse": {"left": True}}).status_code == 200
+    assert _send_browser_state(server, token_b, {"buttons": {"Y": True}}).status_code == 200
+    response = server.app.test_client().post(
+        "/api/disconnect", headers={"Authorization": f"Bearer {token_a}"}, json={}
+    )
+
+    assert response.status_code == 200
+    assert token_a not in server._sessions and token_b in server._sessions
+    assert mappers[0].calls[-3:] == ["reset_gamepad", "release_mouse_buttons", "shutdown"]
+    assert mappers[0].gamepad_state["buttons"]["A"] == 0
+    assert mappers[0].mouse_state == {"left": 0, "right": 0, "middle": 0}
+    assert "shutdown" not in mappers[1].calls
+    assert mappers[1].gamepad_state["buttons"]["Y"] == 1
+    calls_before = list(mappers[1].calls)
+    assert _send_browser_state(server, token_b, {"buttons": {"X": True}}).status_code == 200
+    assert mappers[1].calls == calls_before + ["hid"]
+    assert _send_browser_state(server, token_a, {"buttons": {"A": True}}).status_code == 401
+
+
+def test_expired_browser_session_is_closed_and_cannot_send_more_commands(monkeypatch):
+    import time
+    from core.web_remote import SESSION_IDLE_SECONDS, WebRemoteServer
+
+    mappers = _install_mock_phone_mappers(monkeypatch)
+    server = WebRemoteServer(object(), object(), object())
+    token_a = _pair_browser(server, "Browser A")
+    token_b = _pair_browser(server, "Browser B")
+    with server._lock:
+        server._sessions[token_a]["last_seen"] = time.monotonic() - SESSION_IDLE_SECONDS - 1
+
+    expired = _send_browser_state(server, token_a, {"buttons": {"A": True}})
+    assert expired.status_code == 401
+    assert token_a not in server._sessions and token_b in server._sessions
+    assert mappers[0].calls == ["reset_gamepad", "release_mouse_buttons", "shutdown"]
+    assert mappers[0].gamepad_state["buttons"]["A"] == 0
+    assert mappers[0].mouse_state == {"left": 0, "right": 0, "middle": 0}
+    assert _send_browser_state(server, token_a, {"mode": "mouse"}).status_code == 401
+    action = server.app.test_client().post(
+        "/api/action",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"request_id": "expired-request", "action": "pc_status", "payload": {}},
+    )
+    assert action.status_code == 401
+    assert mappers[0].calls == ["reset_gamepad", "release_mouse_buttons", "shutdown"]
+    assert _send_browser_state(server, token_b, {"buttons": {"B": True}}).status_code == 200
+    assert mappers[1].hid_inputs[-1]["buttons"]["B"] == 1
+
+
+def test_repeated_pair_and_disconnect_cycles_leave_no_live_sessions_or_mappers(monkeypatch):
+    from core.web_remote import WebRemoteServer
+
+    mappers = _install_mock_phone_mappers(monkeypatch)
+    server = WebRemoteServer(object(), object(), object())
+    for index in range(4):
+        token = _pair_browser(server, f"Browser {index}")
+        assert server.client_count == 1
+        assert _send_browser_state(server, token, {"buttons": {"A": True}}).status_code == 200
+        response = server.app.test_client().post(
+            "/api/disconnect", headers={"Authorization": f"Bearer {token}"}, json={}
+        )
+        assert response.status_code == 200
+        assert server.client_count == 0
+        assert token not in server._sessions
+        assert mappers[index].gamepad_state["buttons"]["A"] == 0
+        assert mappers[index].mouse_state == {"left": 0, "right": 0, "middle": 0}
+
+    assert len(mappers) == 4
+    for mapper in mappers:
+        assert mapper.calls.count("shutdown") == 1
+        assert mapper.calls[-3:] == ["reset_gamepad", "release_mouse_buttons", "shutdown"]
+
+
+def test_concurrent_mode_changes_on_one_browser_are_serialized(monkeypatch):
+    import threading
+    from core.web_remote import WebRemoteServer
+
+    mappers = _install_mock_phone_mappers(monkeypatch)
+    server = WebRemoteServer(object(), object(), object())
+    token = _pair_browser(server, "Browser A")
+    mapper = mappers[0]
+    mouse_entered = threading.Event()
+    allow_mouse_finish = threading.Event()
+    second_authorized = threading.Event()
+    hid_entered = threading.Event()
+    original_authorize = server._authorize
+    original_hid = mapper.handle_hid_data
+
+    def blocked_mouse(data):
+        mouse_entered.set()
+        assert allow_mouse_finish.wait(2)
+        mapper.calls.append("mouse")
+        mapper.mouse_inputs.append(data)
+        mapper.mouse_state = {key: data[key] for key in ("left", "right", "middle")}
+
+    def tracked_hid(data):
+        hid_entered.set()
+        original_hid(data)
+
+    def tracked_authorize(header):
+        result = original_authorize(header)
+        if threading.current_thread().name == "second-state-request":
+            second_authorized.set()
+        return result
+
+    mapper.handle_mouse_data = blocked_mouse
+    mapper.handle_hid_data = tracked_hid
+    server._authorize = tracked_authorize
+    statuses = {}
+
+    def post(name, state):
+        with server.app.test_client() as client:
+            statuses[name] = client.post(
+                "/api/state", headers={"Authorization": f"Bearer {token}"}, json=state
+            ).status_code
+
+    first = threading.Thread(
+        name="first-state-request",
+        target=post,
+        args=("mouse", {"mode": "mouse", "mouse": {"left": True}}),
+    )
+    second = threading.Thread(
+        name="second-state-request",
+        target=post,
+        args=("gamepad", {"mode": "gamepad", "buttons": {"A": False}}),
+    )
+    first.start()
+    try:
+        assert mouse_entered.wait(2)
+        second.start()
+        assert second_authorized.wait(2)
+        assert not hid_entered.wait(0.05)
+    finally:
+        allow_mouse_finish.set()
+    first.join(2)
+    second.join(2)
+
+    assert not first.is_alive() and not second.is_alive()
+    assert statuses == {"mouse": 200, "gamepad": 200}
+    assert mapper.calls == ["reset_gamepad", "mouse", "release_mouse_buttons", "hid"]
+    assert mapper.mouse_state == {"left": 0, "right": 0, "middle": 0}
+    assert server._sessions[token]["mode"] == "gamepad"
 
 
 def test_disconnect_releases_the_browser_controller_session():
