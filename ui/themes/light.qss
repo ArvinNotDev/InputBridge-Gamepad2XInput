@@ -826,3 +826,26 @@ QStackedWidget#content_stack {
     border: none;
     border-radius: 0;
 }
+
+
+/* Frameless Apple-inspired title bar */
+QPushButton#window_minimize, QPushButton#window_maximize, QPushButton#window_close {
+    border: none; border-radius: 7px; padding: 0; min-width: 13px; max-width: 13px;
+    min-height: 13px; max-height: 13px;
+}
+QPushButton#window_minimize { background: #f6c65b; }
+QPushButton#window_maximize { background: #35c76b; }
+QPushButton#window_close { background: #ff5f57; }
+QPushButton#window_minimize:hover { background: #ffda79; }
+QPushButton#window_maximize:hover { background: #61dc89; }
+QPushButton#window_close:hover { background: #ff837d; }
+QPushButton#profile_chip { text-align: left; padding: 3px 8px; }
+QPushButton#profile_chip:hover { background: #e8ebf7; border-color: #aeb8d5; }
+QPushButton#settings_gear { background: #f8f9fd; border: 1px solid #d2d8e7; border-radius: 12px;
+    padding: 0; color: #333b57; font-size: 21px; font-weight: 500; }
+QPushButton#settings_gear:hover { background: #e9edfb; border-color: #979cf0; }
+QTabBar#settings_navigation { background: transparent; border: none; padding: 0; margin: 0 0 8px 0; }
+QTabBar#settings_navigation::tab { background: transparent; color: #707893; border: none;
+    border-bottom: 2px solid transparent; padding: 8px 14px; margin-right: 5px; font-weight: 650; }
+QTabBar#settings_navigation::tab:hover { color: #252943; background: rgba(99,91,255,0.06); }
+QTabBar#settings_navigation::tab:selected { color: #30354f; border-bottom-color: #635bff; }
