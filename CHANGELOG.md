@@ -5,6 +5,23 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
 
+### Mobile controller responsiveness and customization
+
+- Removed the fixed 40 ms state-send throttle. Touch, stick, trigger, mouse, and
+  motion-steering changes now coalesce to the latest state while one request is
+  in flight, and idle clients use a low-frequency keepalive instead of streaming
+  unchanged state continuously.
+- Added full-screen Edit layout mode with drag-and-drop positions for control
+  groups, individual face buttons, and D-pad directions. Added Classic, Racing,
+  Left-handed, and Compact presets with browser-local persistence.
+- Improved Driving mode so selecting it requests motion-steering permission,
+  calibrates the steering center, and uses the correct sensor axis in landscape
+  and portrait orientations.
+- Increased the desktop window's default size for a clearer layout at 1080p,
+  moved the circular traffic-light controls to the right, and improved profile
+  chip contrast.
+
+
 ### VPadConnect branding
 
 - Rebranded the application and Windows executable as VPadConnect while
