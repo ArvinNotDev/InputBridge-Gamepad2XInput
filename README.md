@@ -216,15 +216,13 @@ InputBridge now provides two separately named mobile clients:
 - **PySide6 Mobile (recommended):** the modern Qt for Python client in `mobile_pyside6/`. It contains Connect, Gamepad, Mouse, Remote and Settings screens with a touch-first dark interface.
 - **Legacy Kivy Mobile:** the previous client is preserved in `mobile_kivy_legacy/main.py`, along with its legacy Buildozer configuration and dependency list. It is kept separate so the two approaches cannot be confused.
 
-### Install the PySide6 APK without building locally
+### PySide6 mobile source and Android runtime
 
-**Recommended: download the prebuilt APK from the [latest mobile release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/mobile-latest).** Install `InputBridge-Mobile-Android-arm64.apk` on an ARM64 Android phone. Android may ask you to allow installation from the browser or file manager.
+The PySide6 client source is maintained in `mobile_pyside6/`. This repository intentionally does **not** build or publish a mobile APK/AAB. CI only validates the Python source and tests.
 
-A successful build also appears in the [Build PySide6 Android client workflow](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/actions/workflows/mobile-pyside6-android.yml). Open its latest successful run and download the `InputBridge-Mobile-Android-arm64` artifact if you need the raw CI artifact.
+A Python source file using PySide6 cannot directly become a native Android application by itself: Android does not provide the Python interpreter and Qt/PySide runtime required by the source. Qt documents the packaging requirement in its [official Android deployment guide](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html).
 
-The APK is built on GitHub Actions after relevant changes land on `main`; you do **not** need to install Qt, the Android SDK/NDK, or build the APK on your own computer. The workflow packages the Python, Qt, multimedia, sensor, and QR-decoding runtime into the APK. The Python source alone is not an installable Android application.
-
-The first time you choose **Scan pairing QR**, Android should ask for camera permission. Approve it to use the built-in scanner. If you deny permission, or a device's camera/decoder is unavailable, the scanner provides a paste field and a **Paste** button as a fallback.
+For source development, follow [the PySide6 mobile README](mobile_pyside6/README.md). The interface, controller-state protocol, pairing validation, and remote-action flow can be tested on a desktop. Real Android camera/sensor behavior and native phone deployment cannot be verified by source-only tests.
 
 ### Secure pairing and connection
 
@@ -526,18 +524,15 @@ This separation makes it possible to extend the project with additional input an
 
 ## Remote Client
 
-The recommended phone application is the **PySide6 Mobile** client in
-`mobile_pyside6/main.py`. It is packaged as an ARM64 Android APK by the
-**Build PySide6 Android client** GitHub Actions workflow, so users can download
-the build artifact without setting up the Android toolchain on their own
-computer. The workflow is available from the repository's Actions tab.
+The recommended phone-client source is the **PySide6 Mobile** client in
+`mobile_pyside6/main.py`. Its current CI workflow validates the source and unit tests only; it does not build or publish an APK/AAB. To run this as a native Android app, the Python, Qt and PySide runtime still has to be packaged as documented by [Qt for Python](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html).
 
 The previous Kivy implementation remains available separately in
 `mobile_kivy_legacy/main.py` as the **Legacy Kivy Mobile** version. The two clients
-share the desktop protocol, while the PySide6 interface provides Connect,
-Gamepad, Mouse, Remote and Settings screens, secure QR pairing, and one-finger
-pointer movement, two-finger scrolling, optional tap-to-click and adjustable
-mouse sensitivity.
+share the desktop protocol, while the PySide6 source provides Connect, Gamepad,
+Mouse, Remote and Settings screens, secure QR pairing, one-finger pointer
+movement, two-finger scrolling, optional tap-to-click and adjustable mouse
+sensitivity. Source-only tests do not prove access to real phone camera/sensors.
 
 ## Project Status
 

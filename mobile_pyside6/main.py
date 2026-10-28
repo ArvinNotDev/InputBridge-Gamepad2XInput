@@ -53,10 +53,16 @@ def is_android_runtime() -> bool:
 
 
 def normalize_fingerprint(value: Any) -> str:
+    """Normalize a SHA-256 certificate fingerprint without ignoring typos."""
     if not isinstance(value, str):
         return ""
-    value = "".join(c for c in value.lower() if c in "0123456789abcdef")
-    return value if len(value) == 64 else ""
+    value = value.strip().lower()
+    # Colons and whitespace are conventional separators. Reject all other
+    # non-hex characters rather than silently stripping arbitrary input.
+    if any(c not in "0123456789abcdef:- \t\r\n" for c in value):
+        return ""
+    compact = "".join(c for c in value if c in "0123456789abcdef")
+    return compact if len(compact) == 64 else ""
 
 
 def parse_pairing_qr_payload(raw: str | bytes) -> dict[str, str] | None:
@@ -121,6 +127,36 @@ for key, value in {
     "tap_to_click": True,
 }.items():
     SETTINGS.setdefault(key, value)
+
+# Recover safely from stale, manually edited, or partially corrupt settings.
+try:
+    SETTINGS["uuid"] = str(uuid.UUID(str(SETTINGS["uuid"])))
+except (ValueError, TypeError, AttributeError):
+    SETTINGS["uuid"] = str(uuid.uuid4())
+SETTINGS["name"] = (
+    SETTINGS["name"].strip()[:64]
+    if isinstance(SETTINGS.get("name"), str) and SETTINGS["name"].strip()
+    else APP_NAME
+)
+SETTINGS["last_host"] = (
+    SETTINGS["last_host"].strip()[:253]
+    if isinstance(SETTINGS.get("last_host"), str) else ""
+)
+try:
+    saved_port = int(SETTINGS.get("last_port", 5000))
+    SETTINGS["last_port"] = str(saved_port) if 1 <= saved_port <= 65535 else "5000"
+except (ValueError, TypeError, OverflowError):
+    SETTINGS["last_port"] = "5000"
+if SETTINGS.get("mode") not in ("standard", "driving"):
+    SETTINGS["mode"] = "standard"
+for _key, _default in (("steering_sensitivity", 1.5), ("mouse_sensitivity", 1.8)):
+    try:
+        _number = float(SETTINGS.get(_key, _default))
+        SETTINGS[_key] = _number if math.isfinite(_number) and 0.5 <= _number <= 4.0 else _default
+    except (ValueError, TypeError, OverflowError):
+        SETTINGS[_key] = _default
+if not isinstance(SETTINGS.get("tap_to_click"), bool):
+    SETTINGS["tap_to_click"] = True
 _write_json(SETTINGS_FILE, SETTINGS)
 
 
@@ -388,6 +424,21 @@ class BridgeClient(QObject):
                 "error": "Request timed out. Check the PC connection and desktop permissions.",
             })
 
+    def _reset_controls(self) -> None:
+        """Return every input to neutral so disconnects cannot leave stuck inputs."""
+        for key in self.buttons:
+            self.buttons[key] = 0
+        for key in self.analog:
+            self.analog[key] = 0
+        self.joystick.update(left_x=128, left_y=128, right_x=128, right_y=128)
+        self.gyro_enabled = False
+        self.gyro_neutral = None
+        self.gyro_steer = 0.0
+        with self._mouse_lock:
+            self._mouse_dx = self._mouse_dy = 0.0
+            self._mouse_scroll = 0
+            self.mouse_buttons.update(left=0, right=0, middle=0)
+
     def _close_session(self, generation=None, sock=None, message="Disconnected.") -> None:
         with self._lock:
             if generation is not None and generation != self._generation:
@@ -398,10 +449,7 @@ class BridgeClient(QObject):
             self._generation += 1
             self.sock, self.connected, self.connecting = None, False, False
             self._rx_stop.set()
-        with self._mouse_lock:
-            self._mouse_dx = self._mouse_dy = 0.0
-            self._mouse_scroll = 0
-            self.mouse_buttons = {"left": 0, "right": 0, "middle": 0}
+        self._reset_controls()
         with self._pending_lock:
             self._pending.clear()
         if old is not None:
@@ -732,7 +780,6 @@ class PairingScanner(QDialog):
             self.preview.setMinimumHeight(180)
             self.preview.setStyleSheet("background:#050811;border-radius:12px;")
             root.addWidget(self.preview)
-            self._start_camera()
         else:
             root.addWidget(label("Qt Multimedia camera support is not available in this runtime.", "warning"))
         if decode_qr is None or np is None:
@@ -754,6 +801,10 @@ class PairingScanner(QDialog):
         row.addWidget(paste, 1)
         row.addWidget(cancel, 1)
         root.addLayout(row)
+
+        # Camera startup can synchronously hit the no-device/error path. Defer
+        # it until the status label and the complete dialog UI are initialized.
+        QTimer.singleShot(0, self._start_camera)
 
     def _start_camera(self):
         if QCamera is None or QMediaCaptureSession is None or QMediaDevices is None or self.preview is None:
