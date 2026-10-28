@@ -69,13 +69,13 @@ class WebRemotePage(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 8, 16, 10)
+        root.setContentsMargins(16, 6, 16, 8)
         root.setSpacing(8)
 
         intro = QFrame()
         intro.setObjectName("webHero")
         intro_layout = QVBoxLayout(intro)
-        intro_layout.setContentsMargins(16, 8, 16, 8)
+        intro_layout.setContentsMargins(16, 6, 16, 6)
         intro_layout.setSpacing(3)
         eyebrow = QLabel("VPADCONNECT")
         eyebrow.setObjectName("webEyebrow")
@@ -91,7 +91,7 @@ class WebRemotePage(QWidget):
         setup = QFrame()
         setup.setObjectName("webCard")
         setup_layout = QGridLayout(setup)
-        setup_layout.setContentsMargins(12, 8, 12, 8)
+        setup_layout.setContentsMargins(12, 6, 12, 6)
         setup_layout.setHorizontalSpacing(12)
         setup_layout.setVerticalSpacing(6)
         setup_layout.setColumnStretch(1, 1)
@@ -143,7 +143,7 @@ class WebRemotePage(QWidget):
         pairing.setObjectName("webPairingCard")
         self.pairing_card = pairing
         pairing_layout = QHBoxLayout(pairing)
-        pairing_layout.setContentsMargins(12, 8, 12, 8)
+        pairing_layout.setContentsMargins(12, 6, 12, 6)
         pairing_layout.setSpacing(14)
 
         qr_column = QVBoxLayout()
