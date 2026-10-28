@@ -36,8 +36,8 @@ from core.version import APP_NAME
 class MainWindow(QMainWindow):
 
     WINDOW_TITLE = APP_NAME
-    WINDOW_WIDTH = 1040
-    WINDOW_HEIGHT = 640
+    WINDOW_WIDTH = 1180
+    WINDOW_HEIGHT = 760
     NAV_PAGE_INDICES = (0, 1, 2, 4)
     IDX_CONTROLLER_EMULATION = 0
     IDX_WEB_REMOTE = 1
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle(self.WINDOW_TITLE)
-        self.setMinimumSize(900, 620)
+        self.setMinimumSize(960, 660)
         self.resize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
         app_icon = QIcon(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
         self.setWindowIcon(app_icon)
@@ -112,9 +112,8 @@ class MainWindow(QMainWindow):
         self._window_close.setFixedSize(13, 13)
         self._window_close.setToolTip("Close")
         self._window_close.clicked.connect(self.close)
-        for control in (self._window_minimize, self._window_maximize, self._window_close):
+        for control in (self._window_close, self._window_minimize, self._window_maximize):
             window_controls.addWidget(control)
-        header_layout.addLayout(window_controls)
 
         self._brand_mark = QLabel()
         self._brand_mark.setObjectName("brand_mark")
@@ -139,7 +138,7 @@ class MainWindow(QMainWindow):
 
         self._avatar_container = QPushButton()
         self._avatar_container.setObjectName("profile_chip")
-        self._avatar_container.setFlat(True)
+        self._avatar_container.setFlat(False)
         self._avatar_container.setCursor(Qt.CursorShape.PointingHandCursor)
         self._avatar_container.setToolTip("Open profiles")
         self._avatar_container.clicked.connect(
@@ -172,6 +171,7 @@ class MainWindow(QMainWindow):
             lambda: self._show_special_page(self.IDX_SETTINGS_PAGE)
         )
         header_layout.addWidget(self._settings_button)
+        header_layout.addLayout(window_controls)
 
         main_layout.addWidget(header)
 
