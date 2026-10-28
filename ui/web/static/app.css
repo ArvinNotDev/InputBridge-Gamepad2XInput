@@ -71,3 +71,48 @@ body.focus-mode .face.b{right:0;left:auto}
   .face.y,.face.a{left:44px}
   .face.x,.face.b{top:44px}
 }
+
+
+/* Fast, touch-first controller layouts */
+.focus-tools{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.focus-tools #editLayout,.focus-tools .layout-preset{display:none}
+body.focus-mode .focus-tools{position:fixed;z-index:40;top:max(7px,env(safe-area-inset-top));right:max(8px,env(safe-area-inset-right));display:flex;align-items:center;gap:6px}
+body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{display:inline-flex;min-height:35px;padding:7px 11px;background:#111d31eF;border-color:#40577a;box-shadow:0 5px 18px #0006;backdrop-filter:blur(12px)}
+body.layout-edit .focus-tools .layout-preset{display:block;width:auto;min-height:35px;max-width:138px;padding:6px 28px 6px 9px;border-radius:10px;background:#121e33;border-color:#586f9e;font-size:12px;box-shadow:0 5px 18px #0006}
+body.layout-edit .focus-tools #editLayout{background:linear-gradient(135deg,#5a64ff,#2c9cdb);border-color:#84adff}
+body.layout-edit .focus-tools #editLayout[aria-pressed="true"]{background:#174b42;border-color:#4bcaa2}
+body.focus-mode .toolbar{padding-top:1px}
+body.focus-mode .toolbar>div:first-child h2{margin:0}
+body.focus-mode .toolbar>div:first-child{padding-right:0}
+#controller{align-items:stretch}
+#controller>.zone{min-width:0}
+#stickZone{display:flex;align-items:stretch}
+#stickZone .stickwrap{flex:1 1 0;min-width:0}
+#buttonsZone{display:flex;flex-direction:column;gap:0}
+.layout-edit [data-layout-id]{outline:1px dashed #657fc0;outline-offset:2px;cursor:grab}
+.layout-edit [data-layout-id]:active{cursor:grabbing}
+.layout-edit .stick{touch-action:none}
+.layout-edit .pad-key,.layout-edit .trigger input{touch-action:none}
+[data-layout-id].layout-dragging{opacity:.42;filter:saturate(.7)}
+[data-layout-id].layout-drop-target{outline:2px solid #35cfe3;outline-offset:4px;background-color:#162b43}
+body.layout-edit .controller-footer{color:#8eb8ff}
+body.layout-edit #editLayout::after{content:""}
+body.layout-compact .zone{padding:11px}
+body.layout-compact .stick{width:min(100%,178px);margin:7px auto 3px}
+body.layout-compact .face-row{min-height:164px;gap:6px}
+body.layout-compact .dpad{grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px);gap:3px}
+body.layout-compact .faces{width:126px;height:126px}
+body.layout-compact .face{width:42px;height:42px;min-height:42px}
+body.layout-compact .face.y,body.layout-compact .face.a{left:42px}
+body.layout-compact .face.x,body.layout-compact .face.b{top:42px}
+body.layout-compact .centers{margin:8px 0}
+@media(max-width:760px){
+  body.focus-mode .focus-tools{top:max(6px,env(safe-area-inset-top));right:max(6px,env(safe-area-inset-right));gap:4px}
+  body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{min-height:32px;padding:6px 8px;font-size:11px}
+  body.layout-edit .focus-tools .layout-preset{max-width:112px;min-height:32px;font-size:11px}
+  body.focus-mode .toolbar{padding-top:0}
+}
+@media(orientation:landscape) and (max-height:560px){
+  body.focus-mode .focus-tools{top:4px;right:5px}
+  body.focus-mode .focus-tools #editLayout,body.focus-mode .focus-tools .focus-exit{min-height:29px;padding:4px 8px}
+}
