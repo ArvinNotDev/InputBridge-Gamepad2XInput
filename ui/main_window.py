@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QSizeGrip,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QColor, QFont
@@ -232,6 +233,19 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(self.pages, 1)
 
+        # Keep the frameless window resizable without restoring the native title bar.
+        resize_row = QHBoxLayout()
+        resize_row.setContentsMargins(0, 0, 0, 0)
+        resize_row.setSpacing(0)
+        resize_row.addStretch(1)
+        self._size_grip = QSizeGrip(central)
+        self._size_grip.setFixedSize(12, 12)
+        resize_row.addWidget(
+            self._size_grip, 0,
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+        )
+        main_layout.addLayout(resize_row)
+
         self.menu.currentChanged.connect(self._on_menu_index_changed)
         self.menu.setCurrentIndex(self.IDX_CONTROLLER_EMULATION)
         self.pages.setCurrentIndex(0)
@@ -262,8 +276,10 @@ class MainWindow(QMainWindow):
     def _toggle_window_maximized(self) -> None:
         if self.isMaximized():
             self.showNormal()
+            self._size_grip.setVisible(True)
         else:
             self.showMaximized()
+            self._size_grip.setVisible(False)
 
     # --------------------
     # Tray
