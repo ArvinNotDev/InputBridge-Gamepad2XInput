@@ -5,22 +5,19 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
 
-### Mobile controller responsiveness and customization
+### Mobile controller and desktop UI refinements
 
 - Replaced per-move HTTPS requests and the 1.8-second application heartbeat
-  with one authenticated persistent WebSocket per browser. Dirty input snapshots
-  are sent on the animation-frame loop without waiting for per-update HTTP replies;
-  the WebSocket's ping/pong and disconnect cleanup keep sessions live and release
-  held controls. The HTTP state endpoint remains as a compatibility fallback.
-- Added full-screen Edit layout mode with drag-and-drop positions for control
-  groups, individual face buttons, and D-pad directions. Added Classic, Racing,
-  Left-handed, and Compact presets with browser-local persistence.
-- Improved Driving mode so selecting it requests motion-steering permission,
-  calibrates the steering center, and uses the correct sensor axis in landscape
-  and portrait orientations.
-- Increased the desktop window's default size for a clearer layout at 1080p,
-  moved the circular traffic-light controls to the right, and improved profile
-  chip contrast.
+  with one authenticated persistent WebSocket per browser. Input snapshots travel
+  over the open connection without waiting for an HTTP response after every move;
+  disconnect cleanup releases held controls.
+- Replaced custom layout editing with native-style Xbox and PlayStation controller
+  layouts. A single selector switches face-button symbols, shoulder/trigger labels,
+  and the controller's visual arrangement, with the selection saved per browser.
+- Corrected the horizontal gyro-steering direction in landscape and kept the
+  driving calibration and sensitivity controls accessible next to the layout selector.
+- Added richer coordinated gradients to both PySide6 themes and updated the
+  README with current controller and driving instructions.
 
 
 ### VPadConnect branding
