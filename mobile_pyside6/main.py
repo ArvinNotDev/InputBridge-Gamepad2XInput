@@ -1019,6 +1019,11 @@ class MainWindow(QMainWindow):
         self._build_remote()
         self._build_settings()
         self._focus_gamepad = False
+        self.focus_exit_button = button("✕  Exit Focus", "violet")
+        self.focus_exit_button.setMinimumHeight(38)
+        self.focus_exit_button.clicked.connect(self._toggle_focus_gamepad)
+        self.focus_exit_button.hide()
+        self.gamepad_layout.insertWidget(0, self.focus_exit_button)
         self._update_responsive_layout()
         self._select_tab(0)
 
@@ -1327,6 +1332,7 @@ class MainWindow(QMainWindow):
             self._select_tab(1)
         self.header.setVisible(not self._focus_gamepad)
         self.navigation.setVisible(not self._focus_gamepad)
+        self.focus_exit_button.setVisible(self._focus_gamepad)
         for page in self.stack.findChildren(QWidget):
             heading = getattr(page, "_page_heading", None)
             description = getattr(page, "_page_description", None)
