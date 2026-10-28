@@ -140,6 +140,11 @@ class WebRemoteServer:
         return self._thread is not None and self._thread.is_alive() and not self._stop_event.is_set()
 
     @property
+    def client_count(self) -> int:
+        with self._lock:
+            return len(self._sessions)
+
+    @property
     def local_url(self) -> str:
         return "https://" + get_lan_ip() + ":" + str(self.port) + "/"
 

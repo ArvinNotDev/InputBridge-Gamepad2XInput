@@ -319,15 +319,18 @@ class MainWindow(QMainWindow):
             return
         running = bool(getattr(self.server_page, "server_running", False))
         client_count = len(getattr(self.server_page, "clients", {}))
+        web_server = getattr(getattr(self, "web_remote_page", None), "web_server", None)
+        web_running = bool(getattr(web_server, "running", False))
+        web_count = int(getattr(web_server, "client_count", 0)) if web_server else 0
         mapped_count = len(getattr(self.controller_emulation_page, "mappers", {}))
         self._tray_status_action.setText(
-            f"Server: {'running' if running else 'stopped'} · "
-            f"Clients: {client_count} · Mapped: {mapped_count}"
+            f"Phone: {'on' if running else 'off'} · Web: {'on' if web_running else 'off'} · "
+            f"Clients: {client_count}+{web_count} · Mapped: {mapped_count}"
         )
-        self._tray_server_action.setText("Stop server" if running else "Start server")
+        self._tray_server_action.setText("Stop phone server" if running else "Start phone server")
         self.tray_icon.setToolTip(
-            f"{self.WINDOW_TITLE} — "
-            f"{'server running' if running else 'server stopped'}"
+            f"{self.WINDOW_TITLE} — Phone server {'running' if running else 'stopped'}, "
+            f"Web Companion {'running' if web_running else 'stopped'}"
         )
         self._tray_hide_action.setEnabled(self.isVisible())
 

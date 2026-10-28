@@ -80,6 +80,12 @@ class WebRemotePage(QWidget):
         self.status_badge.setObjectName("webStatusStopped")
         setup_layout.addWidget(status_caption, 0, 0)
         setup_layout.addWidget(self.status_badge, 0, 1)
+        clients_caption = QLabel("CONNECTED BROWSER CONTROLLERS")
+        clients_caption.setObjectName("webCaption")
+        self.clients_label = QLabel("0 connected")
+        self.clients_label.setObjectName("webMuted")
+        setup_layout.addWidget(clients_caption, 5, 0)
+        setup_layout.addWidget(self.clients_label, 5, 1)
 
         port_label = QLabel("HTTPS port")
         port_label.setObjectName("webLabel")
@@ -280,7 +286,10 @@ class WebRemotePage(QWidget):
     def _refresh_countdown(self) -> None:
         if not self.web_server.running:
             return
-        remaining = max(0, int(self.web_server.pairing_deadline - __import__("time").monotonic()))
+        import time
+        count = self.web_server.client_count
+        self.clients_label.setText(f"{count} connected browser controller" + ("" if count == 1 else "s"))
+        remaining = max(0, int(self.web_server.pairing_deadline - time.monotonic()))
         self.expiry_label.setText(
             f"Code valid for {remaining // 60}:{remaining % 60:02d}. Generate a new code to revoke the old one."
             if remaining else "Pairing code expired. Generate a new code to pair another browser."
