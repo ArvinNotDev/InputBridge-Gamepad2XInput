@@ -108,6 +108,7 @@ function createHarness(settings = {}) {
   let now = 1000;
   let failNextState = false;
   const heldStateResponses = [];
+  const webSockets = [];
   const frames = [];
 
   const document = {
@@ -141,7 +142,7 @@ function createHarness(settings = {}) {
     },
   };
   const window = {
-    location: { hash: settings.hash || "", pathname: "/", search: "" },
+    location: { hash: settings.hash || "", pathname: "/", search: "", protocol: "https:", host: "vpadconnect.test" },
     confirmCalls: 0,
     DeviceOrientationEvent: function DeviceOrientationEvent() {},
     addEventListener(name, handler) { windowListeners.set(name, handler); },
@@ -174,6 +175,34 @@ function createHarness(settings = {}) {
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
   };
+  class FakeWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.sent = [];
+      this.readyState = 0;
+      this.bufferedAmount = 0;
+      webSockets.push(this);
+      setTimeout(() => {
+        if (this.readyState !== 0) return;
+        this.readyState = 1;
+        if (this.onopen) this.onopen({});
+      }, 0);
+    }
+    send(raw) {
+      const packet = JSON.parse(raw);
+      this.sent.push(packet);
+      if (packet.type === "auth") {
+        setTimeout(() => {
+          if (this.onmessage) this.onmessage({ data: JSON.stringify({ type: "ready" }) });
+        }, 0);
+      }
+    }
+    close() {
+      this.readyState = 3;
+      if (this.onclose) this.onclose({});
+    }
+  }
+
   const sandbox = {
     document,
     window,
@@ -196,6 +225,7 @@ function createHarness(settings = {}) {
     clearTimeout,
     history: { replaceState() {} },
   };
+  if (settings.websocket) sandbox.WebSocket = FakeWebSocket;
 
   vm.runInNewContext(appSource, sandbox, { filename: "ui/web/static/app.js" });
   return {
@@ -209,6 +239,7 @@ function createHarness(settings = {}) {
     quickKeys,
     sessionValues,
     preferenceValues,
+    webSockets,
     dispatchWindow(name, event) {
       const handler = windowListeners.get(name);
       if (handler) handler(event);
@@ -552,4 +583,32 @@ test("focus edit mode exposes layout presets and persists a left-handed layout",
   const saved = JSON.parse(harness.preferenceValues.get("ib.web.preferences"));
   assert.equal(saved.layoutPreset, "left-handed");
   assert.deepEqual(saved.layoutOrders.faceRow, ["face-buttons", "dpad"]);
+});
+
+
+test("paired controller streams input over one persistent WebSocket without state POSTs", async () => {
+  const harness = createHarness({ websocket: true });
+  await settle();
+
+  assert.equal(harness.webSockets.length, 1);
+  const socket = harness.webSockets[0];
+  assert.equal(socket.url, "wss://vpadconnect.test/api/stream");
+  assert.deepEqual(socket.sent[0], { type: "auth", token: "test-session-token" });
+
+  harness.tickFrame();
+  harness.leftStick.dispatch("pointerdown", { pointerId: 91, clientX: 168, clientY: 100 });
+  harness.tickFrame();
+  let snapshots = socket.sent.filter((packet) => packet.type === "state");
+  assert.equal(snapshots.at(-1).state.joystick.left_x, 255);
+
+  harness.leftStick.dispatch("pointermove", { pointerId: 91, clientX: 130, clientY: 100 });
+  harness.tickFrame();
+  snapshots = socket.sent.filter((packet) => packet.type === "state");
+  assert.ok(snapshots.at(-1).state.joystick.left_x < 255);
+  assert.equal(harness.calls.filter(({ url }) => url === "/api/state").length, 0);
+
+  harness.leftStick.dispatch("pointercancel", { pointerId: 91 });
+  harness.tickFrame();
+  snapshots = socket.sent.filter((packet) => packet.type === "state");
+  assert.equal(snapshots.at(-1).state.joystick.left_x, 128);
 });
