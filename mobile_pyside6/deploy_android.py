@@ -86,10 +86,21 @@ def main() -> int:
     if not pyside_wheel.is_file() or not shiboken_wheel.is_file():
         raise FileNotFoundError("The PySide6 and Shiboken6 Android wheels must both exist.")
 
+    cache = Path.home() / ".pyside6_android_deploy"
+    ndk_root = cache / "android-ndk"
+    ndk_candidates = sorted(ndk_root.glob("android-ndk-r*")) if ndk_root.is_dir() else []
+    sdk_path = cache / "android-sdk"
+    if not ndk_candidates:
+        raise FileNotFoundError(f"Android NDK was not found under {ndk_root}")
+    if not sdk_path.is_dir():
+        raise FileNotFoundError(f"Android SDK was not found under {sdk_path}")
+
     android_deploy.main(
         name="InputBridge Mobile",
         pyside_wheel=pyside_wheel,
         shiboken_wheel=shiboken_wheel,
+        ndk_path=ndk_candidates[-1],
+        sdk_path=sdk_path,
         config_file=Path.cwd() / "pysidedeploy.spec",
         loglevel=logging.INFO,
         force=True,
