@@ -134,3 +134,6 @@ body.layout-edit [data-layout-id]:not(.layout-dragging):not(.layout-drop-target)
   body.focus-mode .faces{width:108px;height:108px}
   body.focus-mode .faces .face{width:35px;height:35px;min-height:35px}
 }
+
+
+body.layout-edit #controller,body.layout-edit #controller [data-layout-id]{touch-action:none;overscroll-behavior:contain}
