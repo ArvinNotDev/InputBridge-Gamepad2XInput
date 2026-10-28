@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle(self.WINDOW_TITLE)
-        self.setMinimumSize(900, 560)
+        self.setMinimumSize(900, 620)
         self.resize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
         app_icon = QIcon(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
         self.setWindowIcon(app_icon)
@@ -83,8 +83,8 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         central.setObjectName("app_root")
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(22, 18, 22, 18)
-        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(22, 16, 22, 16)
+        main_layout.setSpacing(10)
         self.setCentralWidget(central)
 
         # Compact, frameless title bar inspired by macOS.
