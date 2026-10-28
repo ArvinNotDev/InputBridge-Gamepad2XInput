@@ -248,7 +248,15 @@ corresponding XInput controls.
 
 **Driving** mode supports phone-tilt steering. Enable motion access when requested,
 hold the device at a comfortable neutral angle, and select **Calibrate center**.
-Steering sensitivity can be adjusted without leaving the controller.
+Steering sensitivity can be adjusted without leaving the controller. Open the
+mobile **Settings** tab for additional options, including Xbox/PlayStation layout,
+pointer sensitivity, tap-to-click, scroll speed, reversed touchpad scrolling,
+optional haptic feedback, screen wake lock, and restoring defaults. Preferences are
+saved locally in that browser.
+
+The **Touch mouse** uses a two-finger swipe to scroll. Enable **Reverse scrolling
+direction** in Settings to invert both gesture scrolling and mouse-wheel scrolling;
+adjust **Scroll speed** independently to make scrolling slower or faster.
 
 Controller input travels over an authenticated persistent WebSocket per paired
 browser, so changes do not wait for an HTTP response after every stick movement.
