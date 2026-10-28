@@ -934,3 +934,10 @@ QListWidget#top_navigation::item:selected {
     border: 1px solid #a2a9f4;
     color: #ffffff;
 }
+
+
+/* The active underline is drawn by AnimatedTabBar and moves between tabs. */
+QTabBar#top_navigation::tab:selected,
+QTabBar#settings_navigation::tab:selected {
+    border-bottom-color: transparent;
+}
