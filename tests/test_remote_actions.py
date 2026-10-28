@@ -35,7 +35,7 @@ def test_allowlisted_action_uses_adapter_for_testability():
     seen = []
     result = RemoteActionSession().execute(
         _request("media", {"command": "mute"}),
-        DEFAULT_REMOTE_PERMISSIONS,
+        dict(DEFAULT_REMOTE_PERMISSIONS, media=True),
         adapters={"media": lambda payload: seen.append(payload["command"]) or {"done": True}},
     )
     assert result == {"done": True}
@@ -57,5 +57,5 @@ def test_permissions_persist_atomically_and_invalid_values_use_defaults(tmp_path
     save_remote_permissions({"power": True, "clipboard": "yes"}, path)
     restored = load_remote_permissions(path)
     assert restored["power"] is True
-    assert restored["clipboard"] is True
-    assert restored["keyboard"] is True
+    assert restored["clipboard"] is False
+    assert restored["keyboard"] is False

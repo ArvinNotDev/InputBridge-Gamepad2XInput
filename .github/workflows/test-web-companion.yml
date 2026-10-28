@@ -6,12 +6,16 @@ on:
     paths:
       - "core/web_remote.py"
       - "core/remote_protocol.py"
+      - "core/remote_actions.py"
+      - "core/remote_security.py"
       - "ui/web/**"
       - "ui/pages/web_remote.py"
       - "ui/main_window.py"
       - "ui/i18n.py"
       - "tests/test_web_remote.py"
       - "tests/test_remote_protocol.py"
+      - "tests/test_remote_actions.py"
+      - "tests/test_remote_security.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "InputBridge-Gamepad2XInput*.spec"
@@ -20,12 +24,16 @@ on:
     paths:
       - "core/web_remote.py"
       - "core/remote_protocol.py"
+      - "core/remote_actions.py"
+      - "core/remote_security.py"
       - "ui/web/**"
       - "ui/pages/web_remote.py"
       - "ui/main_window.py"
       - "ui/i18n.py"
       - "tests/test_web_remote.py"
       - "tests/test_remote_protocol.py"
+      - "tests/test_remote_actions.py"
+      - "tests/test_remote_security.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "InputBridge-Gamepad2XInput*.spec"
@@ -66,4 +74,7 @@ jobs:
         run: node --test tests/test_web_frontend.cjs
 
       - name: Run web protocol, session, and security-header tests
-        run: python -m pytest -q tests/test_web_remote.py tests/test_remote_protocol.py
+        run: python -m pytest -q tests/test_web_remote.py tests/test_remote_protocol.py tests/test_remote_security.py
+
+      - name: Run permission-gated remote action tests
+        run: python -m pytest -q tests/test_remote_actions.py
