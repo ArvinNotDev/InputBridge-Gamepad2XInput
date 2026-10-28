@@ -870,3 +870,67 @@ QPushButton#settings_gear {
 QPushButton#settings_gear:hover { background: #e9edfb; border-color: #979cf0; }
 #sidebar_profile_name { color: #252b43; font-size: 12px; font-weight: 750; }
 #sidebar_profile_label { color: #5f6b86; font-size: 10px; }
+
+
+/* Richer, coordinated desktop gradients */
+QMainWindow {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #eaf2ff, stop:0.3 #eff2ff, stop:0.62 #f2edff,
+        stop:0.84 #e8f4fb, stop:1 #eef5ff);
+}
+#app_root {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #edf4ff, stop:0.26 #f0f2ff, stop:0.52 #f8f1ff,
+        stop:0.78 #eaf5ff, stop:1 #eff9fb);
+}
+QStackedWidget#content_stack {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(255,255,255,0.96), stop:0.58 rgba(248,249,255,0.96),
+        stop:1 rgba(243,248,255,0.96));
+    border: 1px solid #d4ddef;
+    border-radius: 18px;
+}
+QPushButton {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #ffffff, stop:0.55 #f1f4ff, stop:1 #f4efff);
+    border: 1px solid #d0d8eb;
+    color: #28334f;
+}
+QPushButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #e2ecff, stop:0.5 #eae5ff, stop:1 #def5fb);
+    border-color: #9ba9ed;
+}
+QPushButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #d8e4fa, stop:1 #e5dcf9);
+}
+QPushButton#profile_chip {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #ffffff, stop:0.55 #f3f5ff, stop:1 #f4efff);
+    border: 1px solid #cbd5e9;
+    border-radius: 14px;
+    padding: 4px 12px;
+}
+QPushButton#profile_chip:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #e1ecff, stop:1 #ede4ff);
+    border-color: #98a5de;
+}
+QPushButton#settings_gear {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #ffffff, stop:1 #ecefff);
+    border: 1px solid #d0d8eb;
+    border-radius: 12px;
+}
+QPushButton#settings_gear:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #dbe8ff, stop:1 #e6dcff);
+    border-color: #9aa3e8;
+}
+QListWidget#top_navigation::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #647ef2, stop:0.5 #8871e9, stop:1 #2ba5bb);
+    border: 1px solid #a2a9f4;
+    color: #ffffff;
+}
