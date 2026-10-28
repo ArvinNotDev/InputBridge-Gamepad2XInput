@@ -280,8 +280,14 @@ class ButtonHoverAnimations(QObject):
         super().__init__(root)
         self._root = root
         self._active = {}
-        for button in root.findChildren(QPushButton):
-            button.installEventFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            # Application-level filtering also covers controller widgets that
+            # are created later, after a device is added to the emulation list.
+            app.installEventFilter(self)
+        else:
+            for button in root.findChildren(QPushButton):
+                button.installEventFilter(self)
 
     def eventFilter(self, watched, event) -> bool:
         if not isinstance(watched, QPushButton):
@@ -296,7 +302,7 @@ class ButtonHoverAnimations(QObject):
         return False
 
     def _animate_hover(self, button: QPushButton, hovered: bool) -> None:
-        if not animations_enabled() or not button.isEnabled():
+        if hovered and (not animations_enabled() or not button.isEnabled()):
             return
         if button.width() < 34 or button.height() < 26:
             return
@@ -306,6 +312,14 @@ class ButtonHoverAnimations(QObject):
             return
 
         record = self._active.get(button)
+        if not hovered and not animations_enabled():
+            if record is not None:
+                record["group"].stop()
+                record["group"].deleteLater()
+                if button.graphicsEffect() is record["effect"]:
+                    button.setGraphicsEffect(None)
+                self._active.pop(button, None)
+            return
         if record is None:
             if button.graphicsEffect() is not None:
                 return
