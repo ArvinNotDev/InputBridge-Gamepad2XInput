@@ -136,6 +136,17 @@ def test_public_server_info_reports_the_tls_fingerprint_and_https_scheme():
     assert response.get_json()["secure"] is True
 
 
+def test_connected_browser_names_are_sorted_for_the_desktop_list():
+    from core.web_remote import WebRemoteServer
+
+    server = WebRemoteServer(object(), object(), object())
+    server._sessions = {
+        "token-b": {"name": "Tablet"},
+        "token-a": {"name": "Phone"},
+    }
+    assert server.connected_clients == ["Phone", "Tablet"]
+
+
 def test_pairing_url_carries_code_and_public_fingerprint_in_the_fragment():
     from core.web_remote import WebRemoteServer
 
