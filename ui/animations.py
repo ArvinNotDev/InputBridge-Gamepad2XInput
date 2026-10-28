@@ -117,7 +117,7 @@ class AnimatedTabBar(QTabBar):
         self._indicator_rect = self._target_indicator_rect(self.currentIndex())
         self.update()
 
-    def paintEvent(self, event) -> None
+    def paintEvent(self, event) -> None:
         super().paintEvent(event)
         rect = self._indicator_rect
         if rect.width() <= 0 or rect.height() <= 0:
