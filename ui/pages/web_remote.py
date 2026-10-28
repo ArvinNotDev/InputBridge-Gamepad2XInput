@@ -69,13 +69,13 @@ class WebRemotePage(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 12, 16, 14)
-        root.setSpacing(10)
+        root.setContentsMargins(16, 8, 16, 10)
+        root.setSpacing(8)
 
         intro = QFrame()
         intro.setObjectName("webHero")
         intro_layout = QVBoxLayout(intro)
-        intro_layout.setContentsMargins(18, 12, 18, 12)
+        intro_layout.setContentsMargins(16, 8, 16, 8)
         intro_layout.setSpacing(3)
         eyebrow = QLabel("VPADCONNECT")
         eyebrow.setObjectName("webEyebrow")
@@ -91,9 +91,9 @@ class WebRemotePage(QWidget):
         setup = QFrame()
         setup.setObjectName("webCard")
         setup_layout = QGridLayout(setup)
-        setup_layout.setContentsMargins(14, 10, 14, 12)
+        setup_layout.setContentsMargins(12, 8, 12, 8)
         setup_layout.setHorizontalSpacing(12)
-        setup_layout.setVerticalSpacing(8)
+        setup_layout.setVerticalSpacing(6)
         setup_layout.setColumnStretch(1, 1)
 
         status_caption = QLabel("STATUS")
@@ -128,7 +128,7 @@ class WebRemotePage(QWidget):
 
         self.start_button = QPushButton("Start Web Server")
         self.start_button.setObjectName("webStartButton")
-        self.start_button.setMinimumHeight(40)
+        self.start_button.setMinimumHeight(36)
         self.start_button.clicked.connect(self._toggle_server)
         setup_layout.addWidget(self.start_button, 2, 0, 1, 3)
         root.addWidget(setup)
@@ -137,8 +137,8 @@ class WebRemotePage(QWidget):
         pairing.setObjectName("webPairingCard")
         self.pairing_card = pairing
         pairing_layout = QHBoxLayout(pairing)
-        pairing_layout.setContentsMargins(14, 12, 14, 12)
-        pairing_layout.setSpacing(18)
+        pairing_layout.setContentsMargins(12, 8, 12, 8)
+        pairing_layout.setSpacing(14)
 
         qr_column = QVBoxLayout()
         qr_column.setSpacing(6)
@@ -147,7 +147,7 @@ class WebRemotePage(QWidget):
         self.qr_image = QLabel("QR appears after startup")
         self.qr_image.setObjectName("webQrImage")
         self.qr_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.qr_image.setFixedSize(190, 190)
+        self.qr_image.setFixedSize(160, 160)
         qr_column.addWidget(qr_title)
         qr_column.addWidget(self.qr_image, 0, Qt.AlignmentFlag.AlignLeft)
         pairing_layout.addLayout(qr_column, 0)
@@ -168,8 +168,8 @@ class WebRemotePage(QWidget):
         clients_title.setObjectName("webCaption")
         self.client_list = QListWidget()
         self.client_list.setObjectName("webClientsList")
-        self.client_list.setMinimumHeight(62)
-        self.client_list.setMaximumHeight(92)
+        self.client_list.setMinimumHeight(48)
+        self.client_list.setMaximumHeight(60)
         self.client_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         code_column.addWidget(code_title)
         code_column.addWidget(self.code_label)
