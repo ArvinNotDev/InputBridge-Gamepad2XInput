@@ -50,14 +50,14 @@ jobs:
         working-directory: mobile_pyside6
         run: |
           python -m pip install --upgrade aqtinstall
-          aqt install-qt linux desktop 6.12.0 gcc_64 -O "$RUNNER_TEMP/Qt" -m qtmultimedia qtsensors
+          aqt install-qt linux desktop 6.11.0 gcc_64 -O "$RUNNER_TEMP/Qt" -m qtmultimedia qtsensors
           aqt install-qt linux android 6.12.0 android_arm64_v8a -O "$RUNNER_TEMP/Qt" -m qtmultimedia qtsensors
           test -d "$RUNNER_TEMP/Qt/6.12.0/gcc_64"
           test -d "$RUNNER_TEMP/Qt/6.12.0/android_arm64_v8a"
 
       - name: Prepare Android SDK and NDK
         run: |
-          git clone --depth 1 --branch 6.12 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
+          git clone --depth 1 --branch 6.11 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
           cd "$RUNNER_TEMP/pyside-setup"
           python -m pip install -r requirements.txt -r tools/cross_compile_android/requirements.txt
           python tools/cross_compile_android/main.py \

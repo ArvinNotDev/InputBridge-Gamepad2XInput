@@ -6,15 +6,15 @@ python -m pip install -r requirements.txt aqtinstall
 QT_ROOT="\${QT_ROOT:-$HOME/Qt}"
 NDK_ROOT="\${ANDROID_NDK_ROOT:-$HOME/.pyside6_android_deploy/android-ndk}"
 SDK_ROOT="\${ANDROID_SDK_ROOT:-$HOME/.pyside6_android_deploy/android-sdk}"
-aqt install-qt linux desktop 6.12.0 gcc_64 -O "$QT_ROOT" -m qtmultimedia qtsensors
-aqt install-qt linux android 6.12.0 android_arm64_v8a -O "$QT_ROOT" -m qtmultimedia qtsensors
-git clone --depth 1 --branch 6.12 https://code.qt.io/pyside/pyside-setup.git "$HOME/pyside-setup-6.12"
+aqt install-qt linux desktop 6.11.0 gcc_64 -O "$QT_ROOT" -m qtmultimedia qtsensors
+aqt install-qt linux android 6.11.0 android_arm64_v8a -O "$QT_ROOT" -m qtmultimedia qtsensors
+git clone --depth 1 --branch 6.11 https://code.qt.io/pyside/pyside-setup.git "$HOME/pyside-setup-6.12"
 cd "$HOME/pyside-setup-6.12"
 python -m pip install -r requirements.txt -r tools/cross_compile_android/requirements.txt
 python tools/cross_compile_android/main.py --plat-name aarch64 --download-only --skip-update --auto-accept-license
 python tools/cross_compile_android/main.py \
   --plat-name aarch64 \
-  --qt-install-path "$QT_ROOT/6.12.0" \
+  --qt-install-path "$QT_ROOT/6.11.0" \
   --ndk-path "$NDK_ROOT" \
   --sdk-path "$SDK_ROOT" \
   --skip-update --auto-accept-license
