@@ -1,9 +1,15 @@
 # Changelog
 
-All notable user-facing changes to InputBridge-Gamepad2XInput are documented
+All notable user-facing changes to VPadConnect are documented
 here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
+
+### VPadConnect branding
+
+- Rebranded the application and Windows executable as VPadConnect while
+  retaining the existing `.ibprofile` portable profile format for compatibility.
+- Added vector logo and social-preview artwork using the indigo-and-cyan visual identity.
 
 ### Web Companion and desktop integration
 
@@ -52,7 +58,7 @@ remain future work; they are not represented as implemented here.
 - `python -m pytest -q` — 75 passed with no warnings.
 - Both PyInstaller specifications completed on Windows 11 with Python 3.12.
   The built executables were not launched, and no controller hardware was
-  tested. No beta release has been published.
+  tested. 
 
 ## [2.0.8] — 2026-09-26
 
@@ -94,7 +100,7 @@ remain future work; they are not represented as implemented here.
   clearer `poll_interval_ms` setting.
 - Keyboard emulation remains intentionally disabled in this release.
 - Renamed PyInstaller specification files from the historical
-  `UniversalRemapper` name to `InputBridge-Gamepad2XInput`.
+  historical `UniversalRemapper` name to `VPadConnect` during an earlier release.
 
 ### Validation
 
@@ -113,7 +119,7 @@ remain future work; they are not represented as implemented here.
 
 - Added live vibration settings and XInput vibration testing.
 
-[2.0.8]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.8
-[2.0.7]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.7
-[2.0.6]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.6
-[2.0.5]: https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/tag/v2.0.5
+[2.0.8]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.8
+[2.0.7]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.7
+[2.0.6]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.6
+[2.0.5]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.5

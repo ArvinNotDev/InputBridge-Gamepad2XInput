@@ -54,7 +54,7 @@ class WebRemotePage(QWidget):
         intro_layout = QVBoxLayout(intro)
         intro_layout.setContentsMargins(22, 20, 22, 20)
         intro_layout.setSpacing(8)
-        eyebrow = QLabel("INPUTBRIDGE  /  LOCAL NETWORK")
+        eyebrow = QLabel("VPADCONNECT  /  LOCAL NETWORK")
         eyebrow.setObjectName("webEyebrow")
         title = QLabel("Web Companion")
         title.setObjectName("webTitle")

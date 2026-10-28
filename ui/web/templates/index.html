@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#080d18"><title>InputBridge · Web Companion</title>
+<meta name="theme-color" content="#080d18"><title>VPadConnect · Web Companion</title>
 <link rel="stylesheet" href="/static/app.css"><script src="/static/app.js" defer></script>
 </head><body><div class="shell">
-<header class="topbar"><div class="logo">IB</div><div class="brand"><b>INPUTBRIDGE</b><span>Web Companion</span></div><div id="badge" class="badge"><i></i><span>Not paired</span></div></header>
+<header class="topbar"><div class="logo">VP</div><div class="brand"><b>VPADCONNECT</b><span>Web Companion</span></div><div id="badge" class="badge"><i></i><span>Not paired</span></div></header>
 <main>
-<section id="pairPanel" class="panel pairing"><div class="eyebrow">SECURE LOCAL CONTROL</div><h1>Connect this device</h1><p class="muted">Pair with InputBridge on the same trusted network.</p>
+<section id="pairPanel" class="panel pairing"><div class="eyebrow">SECURE LOCAL CONTROL</div><h1>Connect this device</h1><p class="muted">Pair with VPadConnect on the same trusted network.</p>
 <label for="deviceName">Device name</label><input id="deviceName" maxlength="64" value="Web Controller" autocomplete="nickname">
 <label for="pairCode">Six-digit pairing code</label><input id="pairCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Shown in the desktop tab">
 <button id="pairButton" class="btn primary full">Pair securely <span>→</span></button><p id="pairMessage" class="message">Start Web Companion on your PC, then scan its QR code or enter the pairing code.</p>
@@ -51,6 +51,6 @@
 
 <section id="view-session" class="view"><article class="panel"><h2>Desktop status</h2><p id="pcStatus" class="muted">Connect to load desktop status.</p><button id="refresh" class="btn primary">Refresh status</button></article>
 <article class="panel"><h2>This browser</h2><p id="sessionInfo" class="muted">Paired controller</p><button id="disconnect" class="btn danger-btn">Disconnect this device</button></article>
-<article class="panel"><h2>Security & permissions</h2><p class="muted">Each browser gets its own virtual controller. PC actions remain allowlisted and permission-gated by InputBridge. Inactive sessions release held controls automatically.</p><p id="permissionSummary" class="permission-summary">Permissions load from the PC.</p><p id="actionMessage" class="message"></p></article></section>
+<article class="panel"><h2>Security & permissions</h2><p class="muted">Each browser gets its own virtual controller. PC actions remain allowlisted and permission-gated by VPadConnect. Inactive sessions release held controls automatically.</p><p id="permissionSummary" class="permission-summary">Permissions load from the PC.</p><p id="actionMessage" class="message"></p></article></section>
 </section>
-</main><footer><span>InputBridge · Web Companion</span><span>Trusted LAN · HTTPS</span></footer></div><div id="toast" class="toast"></div></body></html>
+</main><footer><span>VPadConnect · Web Companion</span><span>Trusted LAN · HTTPS</span></footer></div><div id="toast" class="toast"></div></body></html>

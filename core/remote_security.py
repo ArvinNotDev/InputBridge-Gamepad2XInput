@@ -64,7 +64,7 @@ def ensure_server_identity(certificate_path: str | Path | None = None, private_k
     if certificate.exists() != private_key.exists():
         raise RuntimeError("Only one TLS identity file exists. Restore both files or remove the incomplete identity pair and restart.")
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    hostname = socket.gethostname() or "InputBridge-PC"
+    hostname = socket.gethostname() or "VPadConnect-PC"
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, hostname[:64])])
     now = datetime.now(timezone.utc)
     sans = [x509.DNSName(hostname), x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]
@@ -130,7 +130,7 @@ def ensure_web_server_identity(
 
     certificate_path = Path(certificate_path or data_path("remote_security", "web_server.crt"))
     private_key_path = Path(private_key_path or data_path("remote_security", "web_server.key"))
-    hostname = socket.gethostname() or "InputBridge-PC"
+    hostname = socket.gethostname() or "VPadConnect-PC"
     dns_names = {hostname[:253], "localhost"}
     ip_names = {"127.0.0.1", "::1"}
     for host in hosts:

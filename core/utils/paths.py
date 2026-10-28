@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 
-APP_NAME = "InputBridge-Gamepad2XInput"
+APP_NAME = "VPadConnect"
 
 
 def _source_root() -> Path:

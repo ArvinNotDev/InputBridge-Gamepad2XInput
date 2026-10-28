@@ -56,7 +56,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="InputBridge-Gamepad2XInput",
+    name="VPadConnect",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

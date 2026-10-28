@@ -105,7 +105,7 @@ class MainWindow(QMainWindow):
         self._brand_mark.setFixedSize(44, 44)
         brand_layout.addWidget(self._brand_mark)
 
-        brand_title = QLabel("InputBridge")
+        brand_title = QLabel("VPadConnect")
         brand_title.setObjectName("brand_title")
         brand_layout.addWidget(brand_title)
         header_layout.addWidget(brand)

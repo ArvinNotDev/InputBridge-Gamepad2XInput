@@ -620,7 +620,7 @@ class ProfilesPage(QWidget):
             self,
             "Export Profile",
             f"{name}.ibprofile",
-            "InputBridge Profile (*.ibprofile)",
+            "VPadConnect Profile (*.ibprofile)",
         )
         if not path:
             return
@@ -639,7 +639,7 @@ class ProfilesPage(QWidget):
             self,
             "Import Profile",
             "",
-            "InputBridge Profile (*.ibprofile *.json);;All Files (*)",
+            "VPadConnect Profile (*.ibprofile *.json);;All Files (*)",
         )
         if not path:
             return

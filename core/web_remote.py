@@ -130,7 +130,7 @@ class WebRemoteServer:
         self._watchdog: threading.Thread | None = None
         self._stop_event = threading.Event()
         root = Path(__file__).resolve().parent.parent / "ui" / "web"
-        self.app = Flask("inputbridge_web_remote", template_folder=str(root / "templates"),
+        self.app = Flask("vpadconnect_web_remote", template_folder=str(root / "templates"),
                          static_folder=str(root / "static"), static_url_path="/static")
         self.app.config["MAX_CONTENT_LENGTH"] = 16 * 1024
         self._register_routes()
@@ -174,8 +174,8 @@ class WebRemoteServer:
         logging.getLogger("werkzeug").setLevel(logging.ERROR)
         # Bind synchronously so the UI can report errors immediately.
         self._server = make_server(self.host, self.port, self.app, threaded=True, ssl_context=tls_context)
-        self._thread = threading.Thread(target=self._server.serve_forever, name="InputBridgeWebHTTPS", daemon=True)
-        self._watchdog = threading.Thread(target=self._watch_expired_sessions, name="InputBridgeWebWatchdog", daemon=True)
+        self._thread = threading.Thread(target=self._server.serve_forever, name="VPadConnectWebHTTPS", daemon=True)
+        self._watchdog = threading.Thread(target=self._watch_expired_sessions, name="VPadConnectWebWatchdog", daemon=True)
         self._thread.start()
         self._watchdog.start()
 
@@ -275,7 +275,7 @@ class WebRemoteServer:
 
         @app.get("/api/info")
         def info():
-            return jsonify({"app": "InputBridge Web Companion", "protocol_version": PROTOCOL_VERSION,
+            return jsonify({"app": "VPadConnect Web Companion", "protocol_version": PROTOCOL_VERSION,
                             "fingerprint": self.fingerprint,
                             "pairing_seconds": max(0, int(self.pairing_deadline - time.monotonic())),
                             "secure": request.is_secure})

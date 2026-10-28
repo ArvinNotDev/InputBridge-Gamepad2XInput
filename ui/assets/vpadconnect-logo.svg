@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="170" viewBox="0 0 960 170" role="img" aria-labelledby="title desc">
+  <title id="title">VPadConnect</title>
+  <desc id="desc">Virtual Gamepad. Connected Control.</desc>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#635bff"/><stop offset="1" stop-color="#27c9e2"/></linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8b83ff"/><stop offset="1" stop-color="#55e2ef"/></linearGradient>
+  </defs>
+  <rect x="2" y="2" width="956" height="166" rx="30" fill="#0b1020" stroke="#283554" stroke-width="2"/>
+  <rect x="28" y="27" width="116" height="116" rx="28" fill="url(#brand)"/>
+  <path d="M57 73c2-10 9-16 20-16h18c11 0 18 6 20 16l7 31c2 11-10 18-18 10l-11-12H79l-11 12c-8 8-20 1-18-10z" fill="#0b1020" stroke="#f7fbff" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M69 78v19m-9-9h18" stroke="#f7fbff" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="101" cy="79" r="4.5" fill="#f7fbff"/><circle cx="111" cy="89" r="4.5" fill="#f7fbff"/><circle cx="91" cy="89" r="4.5" fill="#f7fbff"/>
+  <path d="M128 38c8-8 18-8 26 0m-20 8c4-4 10-4 14 0" fill="none" stroke="#55e2ef" stroke-width="3" stroke-linecap="round"/>
+  <text x="174" y="86" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="800" letter-spacing="-1.5" fill="#f7fbff">VPad</text>
+  <text x="325" y="86" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="800" letter-spacing="-1.5" fill="url(#glow)">Connect</text>
+  <text x="177" y="120" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" font-weight="700" letter-spacing="3.2" fill="#9eacc8">VIRTUAL GAMEPAD. CONNECTED CONTROL.</text>
+  <path d="M770 114h116" stroke="#263a56" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="775" cy="114" r="4" fill="#635bff"/><circle cx="828" cy="114" r="4" fill="#38cde1"/><circle cx="881" cy="114" r="4" fill="#635bff"/>
+</svg>

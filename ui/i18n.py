@@ -150,7 +150,7 @@ _TRANSLATIONS = {
         "Hidden": "مخفی",
         "Visible": "قابل مشاهده",
         "Unknown": "ناشناخته",
-        "✨  INPUTBRIDGE": "✨  INPUTBRIDGE",
+        "✨  VPADCONNECT": "✨  VPADCONNECT",
         "Built with care for gamers 🎮": "با عشق برای گیمرها ساخته شده 🎮",
         "Developer: آروین جعفری": "توسعه‌دهنده: آروین جعفری",
         "🐙 GitHub Profile": "🐙 پروفایل گیت‌هاب",
@@ -159,8 +159,8 @@ _TRANSLATIONS = {
             "💡 نکته: برای هر بازی یک پروفایل بسازید و در چند ثانیه جابه‌جا شوید.",
         "A modern bridge between your controllers, XInput, keyboard, and mouse.":
             "پل مدرن بین دسته‌ها، XInput، صفحه‌کلید و ماوس شما.",
-        "InputBridge-Gamepad2XInput helps you connect physical HID controllers to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, remote gamepad support, and HidHide integration.":
-            "InputBridge-Gamepad2XInput دسته‌های HID فیزیکی را با پروفایل‌های "
+        "VPadConnect helps you connect physical HID controllers to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, remote gamepad support, and HidHide integration.":
+            "VPadConnect دسته‌های HID فیزیکی را با پروفایل‌های "
             "انعطاف‌پذیر، میانبرها، حالت ماوس، دستهٔ راه دور و HidHide به دستگاه‌های "
             "مجازی Xbox 360 متصل می‌کند.",
         "English": "انگلیسی",
@@ -256,7 +256,7 @@ _TRANSLATIONS = {
         "Charging indication": "Indicador de carga",
         "Save": "Guardar",
         "Cancel": "Cancelar",
-        "✨  INPUTBRIDGE": "✨  INPUTBRIDGE",
+        "✨  VPADCONNECT": "✨  VPADCONNECT",
         "Built with care for gamers 🎮": "Creado con cariño para gamers 🎮",
         "Developer: آروین جعفری": "Desarrollador: آروین جعفری",
         "🐙 GitHub Profile": "🐙 Perfil de GitHub",
@@ -265,8 +265,8 @@ _TRANSLATIONS = {
             "💡 Consejo: crea un perfil para cada juego y cambia entre ellos en segundos.",
         "A modern bridge between your controllers, XInput, keyboard, and mouse.":
             "Un puente moderno entre tus mandos, XInput, teclado y ratón.",
-        "InputBridge-Gamepad2XInput helps you connect physical HID controllers to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, remote gamepad support, and HidHide integration.":
-            "InputBridge-Gamepad2XInput conecta mandos HID físicos con dispositivos "
+        "VPadConnect helps you connect physical HID controllers to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, remote gamepad support, and HidHide integration.":
+            "VPadConnect conecta mandos HID físicos con dispositivos "
             "Xbox 360 virtuales mediante perfiles flexibles, atajos, modo ratón, "
             "gamepad remoto e integración con HidHide.",
         "English": "Inglés",

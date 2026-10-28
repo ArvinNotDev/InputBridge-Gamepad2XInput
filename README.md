@@ -1,16 +1,20 @@
-# InputBridge-Gamepad2XInput
+# VPadConnect
 
 <p align="center">
-  <strong>Remap Windows gamepads with a simple PySide6 desktop app.</strong><br>
-  Send HID controller input to a virtual Xbox 360 (XInput) controller, mouse controls, or hotkeys, and manage mappings with profiles.
+  <img src="docs/branding/vpadconnect-logo.svg" alt="VPadConnect — Virtual Gamepad. Connected Control." width="760">
 </p>
 
 <p align="center">
-  <a href="https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/latest">
-    <img src="https://img.shields.io/github/v/release/ArvinNotDev/InputBridge-Gamepad2XInput?style=flat-square&color=6f42c1" alt="Latest release">
+  <strong>Virtual Gamepad. Connected Control.</strong><br>
+  Virtual XInput gamepad emulation and remote PC control for Windows.
+</p>
+
+<p align="center">
+  <a href="https://github.com/ArvinNotDev/VPadConnect/releases/latest">
+    <img src="https://img.shields.io/github/v/release/ArvinNotDev/VPadConnect?style=flat-square&color=635bff" alt="Latest release">
   </a>
-  <a href="https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases">
-    <img src="https://img.shields.io/github/downloads/ArvinNotDev/InputBridge-Gamepad2XInput/total?style=flat-square&color=2ea44f" alt="Downloads">
+  <a href="https://github.com/ArvinNotDev/VPadConnect/releases">
+    <img src="https://img.shields.io/github/downloads/ArvinNotDev/VPadConnect/total?style=flat-square&color=20b8d4" alt="Downloads">
   </a>
   <img src="https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square" alt="Windows">
   <img src="https://img.shields.io/badge/PySide6-Qt%206-41CD52?style=flat-square" alt="PySide6">
@@ -19,10 +23,9 @@
 </p>
 
 ---
-
 ## Overview
 
-**InputBridge-Gamepad2XInput** is a Windows desktop application for remapping physical HID controllers to virtual **Xbox 360 / XInput** devices and responsive mouse controls.
+**VPadConnect** is a Windows desktop application for remapping physical HID controllers to virtual **Xbox 360 / XInput** devices and responsive mouse controls.
 
 It provides a graphical interface for configuring controller mappings without modifying source code. Profiles, hotkeys, analog settings, mouse emulation, and remote gamepad support are managed directly from the application.
 
@@ -33,7 +36,7 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 > **Current release: v2.0.8** — per-controller DualSense Lightbar colors,
 > optional battery and charging indications, and USB/Bluetooth output support.
 > See the full [changelog](CHANGELOG.md)
-> and the [latest release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases/latest).
+> and the [latest release](https://github.com/ArvinNotDev/VPadConnect/releases/latest).
 
 ## Features
 
@@ -71,17 +74,17 @@ the relevant permission.
 
 ## Download
 
-Download the latest version from the [Releases](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases) page.
+Download the latest version from the [Releases](https://github.com/ArvinNotDev/VPadConnect/releases) page.
 
 For most users, download:
 
 ```text
-InputBridge-Gamepad2XInput.exe
+VPadConnect.exe
 ```
 
 The packaged application is intended to run directly on Windows without requiring a Python installation.
 
-Place the executable in a writable directory and launch it. On first run, InputBridge-Gamepad2XInput creates its required user configuration files automatically.
+Place the executable in a writable directory and launch it. On first run, VPadConnect creates its required user configuration files automatically.
 
 ## System Requirements
 
@@ -111,10 +114,10 @@ permission.
 
 ## Quick Start
 
-1. Download `InputBridge-Gamepad2XInput.exe` from the latest [Release](https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases).
+1. Download `VPadConnect.exe` from the latest [Release](https://github.com/ArvinNotDev/VPadConnect/releases).
 2. Install **ViGEmBus** if you want virtual Xbox 360 / XInput emulation.
 3. Connect your physical controller.
-4. Launch **InputBridge-Gamepad2XInput**.
+4. Launch **VPadConnect**.
 5. Open **Controller Emulation**.
 6. Click **Add Controller**.
 7. Select the HID controller interface you want to use.
@@ -126,7 +129,7 @@ Once configured, the physical controller can be translated into a virtual XInput
 
 ## Controller Mapping
 
-InputBridge-Gamepad2XInput separates the physical input device from the virtual output device.
+VPadConnect separates the physical input device from the virtual output device.
 
 A typical configuration looks like:
 
@@ -134,7 +137,7 @@ A typical configuration looks like:
 Physical HID Controller
         │
         ▼
-InputBridge-Gamepad2XInput
+VPadConnect
         │
         ├──► Virtual Xbox 360 / XInput Controller
         │
@@ -179,7 +182,7 @@ desktop experience.
 
 ## Mouse Mode
 
-InputBridge-Gamepad2XInput can use controller inputs as mouse controls.
+VPadConnect can use controller inputs as mouse controls.
 
 Supported functionality includes:
 
@@ -220,7 +223,7 @@ Use the desktop app's **Web Companion** tab to control the PC from a phone,
 tablet, or another computer. It serves the touch-friendly interface over HTTPS;
 no native mobile app is required.
 
-1. Start InputBridge on Windows, open **Web Companion**, and choose **Start Web Server**.
+1. Start VPadConnect on Windows, open **Web Companion**, and choose **Start Web Server**.
 2. Scan the desktop's Web Companion QR code with the phone's built-in camera, or
    open the displayed URL. Both devices should be on the same trusted network.
 3. The QR opens the browser at the Web Companion URL and carries the short-lived
@@ -310,7 +313,7 @@ The packaged executable is designed to be portable.
 You can place:
 
 ```text
-InputBridge-Gamepad2XInput.exe
+VPadConnect.exe
 ```
 
 in a writable directory and launch it directly.
@@ -328,8 +331,8 @@ unless the application has the required write permissions.
 ### Clone the repository
 
 ```powershell
-git clone https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput.git
-cd InputBridge-Gamepad2XInput
+git clone https://github.com/ArvinNotDev/VPadConnect.git
+cd VPadConnect
 ```
 
 ### Install dependencies
@@ -354,15 +357,15 @@ python main.py
 ### Build the recommended onedir package
 
 ```powershell
-python -m PyInstaller --clean --noconfirm InputBridge-Gamepad2XInput.spec
+python -m PyInstaller --clean --noconfirm VPadConnect.spec
 ```
 
 Output:
 
 ```text
 dist/
-└── InputBridge-Gamepad2XInput/
-    └── InputBridge-Gamepad2XInput.exe
+└── VPadConnect/
+    └── VPadConnect.exe
 ```
 
 The **onedir** build is generally recommended for development and distribution when fast startup and easier troubleshooting are preferred.
@@ -372,8 +375,8 @@ The **onedir** build is generally recommended for development and distribution w
 ```powershell
 python -m PyInstaller --clean --noconfirm `
   --distpath dist\onefile `
-  --workpath build\InputBridge-Gamepad2XInput_onefile `
-  InputBridge-Gamepad2XInput_onefile.spec
+  --workpath build\VPadConnect_onefile `
+  VPadConnect_onefile.spec
 ```
 
 Output:
@@ -381,7 +384,7 @@ Output:
 ```text
 dist/
 └── onefile/
-    └── InputBridge-Gamepad2XInput.exe
+    └── VPadConnect.exe
 ```
 
 The **onefile** build packages the application into a single executable and is more convenient for end users.
@@ -395,8 +398,8 @@ The **onefile** build packages the application into a single executable and is m
 ├── profiles/                              # Controller profile definitions
 ├── config/                                # Default application configuration
 ├── main.py                                # Application entry point
-├── InputBridge-Gamepad2XInput.spec         # PyInstaller onedir specification
-├── InputBridge-Gamepad2XInput_onefile.spec # PyInstaller onefile specification
+├── VPadConnect.spec         # PyInstaller onedir specification
+├── VPadConnect_onefile.spec # PyInstaller onefile specification
 ├── requirements.txt                       # Python dependencies
 └── README.md
 ```
@@ -409,10 +412,10 @@ Make sure **ViGEmBus** is installed correctly.
 
 Then:
 
-1. Close InputBridge-Gamepad2XInput.
+1. Close VPadConnect.
 2. Verify the ViGEmBus installation.
 3. Restart Windows if required by the driver installation.
-4. Launch InputBridge-Gamepad2XInput again.
+4. Launch VPadConnect again.
 5. Recreate or restart the virtual controller.
 
 ### The physical controller is not detected
@@ -519,7 +522,7 @@ Conceptually:
                             │
                             ▼
                  ┌─────────────────────┐
-                 │   InputBridge Core  │
+                 │   VPadConnect Core  │
                  │                     │
                  │ Discovery           │
                  │ Mapping             │
@@ -540,7 +543,7 @@ This separation makes it possible to extend the project with additional input an
 
 ## Project Status
 
-InputBridge-Gamepad2XInput is an actively developed Windows controller-remapping project.
+VPadConnect is an actively developed Windows controller-remapping and remote-control project.
 
 Current focus includes:
 
@@ -570,25 +573,25 @@ Add an appropriate `LICENSE` file before presenting the project as open source o
 ## Repository
 
 **GitHub:**
-https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput
+https://github.com/ArvinNotDev/VPadConnect
 
 **Releases:**
-https://github.com/ArvinNotDev/InputBridge-Gamepad2XInput/releases
+https://github.com/ArvinNotDev/VPadConnect/releases
 
 ---
 
 <p align="center">
-  <strong>InputBridge-Gamepad2XInput</strong><br>
+  <strong>VPadConnect</strong><br>
   Physical controller → virtual XInput, mouse controls, and hotkeys.
 </p>
 
 ## HidHide integration
 
-InputBridge includes an optional HidHide integration on Windows. From the Controller Emulation page, the HidHide control:
+VPadConnect includes an optional HidHide integration on Windows. From the Controller Emulation page, the HidHide control:
 
 - detects the installed HidHide configuration CLI without requiring a hard-coded install path;
 - opens the official Nefarius release page when HidHide is not installed;
-- registers the running InputBridge executable in HidHide's application whitelist;
+- registers the running VPadConnect executable in HidHide's application whitelist;
 - matches connected supported controllers against HidHide's own `symbolicLink` / `deviceInstancePath` data;
 - adds only missing controller blacklist entries and enables HidHide's cloak;
 - keeps configuration changes idempotent and does not disable or overwrite an already-active HidHide cloak owned by another application.

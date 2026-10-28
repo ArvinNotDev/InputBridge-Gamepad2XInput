@@ -719,7 +719,7 @@ class ServerPage(QWidget):
             QMessageBox.warning(
                 self,
                 "Network address unavailable",
-                "InputBridge could not determine this PC's local network address. "
+                "VPadConnect could not determine this PC's local network address. "
                 "Check Wi-Fi/Ethernet connectivity and restart the server.",
             )
             return
@@ -756,7 +756,7 @@ class ServerPage(QWidget):
             return
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("InputBridge — Secure Remote Client Pairing")
+        dialog.setWindowTitle("VPadConnect — Secure Remote Client Pairing")
         dialog.setMinimumSize(420, 520)
         content = QVBoxLayout(dialog)
         content.setContentsMargins(22, 18, 22, 18)
@@ -1215,7 +1215,7 @@ class ServerPage(QWidget):
                 QMessageBox.critical(
                     self,
                     "Secure Server Unavailable",
-                    "InputBridge could not initialize TLS. The remote server was not started.\n\n"
+                    "VPadConnect could not initialize TLS. The remote server was not started.\n\n"
                     + str(exc),
                 )
                 return

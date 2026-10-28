@@ -1,4 +1,4 @@
-"""HidHide integration for InputBridge.
+"""HidHide integration for VPadConnect.
 
 This module intentionally talks to HidHide through its official CLI instead of
 writing HidHide's registry configuration directly.  HidHide exposes a stable
@@ -402,7 +402,7 @@ class HidHideManager:
         return states
 
     def _disable_owned_cloak_if_unused(self) -> None:
-        """Turn off cloak only when InputBridge owns it and no blacklist entries remain."""
+        """Turn off cloak only when VPadConnect owns it and no blacklist entries remain."""
         if not self._enabled_by_inputbridge:
             return
         try:
@@ -417,7 +417,7 @@ class HidHideManager:
         """Hide exactly one controller.
 
         Returns ``(target, added_by_inputbridge)``. If it was already hidden,
-        no duplicate rule is created and it is not marked as InputBridge-owned.
+        no duplicate rule is created and it is not marked as VPadConnect-owned.
         """
         target = self._match_single_device(hid_device)
         instance_path = str(target.get("deviceInstancePath") or "").strip()
@@ -434,7 +434,7 @@ class HidHideManager:
             self._added_device_paths.add(instance_path)
             added = True
 
-        # InputBridge only owns the cloak if it had to enable it.
+        # VPadConnect only owns the cloak if it had to enable it.
         if not self.cloak_state() and self._added_device_paths:
             self.run(["--cloak-on"])
             self._enabled_by_inputbridge = True
@@ -466,7 +466,7 @@ class HidHideManager:
         return target, was_hidden
 
     def hide_hid_devices(self, hid_devices: Iterable[dict[str, Any]]) -> list[str]:
-        """Hide all supplied controllers; returns only paths newly added by InputBridge."""
+        """Hide all supplied controllers; returns only paths newly added by VPadConnect."""
         targets = list(hid_devices)
         if not targets:
             raise HidHideError("No supported controller is currently connected.")
@@ -483,7 +483,7 @@ class HidHideManager:
         return added
 
     def unhide_our_devices(self) -> list[str]:
-        """Restore only device rules created by this InputBridge session."""
+        """Restore only device rules created by this VPadConnect session."""
         paths = list(self._added_device_paths)
         removed: list[str] = []
         for path in paths:
@@ -503,7 +503,7 @@ class HidHideManager:
         return removed
 
     def unhide_all_hid_devices(self, hid_devices: Iterable[dict[str, Any]]) -> list[str]:
-        """Explicit user action: unhide only the supported controllers currently detected by InputBridge."""
+        """Explicit user action: unhide only the supported controllers currently detected by VPadConnect."""
         targets = self.match_devices(hid_devices)
         removed: list[str] = []
         blacklisted = self._blacklist_set()

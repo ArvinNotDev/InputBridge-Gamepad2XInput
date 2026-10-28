@@ -23,7 +23,7 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #3b3b53;
-    border-color: #6d75d9;
+    border-color: #635bff;
 }
 
 QPushButton:pressed {
@@ -42,11 +42,11 @@ QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
     border: 1px solid #46465d;
     border-radius: 7px;
     padding: 6px 8px;
-    selection-background-color: #5a5af0;
+    selection-background-color: #635bff;
 }
 
 QLineEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {
-    border-color: #6f7cff;
+    border-color: #38cde1;
 }
 
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
@@ -86,7 +86,7 @@ QSlider::handle:horizontal {
     width: 16px;
     margin: -5px 0;
     border-radius: 8px;
-    background: #7378ff;
+    background: #635bff;
 }
 
 #sidebar_menu {
@@ -130,7 +130,7 @@ QListWidget::item {
 QListWidget::item:selected {
     background-color: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #5a5af0, stop:1 #3f3fd0
+        stop:0 #635bff, stop:1 #4d46e6
     );
     color: #ffffff;
     font-weight: 600;
@@ -152,7 +152,7 @@ QScrollBar:vertical {
 QScrollBar::handle:vertical {
     background: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #5a5af0, stop:1 #3f3fd0
+        stop:0 #635bff, stop:1 #4d46e6
     );
     min-height: 20px;
     border-radius: 6px;
@@ -161,7 +161,7 @@ QScrollBar::handle:vertical {
 QScrollBar::handle:vertical:hover {
     background: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #7a7af8, stop:1 #5a5af0
+        stop:0 #38cde1, stop:1 #635bff
     );
 }
 
@@ -250,7 +250,7 @@ QGroupBox::title {
 QPushButton#profiles_activate_btn {
     background-color: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #5a5af0, stop:1 #3f3fd0
+        stop:0 #635bff, stop:1 #4d46e6
     );
     color: #ffffff;
     border: none;
@@ -263,14 +263,14 @@ QPushButton#profiles_activate_btn {
 QPushButton#profiles_activate_btn:hover {
     background-color: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #7a7af8, stop:1 #5a5af0
+        stop:0 #38cde1, stop:1 #635bff
     );
 }
 
 QPushButton#profiles_new_btn {
     background-color: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #5a5af0, stop:1 #3f3fd0
+        stop:0 #635bff, stop:1 #4d46e6
     );
     color: #ffffff;
     border: none;
@@ -283,7 +283,7 @@ QPushButton#profiles_new_btn {
 QPushButton#profiles_new_btn:hover {
     background-color: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #7a7af8, stop:1 #5a5af0
+        stop:0 #38cde1, stop:1 #635bff
     );
 }
 
@@ -300,7 +300,7 @@ QPushButton#profiles_import_btn, QPushButton#profiles_export_btn {
 QPushButton#profiles_import_btn:hover, QPushButton#profiles_export_btn:hover {
     background-color: #35354c;
     color: #ffffff;
-    border-color: #6c7cff;
+    border-color: #635bff;
 }
 
 QListWidget#profiles_list {
@@ -383,7 +383,7 @@ QPushButton#settings_save_profile:hover {
 #settings_profile_menu QMenu::item:selected {
     background-color: qlineargradient(
         x1:0, y1:0, x2:1, y2:0,
-        stop:0 #5a5af0, stop:1 #3f3fd0
+        stop:0 #635bff, stop:1 #4d46e6
     );
     color: #ffffff;
 }
@@ -449,7 +449,7 @@ QPushButton#about_primary_btn, QPushButton#about_secondary_btn {
 }
 
 QPushButton#about_primary_btn {
-    background-color: #5a5af0;
+    background-color: #635bff;
     color: #ffffff;
     border: 1px solid #7373ff;
 }
@@ -489,7 +489,7 @@ QPushButton#github_button {
 QPushButton#github_button:hover {
     background-color: #3a3a50;
     color: #ffffff;
-    border-color: #5a5af0;
+    border-color: #635bff;
 }
 
 /* Profile image buttons */
@@ -505,7 +505,7 @@ QPushButton#profiles_set_image_btn {
 QPushButton#profiles_set_image_btn:hover {
     background-color: #3a3a5a;
     color: #ddddff;
-    border-color: #5a5af0;
+    border-color: #635bff;
 }
 
 QPushButton#profiles_remove_image_btn {
@@ -540,7 +540,7 @@ QPushButton#profiles_save_desc_btn {
 QPushButton#profiles_save_desc_btn:hover {
     background-color: #3a3a5a;
     color: #ddddff;
-    border-color: #5a5af0;
+    border-color: #635bff;
 }
 
 QPushButton#profiles_save_desc_btn:disabled {
@@ -563,7 +563,7 @@ QFrame#lightbar_preview {
 }
 
 
-/* ===================== InputBridge modern shell ===================== */
+/* ===================== VPadConnect modern shell ===================== */
 QMainWindow {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
         stop:0 #0d1422, stop:0.55 #111b2c, stop:1 #1d1730);

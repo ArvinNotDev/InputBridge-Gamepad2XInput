@@ -1,4 +1,4 @@
-"""InputBridge Windows desktop application entry point."""
+"""VPadConnect Windows desktop application entry point."""
 import sys
 
 
@@ -7,7 +7,7 @@ def main():
     from ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
-    app.setApplicationName("InputBridge-Gamepad2XInput")
+    app.setApplicationName("VPadConnect")
     window = MainWindow(app)
     window.show()
     sys.exit(app.exec())

@@ -183,7 +183,7 @@ class HidHideCard(QFrame):
         root.addLayout(header)
 
         self.detail = QLabel(
-            "Hide each physical controller independently. InputBridge stays whitelisted so it can continue reading hidden controllers."
+            "Hide each physical controller independently. VPadConnect stays whitelisted so it can continue reading hidden controllers."
         )
         self.detail.setObjectName("hidhideDetail")
         self.detail.setWordWrap(True)
@@ -467,7 +467,7 @@ class HidHideCard(QFrame):
             if operation == "hide":
                 self._set_status(f"Hidden • {label}")
                 self.detail.setText(
-                    "This controller is now hidden from non-whitelisted applications. InputBridge remains allowed to access it."
+                    "This controller is now hidden from non-whitelisted applications. VPadConnect remains allowed to access it."
                 )
             else:
                 self._set_status(f"Visible • {label}")
@@ -504,7 +504,7 @@ class HidHideCard(QFrame):
         self._start_worker("detect")
 
     def shutdown(self):
-        """Remove only the device rules created by this InputBridge session."""
+        """Remove only the device rules created by this VPadConnect session."""
         self._loader_timer.stop()
         try:
             self.manager.unhide_our_devices()

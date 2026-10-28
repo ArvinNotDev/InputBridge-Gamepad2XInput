@@ -28,7 +28,7 @@ class AboutPage(QWidget):
         hero_layout.setContentsMargins(28, 28, 28, 28)
         hero_layout.setSpacing(8)
 
-        badge = QLabel("✨  INPUTBRIDGE")
+        badge = QLabel("✨  VPADCONNECT")
         badge.setObjectName("about_badge")
         hero_layout.addWidget(badge)
 
@@ -43,7 +43,7 @@ class AboutPage(QWidget):
         hero_layout.addLayout(title_layout)
 
         tagline = QLabel(
-            "A modern bridge between your controllers, XInput, keyboard, and mouse."
+            "Virtual Gamepad. Connected Control."
         )
         tagline.setObjectName("about_tagline")
         tagline.setWordWrap(True)
@@ -61,7 +61,7 @@ class AboutPage(QWidget):
         info_layout.addWidget(heading)
 
         body = QLabel(
-            "InputBridge-Gamepad2XInput helps you connect physical HID controllers "
+            "VPadConnect helps you connect physical HID controllers "
             "to virtual Xbox 360 devices with flexible profiles, hotkeys, mouse mode, "
             "remote gamepad support, and HidHide integration."
         )

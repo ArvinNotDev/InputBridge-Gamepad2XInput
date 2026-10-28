@@ -18,7 +18,7 @@ on:
       - "tests/test_remote_security.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
-      - "InputBridge-Gamepad2XInput*.spec"
+      - "VPadConnect*.spec"
       - ".github/workflows/test-web-companion.yml"
   pull_request:
     paths:
@@ -36,7 +36,7 @@ on:
       - "tests/test_remote_security.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
-      - "InputBridge-Gamepad2XInput*.spec"
+      - "VPadConnect*.spec"
       - ".github/workflows/test-web-companion.yml"
   workflow_dispatch:
 
