@@ -107,6 +107,7 @@ function createHarness(settings = {}) {
   }
   let now = 1000;
   let failNextState = false;
+  const heldStateResponses = [];
   const frames = [];
 
   const document = {
@@ -166,6 +167,11 @@ function createHarness(settings = {}) {
         : url === "/api/pair"
           ? { ok: true, token: "paired-session-token", name: requestBody.name }
           : { ok: true };
+    if (url === "/api/state" && settings.holdStateResponses) {
+      return new Promise((resolve) => {
+        heldStateResponses.push(() => resolve({ ok: true, json: () => Promise.resolve(body) }));
+      });
+    }
     return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
   };
   const sandbox = {
@@ -213,6 +219,8 @@ function createHarness(settings = {}) {
       if (callback) callback();
     },
     setFailNextState() { failNextState = true; },
+    releaseNextState() { const release = heldStateResponses.shift(); if (release) release(); },
+    pendingStateResponses() { return heldStateResponses.length; },
   };
 }
 
@@ -260,6 +268,13 @@ test("browser control preferences restore and persist without storing the sessio
     steeringSensitivity: 2,
     tapToClick: true,
     preset: "standard",
+    layoutPreset: "classic",
+    layoutOrders: {
+      controller: ["sticks", "buttons-zone"],
+      stickZone: ["left-stick", "right-stick"],
+      buttonsZone: ["shoulders", "menu-buttons", "face-row", "stick-buttons"],
+      faceRow: ["dpad", "face-buttons"],
+    },
   });
   assert.equal(harness.sessionValues.get("ib.web.token"), "test-session-token");
   assert.equal(harness.preferenceValues.has("ib.web.token"), false);
@@ -483,4 +498,56 @@ test("visibility loss and a failed connection request clear held input", async (
   assert.ok(harness.calls.some(({ url }) => url === "/api/disconnect"));
   assert.equal(harness.sessionValues.has("ib.web.token"), false);
   assert.equal(harness.gamepadButton.classList.contains("pressed"), false);
+});
+
+
+test("state updates are coalesced while a slow request is in flight, then the newest stick position is sent", async () => {
+  const harness = createHarness({ holdStateResponses: true });
+  await settle();
+
+  harness.leftStick.dispatch("pointerdown", { pointerId: 61, clientX: 168, clientY: 100 });
+  assert.equal(harness.pendingStateResponses(), 1);
+  assert.equal(stateRequests(harness).at(-1).joystick.left_x, 255);
+
+  harness.leftStick.dispatch("pointermove", { pointerId: 61, clientX: 130, clientY: 100 });
+  assert.equal(harness.pendingStateResponses(), 1);
+  harness.releaseNextState();
+  await settle();
+
+  assert.equal(harness.pendingStateResponses(), 1);
+  assert.ok(stateRequests(harness).length >= 2);
+  assert.equal(stateRequests(harness).at(-1).joystick.left_x, 184);
+  harness.releaseNextState();
+  await settle();
+});
+
+test("Driving mode enables motion steering and maps orientation changes to the left stick", async () => {
+  const harness = createHarness();
+  await settle();
+
+  harness.elements.get("driving").dispatch("click");
+  await settle();
+  assert.equal(harness.elements.get("tiltToggle").textContent, "Disable tilt steering");
+
+  harness.dispatchWindow("deviceorientation", { gamma: 0 });
+  harness.dispatchWindow("deviceorientation", { gamma: 15 });
+  await settle();
+
+  assert.ok(stateRequests(harness).at(-1).joystick.left_x > 128);
+});
+
+test("focus edit mode exposes layout presets and persists a left-handed layout", async () => {
+  const harness = createHarness();
+  await settle();
+
+  harness.elements.get("focus").dispatch("click");
+  harness.elements.get("editLayout").dispatch("click");
+  assert.equal(harness.document.body.classList.contains("layout-edit"), true);
+  assert.equal(harness.elements.get("editLayout").getAttribute("aria-pressed"), "true");
+
+  harness.elements.get("layoutPreset").value = "left-handed";
+  harness.elements.get("layoutPreset").dispatch("change");
+  const saved = JSON.parse(harness.preferenceValues.get("ib.web.preferences"));
+  assert.equal(saved.layoutPreset, "left-handed");
+  assert.deepEqual(saved.layoutOrders.faceRow, ["face-buttons", "dpad"]);
 });
