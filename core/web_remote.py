@@ -26,6 +26,7 @@ JOYSTICK_KEYS = {"left_x", "left_y", "right_x", "right_y"}
 MOUSE_BUTTON_KEYS = {"left", "right", "middle"}
 SESSION_IDLE_SECONDS = 8.0
 PAIRING_LIFETIME_SECONDS = 300.0
+MAX_WEB_SESSIONS = 8
 
 
 def _bounded_map(value: Any, allowed: set[str], low: int, high: int, *, booleans: bool = False) -> dict[str, int] | None:
@@ -122,6 +123,7 @@ class WebRemoteServer:
         self.pairing_deadline = 0.0
         self._lock = threading.RLock()
         self._sessions: dict[str, dict[str, Any]] = {}
+        self._pending_pairs = 0
         self._pair_failures: dict[str, list[float]] = {}
         self._server = None
         self._thread: threading.Thread | None = None
@@ -279,20 +281,34 @@ class WebRemoteServer:
                     return jsonify({"ok": False, "error": "Too many attempts. Wait a minute and try again."}), 429
                 attempts.append(now)
                 self._pair_failures[addr] = attempts
+                if len(self._sessions) + self._pending_pairs >= MAX_WEB_SESSIONS:
+                    return jsonify({"ok": False, "error": "The web companion already has the maximum of eight active browser controllers."}), 429
                 valid = bool(self.pairing_code and now < self.pairing_deadline and secrets.compare_digest(code, self.pairing_code))
+                if valid:
+                    self._pending_pairs += 1
             if not valid:
                 return jsonify({"ok": False, "error": "Pairing code is wrong or expired. Create a fresh QR code on the PC."}), 403
             session_uuid = "web-" + uuid.uuid4().hex
             try:
                 mapper = Phone_mapper(session_uuid, "x360", self.controllers_page, self.hotkey_page, self.settings)
             except Exception:
+                with self._lock:
+                    self._pending_pairs = max(0, self._pending_pairs - 1)
                 app.logger.exception("Could not initialize browser controller")
                 return jsonify({"ok": False, "error": "Could not initialize a virtual controller on this PC."}), 500
             token = secrets.token_urlsafe(32)
             session = {"uuid": session_uuid, "name": name.strip(), "mapper": mapper,
                        "remote": RemoteActionSession(), "last_seen": time.monotonic(), "mode": "gamepad"}
             with self._lock:
-                self._sessions[token] = session
+                self._pending_pairs = max(0, self._pending_pairs - 1)
+                if self._stop_event.is_set() or len(self._sessions) >= MAX_WEB_SESSIONS:
+                    rejected = True
+                else:
+                    self._sessions[token] = session
+                    rejected = False
+            if rejected:
+                self._close_session(session)
+                return jsonify({"ok": False, "error": "The web server stopped or reached its controller limit. Try again."}), 503
             if self.mapper_added is not None:
                 try:
                     self.mapper_added(mapper.emulator)
