@@ -114,10 +114,7 @@ def test_persistent_websocket_stream_applies_states_and_releases_inputs(monkeypa
     thread.start()
     client = None
     try:
-        client = Client.connect(
-            f"ws://127.0.0.1:{http_server.server_port}/api/stream",
-            receive_timeout=2,
-        )
+        client = Client.connect(f"ws://127.0.0.1:{http_server.server_port}/api/stream")
         client.send(json.dumps({"type": "auth", "token": token}))
         ready = json.loads(client.receive(timeout=2))
         assert ready == {"type": "ready"}
