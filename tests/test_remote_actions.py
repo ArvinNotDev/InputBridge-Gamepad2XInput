@@ -6,9 +6,9 @@ def _request(action, payload=None, request_id="req_01"):
     return {"protocol_version": 1, "request_id": request_id, "action": action, "payload": payload or {}}
 
 
-def test_remote_permissions_are_disabled_by_default():
-    assert all(value is False for value in DEFAULT_REMOTE_PERMISSIONS.values())
-    assert all(value is False for name, value in remote_capabilities().items() if name != "pc_status")
+def test_remote_permissions_are_enabled_by_default():
+    assert all(value is True for value in DEFAULT_REMOTE_PERMISSIONS.values())
+    assert all(value is True for name, value in remote_capabilities().items() if name != "pc_status")
     assert remote_capabilities()["pc_status"] is True
 
 
@@ -54,8 +54,8 @@ def test_invalid_request_fails_before_adapter_runs():
 def test_permissions_persist_atomically_and_invalid_values_use_defaults(tmp_path):
     from core.remote_actions import load_remote_permissions, save_remote_permissions
     path = tmp_path / "remote_permissions.json"
-    save_remote_permissions({"power": True, "clipboard": "yes"}, path)
+    save_remote_permissions({"power": False, "clipboard": "yes"}, path)
     restored = load_remote_permissions(path)
-    assert restored["power"] is True
-    assert restored["clipboard"] is False
-    assert restored["keyboard"] is False
+    assert restored["power"] is False
+    assert restored["clipboard"] is True
+    assert restored["keyboard"] is True
