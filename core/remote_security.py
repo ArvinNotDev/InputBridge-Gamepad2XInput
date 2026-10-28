@@ -156,8 +156,13 @@ def ensure_web_server_identity(
             if (dns_names.issubset(previous_dns) and ip_names.issubset(previous_ips)
                     and not_before <= now < not_after):
                 # Let SSLContext validate that the stored private key matches.
-                serialization.load_pem_private_key(private_key_path.read_bytes(), password=None)
-                return certificate_path, private_key_path
+                stored_key = serialization.load_pem_private_key(
+                    private_key_path.read_bytes(), password=None
+                )
+                public_encoding = serialization.Encoding.DER
+                public_format = serialization.PublicFormat.SubjectPublicKeyInfo
+                if previous.public_key().public_bytes(public_encoding, public_format) == stored_key.public_key().public_bytes(public_encoding, public_format):
+                    return certificate_path, private_key_path
         except Exception:
             # A corrupt or out-of-date web identity can be recreated. The native
             # identity is never read or modified by this function.
