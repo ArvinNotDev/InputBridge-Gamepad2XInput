@@ -5,15 +5,31 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
 
-### Phone remote-control foundation
+### Web Companion and desktop integration
+
+- Improved the browser gamepad layout for portrait and landscape screens,
+  including a full-screen Gamepad Focus mode and touch-safe scrolling.
+- Added pointer-cancellation and connection-loss cleanup so touch controls are
+  released when input ends unexpectedly.
+- Kept browser controllers independent, with per-browser virtual gamepads and
+  serialized input and cleanup for each session.
+- Added quick keyboard navigation controls and persistent browser preferences
+  for the device name, gamepad mode, and touch-control settings. Session tokens
+  remain scoped to the browser tab.
+- Removed the separate Kivy and mobile PySide6 clients and their mobile-only
+  build files. The Windows PySide6 desktop application remains supported.
+
+### Remote-control foundation
 
 - Added a versioned, bounded request/response schema for allowlisted remote
   actions while preserving the existing gamepad and touchpad state payload.
-- Added a per-installation TLS identity on the desktop and SHA-256 certificate
-  pin verification on the phone. The desktop exposes the fingerprint needed
-  for first-time connection setup; both clients must be updated together.
+- Added a per-installation TLS identity on the desktop and a browser pairing
+  flow that displays and checks the expected SHA-256 certificate fingerprint.
+  Browser JavaScript cannot independently pin the TLS certificate; users must
+  compare the certificate details with the desktop value before accepting a
+  self-signed certificate warning.
 - Added PC-side permission controls. All remote-action permissions default to
-  disabled; power actions additionally require confirmation on the phone.
+  disabled; power actions additionally require confirmation in the browser.
 - Added remote keyboard/text input, special keys and approved shortcuts,
   Windows media keys, explicit clipboard send/read, approved app launching,
   presentation key commands, and PC status information.
@@ -33,8 +49,10 @@ remain future work; they are not represented as implemented here.
 
 ### Validation
 
-- Test and compile commands must be run in a Python environment with the
-  project's dependencies before this change is considered verified.
+- `python -m pytest -q` — 75 passed with no warnings.
+- Both PyInstaller specifications completed on Windows 11 with Python 3.12.
+  The built executables were not launched, and no controller hardware was
+  tested. No beta release has been published.
 
 ## [2.0.8] — 2026-09-26
 

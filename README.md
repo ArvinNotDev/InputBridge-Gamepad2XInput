@@ -231,11 +231,20 @@ no native mobile app is required.
    keyboard, media, clipboard, app launch, presentation, and power permissions
    from the desktop.
 
+The Gamepad tab supports portrait and landscape layouts and has a full-screen
+**Gamepad Focus** mode. Browser preferences are saved for that browser origin;
+the pairing token stays in per-tab session storage. Each paired browser gets an
+independent virtual controller. The server allows up to eight active browser
+sessions; pairing codes expire after five minutes, and inactive sessions release
+their inputs automatically.
+
 The QR carries a public certificate fingerprint, never the private TLS key.
-Browsers may first show a self-signed certificate warning; compare its
-fingerprint with the one shown on the desktop before continuing. The web server
-allows up to eight independent browser controller sessions. Pairing codes expire
-after five minutes, and inactive sessions release their inputs automatically.
+Browsers may first show a self-signed certificate warning. Before proceeding,
+inspect the certificate details in the browser and compare its SHA-256
+fingerprint with the value shown on the desktop. Browser JavaScript cannot
+independently pin the TLS certificate, so do not bypass a warning when the
+fingerprints do not match or cannot be checked. Use the Web Companion only on a
+trusted network.
 
 ### Native-client parity checklist
 
@@ -469,6 +478,23 @@ Inspect the detected device list and choose the interface corresponding to the c
 ```text
 main.py
 ```
+
+### Automated tests
+
+From the repository root, install the project dependencies and `pytest`, then
+run the Python and browser checks:
+
+```bash
+python -m pip install -r requirements.txt pytest
+python -m pytest -q
+node --check ui/web/static/app.js
+node --test tests/test_web_frontend.cjs
+```
+
+The Python suite covers shared protocol, permission, controller-mapping, and
+configuration behavior. The Node tests cover browser touch-input behavior.
+These checks do not replace testing the Windows executable with ViGEmBus and
+real controllers.
 
 ### Packaging
 
