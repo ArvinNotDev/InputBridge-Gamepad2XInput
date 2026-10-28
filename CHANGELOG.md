@@ -12,6 +12,18 @@ here. Version numbers follow semantic-versioning conventions where practical.
 - Added vector logo and social-preview artwork using the indigo-and-cyan visual identity.
 
 ### Web Companion and desktop integration
+### Web Companion desktop refresh
+
+- Combined Web Companion into the primary feature navigation and removed the old
+  native remote-controller page from the desktop shell.
+- Added a compact Apple-inspired frameless title bar, app/tray icon, horizontal
+  Settings sections, and profile/settings shortcuts in the header.
+- Moved Web Companion startup and shutdown to a worker thread and fixed its
+  listener to HTTPS port 8765. The app can request a private-network Windows
+  Firewall rule to make browser connections available over the LAN.
+- Simplified pairing UI, disabled pairing controls until startup completes, and
+  added a scrollable list of connected browsers.
+
 
 - Improved the browser gamepad layout for portrait and landscape screens,
   including a full-screen Gamepad Focus mode and touch-safe scrolling.
@@ -34,8 +46,9 @@ here. Version numbers follow semantic-versioning conventions where practical.
   Browser JavaScript cannot independently pin the TLS certificate; users must
   compare the certificate details with the desktop value before accepting a
   self-signed certificate warning.
-- Added PC-side permission controls. All remote-action permissions default to
-  disabled; power actions additionally require confirmation in the browser.
+- Added PC-side permission controls in Web Companion. Remote-action permissions
+  are enabled by default and can be changed at any time; power actions still require
+  confirmation in the browser.
 - Added remote keyboard/text input, special keys and approved shortcuts,
   Windows media keys, explicit clipboard send/read, approved app launching,
   presentation key commands, and PC status information.
