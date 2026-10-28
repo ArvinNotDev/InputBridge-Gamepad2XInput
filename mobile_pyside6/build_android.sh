@@ -8,6 +8,21 @@ PYSIDE_SETUP_DIR="$HOME/pyside-setup-6.11"
 WHEEL_DIR="$HOME/.cache/inputbridge-android-wheels/$QT_VERSION"
 
 cd "$PROJECT_DIR"
+
+# Fail fast with an actionable message if the Linux host is missing tools used
+# by python-for-android/autoconf recipes (notably libtool's LT_* m4 macros).
+for tool in autoconf automake aclocal autoreconf libtoolize m4 pkg-config; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "Missing build prerequisite: $tool. Install the Android build dependencies from .github/workflows/mobile-pyside6-android.yml." >&2
+    exit 1
+  fi
+done
+LIBTOOL_MACROS="$(aclocal --print-ac-dir)/libtool.m4"
+if [ ! -f "$LIBTOOL_MACROS" ] || ! grep -q 'LT_SYS_SYMBOL_USCORE' "$LIBTOOL_MACROS"; then
+  echo "The libtool Autoconf macros are missing. Install Ubuntu packages libtool, libtool-bin, autoconf, automake and autopoint." >&2
+  exit 1
+fi
+
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt aqtinstall
 

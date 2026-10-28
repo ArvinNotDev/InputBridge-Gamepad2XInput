@@ -154,17 +154,61 @@ def main() -> int:
     if not sdk_path.is_dir():
         raise FileNotFoundError(f"Android SDK was not found under {sdk_path}")
 
+    project_dir = Path.cwd()
+    output_dir = project_dir / "dist"
+    before_apks: dict[Path, tuple[int, int]] = {}
+    if output_dir.is_dir():
+        for apk in output_dir.rglob("*.apk"):
+            if apk.is_file():
+                stat = apk.stat()
+                before_apks[apk.resolve()] = (stat.st_size, stat.st_mtime_ns)
+
     android_deploy.main(
         name="InputBridge Mobile",
         pyside_wheel=pyside_wheel,
         shiboken_wheel=shiboken_wheel,
         ndk_path=ndk_candidates[-1],
         sdk_path=sdk_path,
-        config_file=Path.cwd() / "pysidedeploy.spec",
+        config_file=project_dir / "pysidedeploy.spec",
         loglevel=logging.INFO,
         force=True,
         extra_modules_grouped="Network,Multimedia,MultimediaWidgets,Sensors",
     )
+
+    # Some upstream deploy-tool versions log Buildozer failures and return
+    # without propagating a non-zero code. Do not let CI mark that run as
+    # successful unless it produced a fresh, structurally valid APK.
+    apks = sorted(
+        (apk for apk in output_dir.rglob("*.apk") if apk.is_file()),
+        key=lambda apk: apk.stat().st_mtime_ns,
+        reverse=True,
+    ) if output_dir.is_dir() else []
+    fresh_apks = []
+    for apk in apks:
+        stat = apk.stat()
+        previous = before_apks.get(apk.resolve())
+        if previous != (stat.st_size, stat.st_mtime_ns):
+            fresh_apks.append(apk)
+    if not fresh_apks:
+        seen = ", ".join(str(path.relative_to(project_dir)) for path in apks) or "none"
+        raise RuntimeError(
+            f"Qt Android Deploy returned without producing a fresh APK under {output_dir}. "
+            f"APK files found: {seen}. Check the Buildozer/python-for-android messages above; "
+            "the upstream deployment tool may have logged a build error without raising it."
+        )
+
+    built_apk = fresh_apks[0]
+    try:
+        with zipfile.ZipFile(built_apk) as archive:
+            corrupt_member = archive.testzip()
+            if corrupt_member:
+                raise RuntimeError(f"New APK contains a corrupt archive member: {corrupt_member}")
+            if "AndroidManifest.xml" not in archive.namelist():
+                raise RuntimeError(f"Output is not an Android APK (missing AndroidManifest.xml): {built_apk}")
+    except zipfile.BadZipFile as exc:
+        raise RuntimeError(f"Output file is not a valid APK archive: {built_apk}") from exc
+
+    print(f"Validated Android APK: {built_apk} ({built_apk.stat().st_size} bytes)", flush=True)
     return 0
 
 
