@@ -118,7 +118,7 @@ def _ensure_windows_firewall_rule(port: int) -> None:
             # Windows displays the standard UAC prompt; no elevation is requested without consent.
             command = (
                 "Start-Process -FilePath 'netsh.exe' "
-                f"-ArgumentList 'advfirewall firewall add rule name=\\"{rule_name}\\" "
+                f"-ArgumentList 'advfirewall firewall add rule name=\"{rule_name}\" "
                 f"dir=in action=allow protocol=TCP localport={port} profile=private enable=yes' "
                 "-Verb RunAs -WindowStyle Hidden -Wait"
             )
