@@ -5,6 +5,16 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ## [Unreleased]
 
+### Mobile Settings and touchpad scrolling
+
+- Added a dedicated mobile Settings tab with pointer sensitivity, scroll sensitivity,
+  reverse touchpad scrolling, tap-to-click, gyro sensitivity, Xbox/PlayStation layout
+  selection, optional haptic feedback, screen wake lock, and a restore-defaults action.
+- Added browser-local persistence for the new preferences. Reversed scrolling affects
+  both two-finger touchpad gestures and mouse-wheel events; explicit Scroll Up/Down
+  buttons remain literal and keep their displayed direction.
+
+
 ### Mobile controller and desktop UI refinements
 
 - Replaced per-move HTTPS requests and the 1.8-second application heartbeat
