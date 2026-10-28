@@ -225,7 +225,7 @@ function createHarness(settings = {}) {
     clearTimeout,
     history: { replaceState() {} },
   };
-  if (settings.websocket) sandbox.WebSocket = FakeWebSocket;
+  sandbox.WebSocket = settings.websocket ? FakeWebSocket : undefined;
 
   vm.runInNewContext(appSource, sandbox, { filename: "ui/web/static/app.js" });
   return {
