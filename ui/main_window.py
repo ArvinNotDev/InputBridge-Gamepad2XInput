@@ -22,6 +22,7 @@ from ui.pages.controller_emulation import ControllerEmulation
 from ui.pages.controllers import ControllersPage
 from ui.pages.settings import SettingsPage
 from ui.pages.server import ServerPage
+from ui.pages.web_remote import WebRemotePage
 from ui.pages.hotkey import HotkeyPage
 from ui.pages.profiles import ProfilesPage
 from ui.pages.about import AboutPage
@@ -47,7 +48,8 @@ class MainWindow(QMainWindow):
     IDX_TEST_XINPUT = 4
     IDX_SETTINGS = 5
     IDX_ABOUT = 6
-    IDX_QUIT = 7
+    IDX_WEB_REMOTE = 7
+    IDX_QUIT = 8
 
     def __init__(self, app: QApplication) -> None:
         super().__init__()
@@ -154,6 +156,7 @@ class MainWindow(QMainWindow):
         self.menu.addTab("Input Test")                                 # 4
         self.menu.addTab("Settings")                                   # 5
         self.menu.addTab("About")                                      # 6
+        self.menu.addTab("Web Companion")                               # 7
         self.menu.setMinimumHeight(44)
         main_layout.addWidget(self.menu)
 
@@ -165,7 +168,7 @@ class MainWindow(QMainWindow):
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
-        # The order here must match indices 0..5
+        # The stacked page order must match menu indices 0..7.
         # 0: Controller Emulation
         self.controller_emulation_page = ControllerEmulation(
             self.settings, controllers_page, hotkey_page
@@ -194,6 +197,14 @@ class MainWindow(QMainWindow):
         )
         self.about_page = AboutPage()
         self.pages.addWidget(self.about_page)
+        # Browser controllers share the existing mapper registration path with
+        # the TLS phone client, so each paired browser appears as its own XInput
+        # device alongside mobile and physical controllers.
+        self.web_remote_page = WebRemotePage(
+            self.settings, controllers_page, hotkey_page, self.server_page,
+            status_changed=self._refresh_tray_menu,
+        )
+        self.pages.addWidget(self.web_remote_page)
 
         main_layout.addWidget(self.pages, 1)
 
@@ -222,7 +233,7 @@ class MainWindow(QMainWindow):
             QApplication.quit()
             return
 
-        # For all other indices, show corresponding page (indices 0..6)
+        # For all remaining tabs, show the matching stacked page (indices 0..7).
         if 0 <= index < self.pages.count():
             self.pages.setCurrentIndex(index)
 
@@ -288,6 +299,7 @@ class MainWindow(QMainWindow):
             ("Profiles", self.IDX_PROFILES),
             ("Settings", self.IDX_SETTINGS),
             ("About", self.IDX_ABOUT),
+            ("Web Companion", self.IDX_WEB_REMOTE),
         ):
             action = QAction(label, menu)
             action.triggered.connect(
@@ -308,15 +320,18 @@ class MainWindow(QMainWindow):
             return
         running = bool(getattr(self.server_page, "server_running", False))
         client_count = len(getattr(self.server_page, "clients", {}))
+        web_server = getattr(getattr(self, "web_remote_page", None), "web_server", None)
+        web_running = bool(getattr(web_server, "running", False))
+        web_count = int(getattr(web_server, "client_count", 0)) if web_server else 0
         mapped_count = len(getattr(self.controller_emulation_page, "mappers", {}))
         self._tray_status_action.setText(
-            f"Server: {'running' if running else 'stopped'} · "
-            f"Clients: {client_count} · Mapped: {mapped_count}"
+            f"Phone: {'on' if running else 'off'} · Web: {'on' if web_running else 'off'} · "
+            f"Clients: {client_count}+{web_count} · Mapped: {mapped_count}"
         )
-        self._tray_server_action.setText("Stop server" if running else "Start server")
+        self._tray_server_action.setText("Stop phone server" if running else "Start phone server")
         self.tray_icon.setToolTip(
-            f"{self.WINDOW_TITLE} — "
-            f"{'server running' if running else 'server stopped'}"
+            f"{self.WINDOW_TITLE} — Phone server {'running' if running else 'stopped'}, "
+            f"Web Companion {'running' if web_running else 'stopped'}"
         )
         self._tray_hide_action.setEnabled(self.isVisible())
 
@@ -415,6 +430,10 @@ class MainWindow(QMainWindow):
             self.server_page.shutdown()
         except Exception as exc:
             print(f"[MainWindow] Server shutdown failed: {exc}")
+        try:
+            self.web_remote_page.shutdown()
+        except Exception as exc:
+            print(f"[MainWindow] Web Companion shutdown failed: {exc}")
         try:
             self.controller_emulation_page.shutdown()
         except Exception as exc:

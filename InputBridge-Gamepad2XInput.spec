@@ -12,6 +12,7 @@ datas = [
     (str(project_root / "profiles"), "profiles"),
     (str(project_root / "ui" / "themes"), "ui/themes"),
     (str(project_root / "ui" / "assets"), "ui/assets"),
+    (str(project_root / "ui" / "web"), "ui/web"),
 ]
 
 # vgamepad loads ViGEmClient.dll via an absolute path relative to its package.
@@ -30,6 +31,8 @@ hiddenimports = [
     "cryptography.hazmat.bindings._rust",
     "qrcode",
     "qrcode.image.pil",
+    "flask",
+    "werkzeug.serving",
 ]
 
 datas += collect_data_files("vgamepad")

@@ -51,6 +51,8 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Remote phone touchpad with cursor movement, left/right/middle buttons, and scrolling
 * Remote phone keyboard typing with text, editing, navigation, and special-key events
 * Per-phone choice between XInput gamepad output and direct Windows mouse output
+* Responsive HTTPS browser companion with touch gamepad, touch mouse, remote keyboard, media, clipboard, launch shortcuts, presentation and permission-gated power controls
+* Independent browser gamepad sessions, so multiple phones/tablets can create separate virtual XInput devices
 * System-tray integration
 * Dark and light themes
 * Persistent application settings
@@ -212,51 +214,41 @@ Hotkeys can be used independently of standard controller mappings and are stored
 
 ## Phone-to-PC Remote Control
 
-The companion Kivy client remains a separate application at
-`phone_client_with_auth.py`. The existing **Gamepad** and **Mouse** screens
-continue to send controller and touchpad state; use the desktop Server page to
-select **Emulate** or **Mouse** for the connected phone.
+InputBridge now provides two separately named mobile clients:
 
-### Secure connection and first pairing
+- **PySide6 Mobile (recommended):** the modern Qt for Python client in `mobile_pyside6/`. It contains Connect, Gamepad, Mouse, Remote and Settings screens with a touch-first dark interface.
+- **Legacy Kivy Mobile:** the previous client is preserved in `mobile_kivy_legacy/main.py`, along with its legacy Buildozer configuration and dependency list. It is kept separate so the two approaches cannot be confused.
 
-1. Install the updated desktop dependencies and start InputBridge.
-2. Open the desktop **Server** page and start the server. It creates a persistent
-   TLS certificate. Once the server is listening, click **Show Phone Pairing QR**.
-3. On the phone, open **Connect** and tap **Scan Pairing QR**. The QR transfers
-   the PC's LAN address, port, and public SHA-256 certificate fingerprint; the
-   phone compares the live TLS certificate against that fingerprint before
-   sending device identity or pairing information. Install the dependencies in
-   `requirements-phone.txt`; for Android packaging, include `numpy` and
-   `pyzbar` in the python-for-android requirements and declare `CAMERA` and
-   `INTERNET` in the Android manifest. If the current mobile build does not
-   include its QR decoder or camera permission, scan the QR with a compatible
-   QR reader and paste its complete text into the fallback field.
-4. If the phone is not trusted yet, copy the short pairing code shown beside the
-   connected client on the PC into the phone and submit it.
-5. Open **Remote** and refresh PC status. On the PC, explicitly enable the
-   individual remote-action permissions required by your workflow.
+### PySide6 mobile source and Android runtime
 
-The TLS certificate and private key are stored in the desktop app's writable
-`remote_security/` data directory. The QR contains only the PC endpoint and
-the public certificate fingerprint; **the private TLS key is never exported**.
-The server fingerprint is saved on the phone per host and port; later connections
-use that pin. If the PC certificate is replaced, scan the new QR or compare and
-enter the newly displayed fingerprint deliberately. Do not accept a fingerprint
-sent through an untrusted channel.
+The PySide6 client source is maintained in `mobile_pyside6/`. This repository intentionally does **not** build or publish a mobile APK/AAB. CI only validates the Python source and tests.
 
-The mobile client retries a transient TCP/TLS establishment failure up to two
-times automatically, keeps longer TLS-handshake timeouts for slower phones, and
-prevents duplicate connect taps while one attempt is in progress.
+A Python source file using PySide6 cannot directly become a native Android application by itself: Android does not provide the Python interpreter and Qt/PySide runtime required by the source. Qt documents the packaging requirement in its [official Android deployment guide](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html).
 
-### Building the Android phone client
+For source development, follow [the PySide6 mobile README](mobile_pyside6/README.md). The interface, controller-state protocol, pairing validation, and remote-action flow can be tested on a desktop. Real Android camera/sensor behavior and native phone deployment cannot be verified by source-only tests.
 
-The repository now includes `buildozer.spec` with the mobile entry point and
-`INTERNET`/`CAMERA` manifest permissions. On Linux or macOS (or Linux under
-WSL), install Buildozer and build from the repository root with
-`buildozer android debug`. The generated APK is placed in `bin/`. The spec
-uses python-for-android `v2026.05.09`, which includes the `pyzbar` recipe
-needed for camera QR decoding. Building an APK has not been run as part of this
-change; use the Android build output to verify the toolchain and target device.
+### Secure pairing and connection
+
+1. Start the updated InputBridge desktop app and open **Server**.
+2. Start the server and choose **Show Phone Pairing QR**.
+3. On the phone, open **Connect → Scan pairing QR**. If scanning is unavailable, paste the complete QR JSON payload or enter the PC address, port, and SHA-256 certificate fingerprint manually.
+4. Keep the phone and PC on the same local network. The mobile client verifies the live TLS certificate against the QR/saved SHA-256 pin before it sends controller state or pairing data.
+5. If the phone has not been trusted, enter the short pairing code shown beside that device in the desktop Server page.
+6. Use **Gamepad**, **Mouse**, or **Remote**. Remote actions remain gated by the individual permissions explicitly enabled in the desktop app.
+
+The QR contains only the PC endpoint and public certificate fingerprint; the private TLS key is never exported. If the desktop certificate is replaced, verify the new fingerprint deliberately and scan the new QR. Do not accept a fingerprint sent through an untrusted channel.
+
+### PySide6 mobile features
+
+- Gamepad buttons, bumpers, menu/system buttons, D-pad, dual analogue sticks and L2/R2 triggers.
+- Standard and Driving modes with optional accelerometer steering and centre calibration when QtSensors is available.
+- Touchpad cursor movement, left/right/middle clicks, tap-to-click, scrolling and pointer sensitivity.
+- Remote text input, special keys, modifiers, approved shortcuts, media controls, explicit clipboard read/write, approved app shortcuts, presentation controls, PC status, and confirmation-gated power actions.
+- Pinned TLS transport, retry handling, device identity persistence, and server capability/permission awareness.
+
+### Legacy Kivy client
+
+The previous Kivy implementation lives at `mobile_kivy_legacy/main.py`. Its Buildozer file and phone dependencies were moved with it. Use this legacy directory only if you specifically want the Kivy version; the recommended client is `mobile_pyside6/`.
 
 ### Remote actions currently implemented
 
@@ -550,16 +542,43 @@ This separation makes it possible to extend the project with additional input an
 
 ## Remote Client
 
-The repository includes the companion Kivy client source:
+The recommended phone-client source is the **PySide6 Mobile** client in
+`mobile_pyside6/main.py`. Its current CI workflow validates the source and unit tests only; it does not build or publish an APK/AAB. To run this as a native Android app, the Python, Qt and PySide runtime still has to be packaged as documented by [Qt for Python](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html).
 
-```text
-phone_client_with_auth.py
-```
+The previous Kivy implementation remains available separately in
+`mobile_kivy_legacy/main.py` as the **Legacy Kivy Mobile** version. The two clients
+share the desktop protocol, while the PySide6 source provides Connect, Gamepad,
+Mouse and Settings screens, secure QR pairing, one-finger pointer
+movement, two-finger scrolling, optional tap-to-click and adjustable mouse
+sensitivity. The mobile UI supports portrait and landscape layouts, touch scrolling,
+and a full-screen Gamepad Focus mode. Source-only tests do not prove access to real
+phone camera/sensors.
 
-It can be built and run separately from the desktop application. Along with the
-controller screen, it provides the touchpad mouse screen for remote desktop
-control, including one-finger pointer movement, optional tap-to-click,
-two-finger scrolling, held mouse buttons, and saved touch sensitivity.
+## Browser Web Companion
+
+The desktop app includes a separate **Web Companion** tab. It starts an HTTPS
+Flask server that lets a phone, tablet, or another PC use a browser as a controller;
+no native phone app or APK is needed for this browser interface.
+
+1. Install the desktop requirements and start InputBridge on Windows.
+2. Open **Web Companion**, select a local HTTPS port (default 8765), and choose
+   **Start Web Server**.
+3. Scan its QR code with the phone camera, or open the displayed URL and enter
+   the short-lived pairing code. Both devices need to be on the same trusted LAN.
+4. If the browser warns about the self-signed HTTPS certificate, compare its
+   SHA-256 fingerprint against the one displayed in the desktop tab before
+   proceeding. The native client verifies its certificate pin in-app; browser
+   certificate trust must be handled by the browser itself.
+5. Use the browser's **Gamepad**, **Touch mouse**, and **PC Remote** tabs. Keyboard,
+   media, clipboard, approved app shortcuts, presentation and power commands
+   continue to obey the permissions configured on the desktop **Server** tab.
+
+Each paired browser gets a separate virtual XInput controller. The web service
+supports up to eight browser sessions at once and runs on port 8765 by default,
+separately from the native phone socket server on port 5000. Stop the Web
+Companion server when it is no longer needed and do not expose it to untrusted
+networks. Its temporary pairing code expires after five minutes; inactive browser
+sessions release input state automatically.
 
 ## Project Status
 

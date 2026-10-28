@@ -12,6 +12,7 @@ datas = [
     (str(project_root / "profiles"), "profiles"),
     (str(project_root / "ui" / "themes"), "ui/themes"),
     (str(project_root / "ui" / "assets"), "ui/assets"),
+    (str(project_root / "ui" / "web"), "ui/web"),
 ]
 
 binaries = collect_dynamic_libs("vgamepad")
@@ -29,6 +30,8 @@ hiddenimports = [
     "cryptography.hazmat.bindings._rust",
     "qrcode",
     "qrcode.image.pil",
+    "flask",
+    "werkzeug.serving",
 ]
 
 

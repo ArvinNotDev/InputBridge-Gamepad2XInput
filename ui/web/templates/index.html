@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080d18"><title>InputBridge · Web Companion</title>
+<link rel="stylesheet" href="/static/app.css"><script src="/static/app.js" defer></script>
+</head><body><div class="shell">
+<header class="topbar"><div class="logo">IB</div><div class="brand"><b>INPUTBRIDGE</b><span>Web Companion</span></div><div id="badge" class="badge"><i></i><span>Not paired</span></div></header>
+<main>
+<section id="pairPanel" class="panel pairing"><div class="eyebrow">SECURE LOCAL CONTROL</div><h1>Connect this device</h1><p class="muted">Pair with InputBridge on the same trusted network.</p>
+<label for="deviceName">Device name</label><input id="deviceName" maxlength="64" value="Web Controller" autocomplete="nickname">
+<label for="pairCode">Six-digit pairing code</label><input id="pairCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="Shown in the desktop tab">
+<button id="pairButton" class="btn primary full">Pair securely <span>→</span></button><p id="pairMessage" class="message">Start Web Companion on your PC, then scan its QR code or enter the pairing code.</p>
+<div class="security-note">◇ <span>HTTPS is enabled. Compare the certificate fingerprint displayed by the desktop app before accepting a self-signed browser certificate warning.</span></div></section>
+
+<section id="workspace" class="hidden">
+<div class="heading"><div><div class="eyebrow">REMOTE CONSOLE</div><h1 id="welcome">Your desktop</h1><p class="muted">Gamepad, touch mouse and PC tools in one place.</p></div><button id="focus" class="btn ghost">⛶ Focus</button></div>
+<nav class="tabs"><button class="tab active" data-tab="gamepad">◉ Gamepad</button><button class="tab" data-tab="mouse">⌁ Touch mouse</button><button class="tab" data-tab="remote">⌨ PC Remote</button><button class="tab" data-tab="session">⚙ Session</button></nav>
+
+<section id="view-gamepad" class="view active">
+<div class="toolbar"><div><h2>Virtual controller</h2><p class="muted">Hold a button or drag a stick. In landscape, controls share the screen.</p></div><div class="mode-switch"><button id="standard" class="mode active">Standard</button><button id="driving" class="mode">Driving</button></div><button id="exitFocus" class="btn ghost focus-exit">✕ Exit Focus</button></div>
+<div class="motion-row"><button id="tiltToggle" class="btn">Enable tilt steering</button><button id="tiltCalibrate" class="btn ghost">Calibrate center</button><span id="tiltStatus" class="muted">Tilt steering uses device orientation while Driving mode is selected.</span></div>
+<div class="controller">
+<div class="zone sticks"><div class="stickwrap"><div class="sticklabel">LEFT STICK <span id="leftReadout">0 · 0</span></div><div class="stick" id="leftStick"><div class="ring"></div><div class="knob"></div></div></div>
+<div class="stickwrap"><div class="sticklabel">RIGHT STICK <span id="rightReadout">0 · 0</span></div><div class="stick" id="rightStick"><div class="ring"></div><div class="knob"></div></div></div></div>
+<div class="zone buttons-zone"><div class="shoulders"><button class="pad-key shoulder" data-button="LB">LB</button><button class="pad-key shoulder" data-button="RB">RB</button><label class="trigger">L2<input type="range" id="L2" min="0" max="255" value="0"></label><label class="trigger">R2<input type="range" id="R2" min="0" max="255" value="0"></label></div>
+<div class="centers"><button class="pad-key small" data-button="BACK">BACK</button><button class="pad-key small" data-button="GUIDE">GUIDE</button><button class="pad-key small" data-button="START">START</button></div>
+<div class="face-row"><div class="dpad"><button class="pad-key up" data-button="DPAD_UP">▲</button><button class="pad-key left" data-button="DPAD_LEFT">◀</button><span>✦</span><button class="pad-key right" data-button="DPAD_RIGHT">▶</button><button class="pad-key down" data-button="DPAD_DOWN">▼</button></div>
+<div class="faces"><button class="pad-key face y" data-button="Y">Y</button><button class="pad-key face x" data-button="X">X</button><button class="pad-key face b" data-button="B">B</button><button class="pad-key face a" data-button="A">A</button></div></div>
+<div class="centers"><button class="pad-key small" data-button="L3">L3</button><button class="pad-key small" data-button="R3">R3</button></div></div></div>
+<div class="controller-footer"><i></i> Local low-latency input <span>·</span> Multiple controllers supported</div></section>
+
+<section id="view-mouse" class="view"><article class="panel mouse-panel"><h2>Touch mouse</h2><p class="muted">Drag to move the Windows pointer. Use the wheel or two fingers to scroll.</p>
+<div id="touchpad" class="touchpad"><div class="touchgrid"></div><span>DRAG TO MOVE</span></div><div class="mouse-row"><button class="btn primary" data-mouse="left">Left click</button><button class="btn" data-mouse="right">Right click</button><button class="btn" data-mouse="middle">Middle click</button></div>
+<div class="mouse-row"><button id="scrollUp" class="btn">↑ Scroll up</button><button id="scrollDown" class="btn">↓ Scroll down</button><button id="mouseMode" class="btn ghost">Use mouse output</button></div>
+<div class="mouse-settings"><label for="mouseSensitivity">Pointer sensitivity <output id="mouseSensitivityValue">1.7×</output></label><input id="mouseSensitivity" type="range" min="5" max="40" value="17"><label class="check"><input id="tapToClick" type="checkbox" checked> Tap trackpad to click</label></div>
+</article></section>
+
+<section id="view-remote" class="view"><div class="remote-grid">
+<article class="panel"><h2>Keyboard & text</h2><p class="muted">Type into the active desktop application.</p><textarea id="remoteText" maxlength="4096" rows="3" placeholder="Text to send…"></textarea><button id="sendText" class="btn primary full" data-permission="keyboard">Send text</button>
+<div class="row wrap"><button class="btn" data-key="ENTER" data-permission="keyboard">Enter</button><button class="btn" data-key="TAB" data-permission="keyboard">Tab</button><button class="btn" data-key="ESCAPE" data-permission="keyboard">Esc</button><button class="btn" data-key="BACKSPACE" data-permission="keyboard">⌫</button></div>
+<div class="row wrap modifier-row"><button class="btn" data-modifier="CTRL" data-permission="keyboard">Ctrl</button><button class="btn" data-modifier="SHIFT" data-permission="keyboard">Shift</button><button class="btn" data-modifier="ALT" data-permission="keyboard">Alt</button><button class="btn" data-modifier="WIN" data-permission="keyboard">Win</button></div>
+<label for="shortcut">Shortcut</label><div class="row"><select id="shortcut"><option value="copy">Copy</option><option value="paste">Paste</option><option value="cut">Cut</option><option value="undo">Undo</option><option value="redo">Redo</option><option value="select_all">Select all</option><option value="save">Save</option><option value="find">Find</option><option value="alt_tab">Switch window</option><option value="show_desktop">Show desktop</option></select><button id="sendShortcut" class="btn" data-permission="keyboard">Run</button></div></article>
+<article class="panel"><h2>Media & volume</h2><div class="actions">
+<button data-media="previous_track" data-permission="media">⏮<span>Previous</span></button><button data-media="play_pause" data-permission="media">⏯<span>Play / pause</span></button><button data-media="next_track" data-permission="media">⏭<span>Next</span></button><button data-media="volume_down" data-permission="media">－<span>Volume down</span></button><button data-media="mute" data-permission="media">◖<span>Mute</span></button><button data-media="volume_up" data-permission="media">＋<span>Volume up</span></button><button data-media="stop" data-permission="media">■<span>Stop</span></button></div></article>
+<article class="panel"><h2>Clipboard</h2><p class="muted">Controlled by the desktop permission settings.</p><textarea id="clipboardText" rows="3" maxlength="4096" placeholder="Clipboard text…"></textarea><div class="row"><button id="clipSend" class="btn" data-permission="clipboard">Send to PC</button><button id="clipRead" class="btn" data-permission="clipboard">Read PC clipboard</button></div></article>
+<article class="panel"><h2>Quick launch</h2><div class="actions">
+<button data-app="browser" data-permission="app_launch">◉<span>Browser</span></button><button data-app="explorer" data-permission="app_launch">▣<span>Explorer</span></button><button data-app="calculator" data-permission="app_launch">＋<span>Calculator</span></button><button data-app="notepad" data-permission="app_launch">▤<span>Notepad</span></button><button data-app="downloads" data-permission="app_launch">↓<span>Downloads</span></button></div></article>
+<article class="panel"><h2>Presentation</h2><div class="row wrap"><button class="btn" data-presentation="previous" data-permission="presentation">← Previous</button><button class="btn" data-presentation="next" data-permission="presentation">Next →</button><button class="btn" data-presentation="start" data-permission="presentation">Start</button><button class="btn" data-presentation="end" data-permission="presentation">End</button><button class="btn" data-presentation="black_screen" data-permission="presentation">Black screen</button></div></article>
+<article class="panel danger"><h2>Power actions</h2><p class="muted">Only available when enabled on the PC. Destructive actions ask for confirmation.</p><div class="row wrap"><button class="btn" data-power="lock" data-permission="power">Lock</button><button class="btn" data-power="sleep" data-permission="power">Sleep</button><button class="btn" data-power="logoff" data-permission="power">Log off</button><button class="btn" data-power="display_off" data-permission="power">Display off</button><button class="btn danger-btn" data-power="restart" data-permission="power">Restart</button><button class="btn danger-btn" data-power="shutdown" data-permission="power">Shut down</button></div></article>
+</div></section>
+
+<section id="view-session" class="view"><article class="panel"><h2>Desktop status</h2><p id="pcStatus" class="muted">Connect to load desktop status.</p><button id="refresh" class="btn primary">Refresh status</button></article>
+<article class="panel"><h2>This browser</h2><p id="sessionInfo" class="muted">Paired controller</p><button id="disconnect" class="btn danger-btn">Disconnect this device</button></article>
+<article class="panel"><h2>Security & permissions</h2><p class="muted">Each browser gets its own virtual controller. PC actions remain allowlisted and permission-gated by InputBridge. Inactive sessions release held controls automatically.</p><p id="permissionSummary" class="permission-summary">Permissions load from the PC.</p><p id="actionMessage" class="message"></p></article></section>
+</section>
+</main><footer><span>InputBridge · Web Companion</span><span>Trusted LAN · HTTPS</span></footer></div><div id="toast" class="toast"></div></body></html>
