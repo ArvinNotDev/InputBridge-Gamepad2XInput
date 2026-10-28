@@ -6,7 +6,7 @@ import hashlib, hmac, json, math, os, socket, ssl, sys, threading, time, uuid
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QPointF, QStandardPaths, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPointF, QStandardPaths, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QDialog, QFormLayout, QFrame, QGridLayout,
@@ -603,6 +603,9 @@ class MousePad(QWidget):
         self.client = client
         self.last = self.origin = QPointF()
         self.pressed = self.moved = False
+        self._touch_points = 0
+        self._touch_scroll_y = None
+        self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
         self.setMinimumHeight(205)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setStyleSheet("MousePad{background:#0a1220;border:1px solid #2a3c59;border-radius:18px;}")
@@ -611,12 +614,66 @@ class MousePad(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(QColor("#6e83a5"))
-        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "TOUCH & DRAG\nMove the Windows cursor")
+        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "TOUCH & DRAG\nOne finger: move  ·  Two fingers: scroll")
         p.setPen(QPen(QColor("#1b2a42"), 1, Qt.PenStyle.DotLine))
         for x in range(20, self.width(), 28):
             p.drawLine(x, 18, x, self.height()-18)
         for y in range(18, self.height(), 28):
             p.drawLine(18, y, self.width()-18, y)
+
+    def event(self, event):
+        event_type = event.type()
+        touch_types = (
+            QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate,
+            QEvent.Type.TouchEnd, QEvent.Type.TouchCancel,
+        )
+        if event_type not in touch_types:
+            return super().event(event)
+
+        points = event.points()
+        if event_type == QEvent.Type.TouchBegin:
+            self.pressed = bool(points)
+            self.moved = False
+            self._touch_points = len(points)
+            self._touch_scroll_y = None
+            if len(points) == 1:
+                self.last = self.origin = points[0].position()
+            elif len(points) >= 2:
+                self.moved = True
+                self._touch_scroll_y = sum(point.position().y() for point in points) / len(points)
+        elif event_type == QEvent.Type.TouchUpdate and self.pressed:
+            if len(points) >= 2:
+                self.moved = True
+                center_y = sum(point.position().y() for point in points) / len(points)
+                if self._touch_scroll_y is not None:
+                    delta = self._touch_scroll_y - center_y
+                    if abs(delta) >= 3:
+                        amount = int(delta / 18)
+                        if amount:
+                            self.client.scroll_mouse(amount)
+                            self._touch_scroll_y = center_y
+                else:
+                    self._touch_scroll_y = center_y
+            elif len(points) == 1 and self._touch_points == 1:
+                point = points[0].position()
+                dx, dy = point.x() - self.last.x(), point.y() - self.last.y()
+                if abs(point.x() - self.origin.x()) + abs(point.y() - self.origin.y()) > 6:
+                    self.moved = True
+                if self.moved:
+                    self.client.move_mouse(dx, dy)
+                self.last = point
+            self._touch_points = len(points)
+        elif event_type in (QEvent.Type.TouchEnd, QEvent.Type.TouchCancel):
+            if (event_type == QEvent.Type.TouchEnd and self.pressed
+                    and not self.moved and self.client.tap_to_click and self.client.connected):
+                self.client.set_mouse_button("left", True)
+                QTimer.singleShot(90, lambda: self.client.set_mouse_button("left", False))
+            self.pressed = False
+            self.moved = False
+            self._touch_points = 0
+            self._touch_scroll_y = None
+        event.accept()
+        return True
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:

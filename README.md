@@ -526,16 +526,18 @@ This separation makes it possible to extend the project with additional input an
 
 ## Remote Client
 
-The repository includes the companion Kivy client source:
+The recommended phone application is the **PySide6 Mobile** client in
+`mobile_pyside6/main.py`. It is packaged as an ARM64 Android APK by the
+**Build PySide6 Android client** GitHub Actions workflow, so users can download
+the build artifact without setting up the Android toolchain on their own
+computer. The workflow is available from the repository's Actions tab.
 
-```text
-mobile_kivy/main.py
-```
-
-It can be built and run separately from the desktop application. Along with the
-controller screen, it provides the touchpad mouse screen for remote desktop
-control, including one-finger pointer movement, optional tap-to-click,
-two-finger scrolling, held mouse buttons, and saved touch sensitivity.
+The previous Kivy implementation remains available separately in
+`mobile_kivy/main.py` as the **Legacy Kivy Mobile** version. The two clients
+share the desktop protocol, while the PySide6 interface provides Connect,
+Gamepad, Mouse, Remote and Settings screens, secure QR pairing, and one-finger
+pointer movement, two-finger scrolling, optional tap-to-click and adjustable
+mouse sensitivity.
 
 ## Project Status
 
