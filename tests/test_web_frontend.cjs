@@ -594,6 +594,8 @@ test("paired controller streams input over one persistent WebSocket without stat
   const socket = harness.webSockets[0];
   assert.equal(socket.url, "wss://vpadconnect.test/api/stream");
   assert.deepEqual(socket.sent[0], { type: "auth", token: "test-session-token" });
+  await settle();
+  socket.onmessage({ data: JSON.stringify({ type: "ready" }) });
 
   harness.tickFrame();
   harness.leftStick.dispatch("pointerdown", { pointerId: 91, clientX: 168, clientY: 100 });
