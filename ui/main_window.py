@@ -119,14 +119,9 @@ class MainWindow(QMainWindow):
         self._brand_mark.setObjectName("brand_mark")
         self._brand_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._brand_mark.setFixedSize(42, 42)
-        logo = QPixmap(str(resource_path("ui", "assets", "vpadconnect-icon.png")))
-        if logo.isNull():
-            logo = QPixmap(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
+        logo = QIcon(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
         if not logo.isNull():
-            self._brand_mark.setPixmap(logo.scaled(
-                42, 42, Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            ))
+            self._brand_mark.setPixmap(logo.pixmap(42, 42))
         header_layout.addWidget(self._brand_mark)
 
         brand_title = QLabel("VPadConnect")
