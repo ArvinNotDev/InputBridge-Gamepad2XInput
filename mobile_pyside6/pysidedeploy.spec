@@ -10,7 +10,7 @@ python_path =
 android_packages = buildozer, Cython
 
 [qt]
-modules = Network, Widgets, Multimedia, MultimediaWidgets, Sensors
+modules =
 
 [android]
 arch = aarch64
