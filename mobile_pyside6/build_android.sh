@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt aqtinstall
 QT_ROOT="$HOME/Qt"
-aqt install-qt linux desktop 6.11.0 gcc_64 -O "$QT_ROOT" -m qtmultimedia qtsensors
+aqt install-qt linux desktop 6.11.0 linux_gcc_64 -O "$QT_ROOT" -m qtmultimedia qtsensors
 aqt install-qt linux android 6.11.0 android_arm64_v8a -O "$QT_ROOT" -m qtmultimedia qtsensors
 git clone --depth 1 --branch 6.11 https://code.qt.io/pyside/pyside-setup.git "$HOME/pyside-setup-6.11"
 cd "$HOME/pyside-setup-6.11"
