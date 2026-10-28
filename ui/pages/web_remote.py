@@ -3,66 +3,85 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 
 import qrcode
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QObject, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from core.web_remote import WebRemoteServer
+from core.remote_actions import load_remote_permissions, save_remote_permissions
+
+
+class _WebRemoteSignals(QObject):
+    started = Signal()
+    start_failed = Signal(str)
+    stopped = Signal()
+    mapper_added = Signal(object)
 
 
 class WebRemotePage(QWidget):
     """Start/stop the HTTPS browser companion and display short-lived pairing credentials."""
 
-    def __init__(self, settings, controllers_page, hotkey_page, server_page, status_changed=None):
+    FIXED_PORT = 8765
+
+    def __init__(self, settings, controllers_page, hotkey_page, status_changed=None):
         super().__init__()
         self.setObjectName("webCompanionPage")
         self._status_changed = status_changed
         self._last_client_count = -1
+        self._last_clients = ()
+        self._server_busy = False
+        self._signals = _WebRemoteSignals(self)
+        self._signals.started.connect(self._on_server_started)
+        self._signals.start_failed.connect(self._on_server_start_failed)
+        self._signals.stopped.connect(self._on_server_stopped)
+        self._signals.mapper_added.connect(self._register_mapper)
         self.web_server = WebRemoteServer(
             settings,
             controllers_page,
             hotkey_page,
-            mapper_added=lambda instance: server_page.signals.remote_mapper_added.emit(instance),
+            mapper_added=self._signals.mapper_added.emit,
+            port=self.FIXED_PORT,
         )
         self._build_ui()
         self._refresh_timer = QTimer(self)
-        self._refresh_timer.setInterval(1000)
+        self._refresh_timer.setInterval(700)
         self._refresh_timer.timeout.connect(self._refresh_countdown)
         self._refresh_timer.start()
         self._set_running(False)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(22, 18, 22, 18)
-        root.setSpacing(14)
+        root.setContentsMargins(16, 12, 16, 14)
+        root.setSpacing(10)
 
         intro = QFrame()
         intro.setObjectName("webHero")
         intro_layout = QVBoxLayout(intro)
-        intro_layout.setContentsMargins(22, 20, 22, 20)
-        intro_layout.setSpacing(8)
-        eyebrow = QLabel("VPADCONNECT  /  LOCAL NETWORK")
+        intro_layout.setContentsMargins(18, 12, 18, 12)
+        intro_layout.setSpacing(3)
+        eyebrow = QLabel("VPADCONNECT")
         eyebrow.setObjectName("webEyebrow")
         title = QLabel("Web Companion")
         title.setObjectName("webTitle")
-        description = QLabel(
-            "Use a phone, tablet or another PC as an additional controller from its browser. "
-            "No companion app or APK is required for the browser interface."
-        )
-        description.setWordWrap(True)
+        description = QLabel("Turn a phone, tablet, or another PC into a controller.")
         description.setObjectName("webMuted")
         intro_layout.addWidget(eyebrow)
         intro_layout.addWidget(title)
@@ -72,166 +91,178 @@ class WebRemotePage(QWidget):
         setup = QFrame()
         setup.setObjectName("webCard")
         setup_layout = QGridLayout(setup)
-        setup_layout.setContentsMargins(18, 16, 18, 16)
-        setup_layout.setHorizontalSpacing(16)
-        setup_layout.setVerticalSpacing(12)
+        setup_layout.setContentsMargins(14, 10, 14, 12)
+        setup_layout.setHorizontalSpacing(12)
+        setup_layout.setVerticalSpacing(8)
+        setup_layout.setColumnStretch(1, 1)
 
-        status_caption = QLabel("SERVER STATUS")
+        status_caption = QLabel("STATUS")
         status_caption.setObjectName("webCaption")
         self.status_badge = QLabel("●  STOPPED")
         self.status_badge.setObjectName("webStatusStopped")
-        setup_layout.addWidget(status_caption, 0, 0)
-        setup_layout.addWidget(self.status_badge, 0, 1)
-        clients_caption = QLabel("CONNECTED BROWSER CONTROLLERS")
-        clients_caption.setObjectName("webCaption")
         self.clients_label = QLabel("0 connected")
         self.clients_label.setObjectName("webMuted")
-        setup_layout.addWidget(clients_caption, 5, 0)
-        setup_layout.addWidget(self.clients_label, 5, 1)
+        self.permissions_button = QPushButton("⚙")
+        self.permissions_button.setObjectName("webPermissionsButton")
+        self.permissions_button.setToolTip("Remote access permissions")
+        self.permissions_button.setFixedSize(34, 32)
+        self.permissions_button.clicked.connect(self._edit_permissions)
+        setup_layout.addWidget(status_caption, 0, 0)
+        setup_layout.addWidget(self.status_badge, 0, 1)
+        setup_layout.addWidget(self.permissions_button, 0, 2, alignment=Qt.AlignmentFlag.AlignRight)
 
-        port_label = QLabel("HTTPS port")
-        port_label.setObjectName("webLabel")
-        self.port_spin = QSpinBox()
-        self.port_spin.setRange(1024, 65535)
-        self.port_spin.setValue(8765)
-        self.port_spin.setFixedWidth(130)
-        setup_layout.addWidget(port_label, 1, 0)
-        setup_layout.addWidget(self.port_spin, 1, 1)
-
-        self.url_label = QLabel("Start the server to generate a local URL.")
+        url_caption = QLabel("BROWSER URL")
+        url_caption.setObjectName("webCaption")
+        self.url_label = QLabel("Start the server to get the URL.")
         self.url_label.setObjectName("webUrl")
         self.url_label.setWordWrap(True)
         self.url_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        setup_layout.addWidget(QLabel("BROWSER URL"), 2, 0)
-        setup_layout.addWidget(self.url_label, 2, 1)
+        self.copy_button = QPushButton("Copy URL")
+        self.copy_button.setObjectName("webCopyButton")
+        self.copy_button.setFixedSize(96, 32)
+        self.copy_button.setToolTip("Copy the pairing link")
+        self.copy_button.clicked.connect(self._copy_url)
+        setup_layout.addWidget(url_caption, 1, 0)
+        setup_layout.addWidget(self.url_label, 1, 1)
+        setup_layout.addWidget(self.copy_button, 1, 2)
 
-        self.fingerprint_label = QLabel("TLS fingerprint will appear after startup.")
-        self.fingerprint_label.setObjectName("webFingerprint")
-        self.fingerprint_label.setWordWrap(True)
-        self.fingerprint_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        setup_layout.addWidget(QLabel("CERTIFICATE SHA-256"), 3, 0)
-        setup_layout.addWidget(self.fingerprint_label, 3, 1)
-
-        actions = QHBoxLayout()
         self.start_button = QPushButton("Start Web Server")
         self.start_button.setObjectName("webStartButton")
-        self.start_button.setMinimumHeight(44)
+        self.start_button.setMinimumHeight(40)
         self.start_button.clicked.connect(self._toggle_server)
-        self.copy_button = QPushButton("Copy URL")
-        self.copy_button.setMinimumHeight(44)
-        self.copy_button.clicked.connect(self._copy_url)
-        actions.addWidget(self.start_button, 2)
-        actions.addWidget(self.copy_button, 1)
-        setup_layout.addLayout(actions, 4, 0, 1, 2)
+        setup_layout.addWidget(self.start_button, 2, 0, 1, 3)
         root.addWidget(setup)
 
         pairing = QFrame()
-        pairing.setObjectName("webCard")
+        pairing.setObjectName("webPairingCard")
+        self.pairing_card = pairing
         pairing_layout = QHBoxLayout(pairing)
-        pairing_layout.setContentsMargins(18, 18, 18, 18)
-        pairing_layout.setSpacing(20)
+        pairing_layout.setContentsMargins(14, 12, 14, 12)
+        pairing_layout.setSpacing(18)
 
         qr_column = QVBoxLayout()
-        qr_title = QLabel("Pair a new browser")
+        qr_column.setSpacing(6)
+        qr_title = QLabel("Scan to connect")
         qr_title.setObjectName("webSectionTitle")
-        qr_subtitle = QLabel("Scan the QR with your phone camera. Keep both devices on the same trusted LAN.")
-        qr_subtitle.setWordWrap(True)
-        qr_subtitle.setObjectName("webMuted")
-        self.qr_image = QLabel("QR\nappears here")
+        self.qr_image = QLabel("QR appears after startup")
         self.qr_image.setObjectName("webQrImage")
         self.qr_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.qr_image.setFixedSize(226, 226)
-        self.qr_image.setMinimumSize(180, 180)
+        self.qr_image.setFixedSize(190, 190)
         qr_column.addWidget(qr_title)
-        qr_column.addWidget(qr_subtitle)
         qr_column.addWidget(self.qr_image, 0, Qt.AlignmentFlag.AlignLeft)
         pairing_layout.addLayout(qr_column, 0)
 
         code_column = QVBoxLayout()
-        code_title = QLabel("Temporary pairing code")
+        code_column.setSpacing(6)
+        code_title = QLabel("Pairing code")
         code_title.setObjectName("webSectionTitle")
         self.code_label = QLabel("— — — — — —")
         self.code_label.setObjectName("webPairCode")
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.expiry_label = QLabel("Start the server to create a code.")
         self.expiry_label.setObjectName("webMuted")
-        self.rotate_button = QPushButton("Generate new code")
-        self.rotate_button.setMinimumHeight(42)
+        self.rotate_button = QPushButton("New code")
+        self.rotate_button.setMinimumHeight(34)
         self.rotate_button.clicked.connect(self._rotate_code)
+        clients_title = QLabel("CONNECTED BROWSERS")
+        clients_title.setObjectName("webCaption")
+        self.client_list = QListWidget()
+        self.client_list.setObjectName("webClientsList")
+        self.client_list.setMinimumHeight(62)
+        self.client_list.setMaximumHeight(92)
+        self.client_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         code_column.addWidget(code_title)
         code_column.addWidget(self.code_label)
         code_column.addWidget(self.expiry_label)
-        code_column.addSpacing(8)
         code_column.addWidget(self.rotate_button)
-        code_column.addStretch(1)
+        code_column.addSpacing(2)
+        code_column.addWidget(clients_title)
+        code_column.addWidget(self.client_list, 1)
         pairing_layout.addLayout(code_column, 1)
         root.addWidget(pairing)
 
-        security = QFrame()
-        security.setObjectName("webSecurityNote")
-        security_layout = QVBoxLayout(security)
-        security_layout.setContentsMargins(15, 12, 15, 12)
-        security_title = QLabel("Security notes")
-        security_title.setObjectName("webSectionTitle")
-        security_body = QLabel(
-            "The web companion uses HTTPS, temporary pairing codes, per-browser session tokens, "
-            "bounded input messages, an idle-session watchdog and the same desktop permissions as PC Remote. "
-            "Browsers may warn about this app's self-signed certificate: compare the SHA-256 fingerprint "
-            "above with the value shown by the PC, and only proceed on your trusted network. A web page "
-            "cannot silently pin this certificate from JavaScript."
-        )
-        security_body.setWordWrap(True)
-        security_body.setObjectName("webMuted")
-        security_layout.addWidget(security_title)
-        security_layout.addWidget(security_body)
-        root.addWidget(security)
-        root.addStretch(1)
-
         self.setStyleSheet("""
             QWidget#webCompanionPage { background: transparent; }
-            QFrame#webHero { border: 1px solid #273b5a; border-radius: 18px;
-                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #14243d,stop:1 #17152f); }
-            QFrame#webCard { border: 1px solid #293a53; border-radius: 16px; background: #111a2b; }
+            QFrame#webHero { border: 1px solid #2a3d5b; border-radius: 15px;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #172841,stop:1 #211a3b); }
+            QFrame#webCard, QFrame#webPairingCard { border: 1px solid #2b3b53;
+                border-radius: 13px; background: #121c2b; }
+            QFrame#webPairingCard:disabled { border-color: #292f3a; background: #1a202b; }
             QLabel { background: transparent; color: #eaf1ff; }
-            QLabel#webEyebrow { color: #91aef5; font-size: 10px; font-weight: 800; letter-spacing: 2px; }
-            QLabel#webTitle { font-size: 27px; font-weight: 800; }
-            QLabel#webMuted { color: #a5b4cb; font-size: 12px; }
-            QLabel#webCaption { color: #7e93b2; font-weight: 800; font-size: 10px; }
-            QLabel#webLabel { color: #c7d6ed; }
-            QLabel#webSectionTitle { color: #f0f4ff; font-size: 15px; font-weight: 750; }
-            QLabel#webUrl { color: #7ab7ff; font-size: 15px; font-weight: 750; }
-            QLabel#webFingerprint { color: #b2c2dc; font-family: Consolas; font-size: 10px; }
-            QLabel#webStatusStopped { color: #ff9cac; font-size: 12px; font-weight: 800; }
-            QLabel#webStatusRunning { color: #68e3b7; font-size: 12px; font-weight: 800; }
-            QLabel#webPairCode { color: #8ab8ff; font-family: Consolas; font-size: 26px; font-weight: 900; letter-spacing: 3px; }
-            QLabel#webQrImage { padding: 8px; color: #637996; background: white; border-radius: 12px; }
-            QFrame#webSecurityNote { border: 1px solid #3d3a32; border-radius: 13px; background: #191a22; }
-            QPushButton { border: 1px solid #354964; border-radius: 10px; padding: 9px 14px;
+            QLabel#webEyebrow { color: #91b3ff; font-size: 9px; font-weight: 800; letter-spacing: 2px; }
+            QLabel#webTitle { font-size: 21px; font-weight: 800; }
+            QLabel#webMuted { color: #a5b4cb; font-size: 11px; }
+            QLabel#webCaption { color: #8296b4; font-size: 9px; font-weight: 800; }
+            QLabel#webSectionTitle { color: #f0f4ff; font-size: 14px; font-weight: 750; }
+            QLabel#webUrl { color: #85bcff; font-size: 12px; font-weight: 700; }
+            QLabel#webStatusStopped { color: #ff9cac; font-size: 11px; font-weight: 800; }
+            QLabel#webStatusRunning { color: #68e3b7; font-size: 11px; font-weight: 800; }
+            QLabel#webPairCode { color: #8ab8ff; font-family: Consolas; font-size: 23px; font-weight: 900; letter-spacing: 3px; }
+            QLabel#webQrImage { padding: 6px; color: #637996; background: #fff; border-radius: 10px; }
+            QListWidget#webClientsList { background: #0d1623; border: 1px solid #28374d;
+                border-radius: 8px; padding: 3px; color: #c9d6e9; }
+            QListWidget#webClientsList::item { padding: 4px 6px; border-radius: 5px; }
+            QListWidget#webClientsList::item:selected { background: #2a4165; }
+            QWidget:disabled { color: #69778c; }
+            QPushButton { border: 1px solid #354964; border-radius: 8px; padding: 7px 11px;
                 color: #eef4ff; background: #1a2940; font-weight: 650; }
             QPushButton:hover:enabled { background: #263d5e; }
-            QPushButton:disabled { color: #667790; background: #111a27; }
-            QPushButton#webStartButton { background: #2769df; border-color: #4f8cff; }
-            QSpinBox { padding: 7px; color: #edf4ff; background: #0b1423; border: 1px solid #30435f; border-radius: 8px; }
+            QPushButton:disabled { color: #667790; background: #202633; border-color: #303746; }
+            QPushButton#webStartButton { background: #17845d; border-color: #35b987;
+                color: white; font-weight: 800; }
+            QPushButton#webStartButton:hover:enabled { background: #1ca370; }
+            QPushButton#webStartButton[running="true"] { background: #bd394b; border-color: #e65a6a; }
+            QPushButton#webStartButton[running="true"]:hover:enabled { background: #d34859; }
+            QPushButton#webCopyButton { padding: 4px 8px; font-size: 11px; }
+            QPushButton#webPermissionsButton { padding: 0; font-size: 17px; }
         """)
 
     def _toggle_server(self) -> None:
+        if self._server_busy:
+            return
+        self._server_busy = True
+        self.start_button.setEnabled(False)
         if self.web_server.running:
-            self.web_server.stop()
-            self._set_running(False)
-            self._notify_status_changed()
-            return
+            self.start_button.setText("Stopping…")
+            target = self._stop_server_worker
+        else:
+            self.start_button.setText("Starting…")
+            target = self._start_server_worker
+        self._server_worker = threading.Thread(target=target, name="VPadConnectWebSetup", daemon=True)
+        self._server_worker.start()
+
+    def _start_server_worker(self) -> None:
         try:
-            self.web_server.start(self.port_spin.value())
+            self.web_server.start()
         except Exception as exc:
-            QMessageBox.critical(
-                self, "Web Companion could not start",
-                "The HTTPS listener could not start. Check whether the port is already in use and "
-                "whether Windows Firewall allows local-network access.\n\n" + str(exc),
-            )
-            return
+            self._signals.start_failed.emit(str(exc))
+        else:
+            self._signals.started.emit()
+
+    def _stop_server_worker(self) -> None:
+        try:
+            self.web_server.stop()
+        finally:
+            self._signals.stopped.emit()
+
+    def _on_server_started(self) -> None:
+        self._server_busy = False
         self._set_running(True)
         self._render_qr()
         self._refresh_countdown()
+        self._notify_status_changed()
+
+    def _on_server_start_failed(self, message: str) -> None:
+        self._server_busy = False
+        self._set_running(False)
+        QMessageBox.critical(
+            self, "Could not start Web Companion",
+            f"Could not start the local server on port {self.FIXED_PORT}.\n\n{message}",
+        )
+
+    def _on_server_stopped(self) -> None:
+        self._server_busy = False
+        self._set_running(False)
         self._notify_status_changed()
 
     def _set_running(self, running: bool) -> None:
@@ -241,25 +272,34 @@ class WebRemotePage(QWidget):
         self.status_badge.style().polish(self.status_badge)
         self.start_button.setText("Stop Web Server" if running else "Start Web Server")
         self.start_button.setProperty("running", running)
-        self.port_spin.setEnabled(not running)
+        self.start_button.setEnabled(not self._server_busy)
+        self.start_button.style().unpolish(self.start_button)
+        self.start_button.style().polish(self.start_button)
+        self.pairing_card.setEnabled(running)
         self.copy_button.setEnabled(running)
-        self.rotate_button.setEnabled(running)
+        self.permissions_button.setEnabled(True)
+        self.client_list.setEnabled(running)
         if running:
-            self.url_label.setText(self.web_server.pairing_url().split("#", 1)[0])
-            self.fingerprint_label.setText(self.web_server.fingerprint)
+            self.url_label.setText(self.web_server.local_url)
         else:
-            self.url_label.setText("Start the server to generate a local URL.")
-            self.fingerprint_label.setText("TLS fingerprint will appear after startup.")
+            self.url_label.setText("Start the server to get the URL.")
             self.qr_image.clear()
-            self.qr_image.setText("QR\nappears here")
+            self.qr_image.setText("QR appears after startup")
             self.code_label.setText("— — — — — —")
             self.expiry_label.setText("Start the server to create a code.")
+            self.clients_label.setText("0 connected")
+            self.client_list.clear()
+            self._last_clients = ()
+            self._last_client_count = 0
 
     def _render_qr(self) -> None:
         if not self.web_server.running:
             return
         try:
-            qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=3)
+            qr = qrcode.QRCode(
+                version=None, error_correction=qrcode.constants.ERROR_CORRECT_M,
+                box_size=7, border=3,
+            )
             qr.add_data(self.web_server.pairing_url())
             qr.make(fit=True)
             image = qr.make_image(fill_color="#07111f", back_color="#ffffff")
@@ -275,10 +315,10 @@ class WebRemotePage(QWidget):
             ))
             self.qr_image.setText("")
             self.code_label.setText(self.web_server.pairing_code)
-            self.url_label.setText(self.web_server.pairing_url().split("#", 1)[0])
+            self.url_label.setText(self.web_server.local_url)
         except Exception as exc:
             self.qr_image.setText("QR unavailable")
-            QMessageBox.warning(self, "Pairing QR", "Could not render the pairing QR.\n\n" + str(exc))
+            QMessageBox.warning(self, "Pairing QR", str(exc))
 
     def _rotate_code(self) -> None:
         if not self.web_server.running:
@@ -291,15 +331,21 @@ class WebRemotePage(QWidget):
         if not self.web_server.running:
             return
         import time
-        count = self.web_server.client_count
-        self.clients_label.setText(f"{count} connected browser controller" + ("" if count == 1 else "s"))
+        names = tuple(self.web_server.connected_clients)
+        count = len(names)
+        self.clients_label.setText(f"{count} connected")
+        if names != self._last_clients:
+            self._last_clients = names
+            self.client_list.clear()
+            for name in names:
+                QListWidgetItem(name, self.client_list)
         if count != self._last_client_count:
             self._last_client_count = count
             self._notify_status_changed()
         remaining = max(0, int(self.web_server.pairing_deadline - time.monotonic()))
         self.expiry_label.setText(
-            f"Code valid for {remaining // 60}:{remaining % 60:02d}. Generate a new code to revoke the old one."
-            if remaining else "Pairing code expired. Generate a new code to pair another browser."
+            f"Expires in {remaining // 60}:{remaining % 60:02d}"
+            if remaining else "Code expired — generate a new one"
         )
 
     def _copy_url(self) -> None:
@@ -307,7 +353,48 @@ class WebRemotePage(QWidget):
             return
         QApplication.clipboard().setText(self.web_server.pairing_url())
         self.copy_button.setText("Copied")
-        QTimer.singleShot(1600, lambda: self.copy_button.setText("Copy URL") if self.web_server.running else None)
+        QTimer.singleShot(
+            1400,
+            lambda: self.copy_button.setText("Copy URL") if self.web_server.running else None,
+        )
+
+    def _edit_permissions(self) -> None:
+        current = load_remote_permissions()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Remote access")
+        dialog.setModal(True)
+        dialog.setMinimumWidth(340)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setSpacing(8)
+        title = QLabel("Allow remote actions")
+        title.setStyleSheet("font-size: 16px; font-weight: 750;")
+        layout.addWidget(title)
+        checks = {}
+        for key, label in (
+            ("keyboard", "Keyboard and text"),
+            ("media", "Media and volume"),
+            ("clipboard", "Clipboard"),
+            ("app_launch", "Approved app shortcuts"),
+            ("presentation", "Presentation controls"),
+            ("power", "Power actions"),
+        ):
+            check = QCheckBox(label)
+            check.setChecked(current.get(key, False))
+            checks[key] = check
+            layout.addWidget(check)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            save_remote_permissions({key: check.isChecked() for key, check in checks.items()})
+
+    def _register_mapper(self, instance) -> None:
+        self.web_server.controllers_page.add_x360_instance(instance)
+        self.web_server.hotkey_page.add_x360_instance(instance)
 
     def shutdown(self) -> None:
         self._refresh_timer.stop()
