@@ -1,10 +1,9 @@
 import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QLabel, QPushButton, QSlider, QFrame, QListWidget, QStackedWidget,
+    QLabel, QPushButton, QSlider, QFrame, QTabBar, QStackedWidget,
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
-    QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QSplitter,
-    QAbstractSpinBox
+    QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QAbstractSpinBox
 )
 from PySide6.QtCore import Qt, QTimer, Signal
 from ui.i18n import LANGUAGE_NAMES, tr
@@ -34,24 +33,23 @@ class SettingsPage(QWidget):
         root.setContentsMargins(18, 18, 18, 18)
         root.setSpacing(0)
 
-        # ====== Top area: menu + pages (splitter) ======
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setChildrenCollapsible(False)
+        # Compact horizontal sections, with the settings content directly underneath.
+        self.menu = QTabBar()
+        self.menu.setObjectName("settings_navigation")
+        self.menu.setDocumentMode(True)
+        self.menu.setDrawBase(False)
+        self.menu.setExpanding(False)
+        self.menu.setMovable(False)
+        self.menu.setUsesScrollButtons(True)
+        self.menu.addTab("Device")
+        self.menu.addTab("UI")
+        self.menu.addTab("Developer")
+        self.menu.setMinimumHeight(36)
+        root.addWidget(self.menu)
 
-        # ====== Left menu ======
-        self.menu = QListWidget()
-        self.menu.addItem("Device")
-        self.menu.addItem("UI")
-        self.menu.addItem("Developer")
-        self.menu.setFixedWidth(160)
-        self.menu.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        splitter.addWidget(self.menu)
-
-        # ====== Pages stack ======
         self.pages = QStackedWidget()
-        splitter.addWidget(self.pages)
-
-        root.addWidget(splitter, 1)
+        self.pages.setObjectName("settings_pages")
+        root.addWidget(self.pages, 1)
 
         # ==========================================================
         # DEVICE PAGE
@@ -346,7 +344,7 @@ class SettingsPage(QWidget):
         # ==========================================================
         # MENU → STACK CONNECTION
         # ==========================================================
-        self.menu.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.menu.currentChanged.connect(self.pages.setCurrentIndex)
 
         # ==========================================================
         # INITIAL LOAD FROM SETTINGS
