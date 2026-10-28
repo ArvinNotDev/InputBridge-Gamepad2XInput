@@ -5,8 +5,6 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QTabBar,
-    QStackedWidget,
     QSystemTrayIcon,
     QMenu,
     QApplication,
@@ -19,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QColor, QFont
 
 from ui.theme_manager import ThemeManager
+from ui.animations import AnimatedStackedWidget, AnimatedTabBar, ButtonHoverAnimations
 from ui.pages.controller_emulation import ControllerEmulation
 from ui.pages.controllers import ControllersPage
 from ui.pages.settings import SettingsPage
@@ -180,7 +179,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(header)
 
         # The feature list contains only the pages used directly during normal work.
-        self.menu = QTabBar()
+        self.menu = AnimatedTabBar()
         self.menu.setObjectName("top_navigation")
         self.menu.setDocumentMode(True)
         self.menu.setDrawBase(False)
@@ -197,7 +196,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.menu)
 
         # Pages are kept in one stack; Profiles and Settings open from the title bar.
-        self.pages = QStackedWidget()
+        self.pages = AnimatedStackedWidget()
         self.pages.setObjectName("content_stack")
 
         controllers_page = ControllersPage(self.settings)
@@ -257,6 +256,10 @@ class MainWindow(QMainWindow):
         # Initialize sidebar avatar
         self._refresh_sidebar_avatar()
         self._apply_language()
+
+        # Add quiet, animated hover feedback to the finished desktop interface.
+        # The controller/input logic and button click handlers remain unchanged.
+        self._button_hover_animations = ButtonHoverAnimations(self)
 
         # Tray
         self.tray_icon: QSystemTrayIcon | None = None
