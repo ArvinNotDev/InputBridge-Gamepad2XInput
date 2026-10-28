@@ -39,6 +39,21 @@ def test_flask_serves_responsive_ui_and_security_headers():
     assert page.headers["X-Frame-Options"] == "DENY"
 
 
+def test_flask_serves_mobile_focus_and_touch_gesture_styles():
+    from core.web_remote import WebRemoteServer
+
+    client = WebRemoteServer(object(), object(), object()).app.test_client()
+    css = client.get("/static/app.css")
+
+    assert css.status_code == 200
+    assert b"orientation:portrait" in css.data
+    assert b"orientation:landscape" in css.data
+    assert b"body.focus-mode" in css.data
+    assert b"overflow-x:auto" in css.data
+    assert b"overscroll-behavior-y:auto" in css.data
+    assert b"touch-action:none" in css.data
+
+
 def test_public_server_info_reports_the_tls_fingerprint_and_https_scheme():
     from core.web_remote import WebRemoteServer
 
@@ -58,6 +73,49 @@ def test_pairing_and_state_endpoints_reject_bad_or_missing_credentials():
     assert bad_code.status_code == 400
     no_token = client.post("/api/state", json={"mode": "gamepad"})
     assert no_token.status_code == 401
+
+
+def test_disconnect_releases_the_browser_controller_session():
+    import time
+    from core.web_remote import WebRemoteServer
+
+    class Mapper:
+        def __init__(self):
+            self.calls = []
+
+        def reset_gamepad(self):
+            self.calls.append("reset_gamepad")
+
+        def release_mouse_buttons(self):
+            self.calls.append("release_mouse_buttons")
+
+        def shutdown(self):
+            self.calls.append("shutdown")
+
+    class Remote:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    server = WebRemoteServer(object(), object(), object())
+    mapper, remote, token = Mapper(), Remote(), "test-browser-token"
+    with server._lock:
+        server._sessions[token] = {
+            "uuid": "web-test", "name": "Test browser", "mapper": mapper,
+            "remote": remote, "last_seen": time.monotonic(), "mode": "gamepad",
+        }
+
+    response = server.app.test_client().post(
+        "/api/disconnect", headers={"Authorization": f"Bearer {token}"}, json={}
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["ok"] is True
+    assert token not in server._sessions
+    assert mapper.calls == ["reset_gamepad", "release_mouse_buttons", "shutdown"]
+    assert remote.closed is True
 
 
 def test_web_tls_certificate_covers_advertised_lan_ip_and_reuses_matching_identity(tmp_path):

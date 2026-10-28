@@ -7,3 +7,66 @@
 .motion-row{display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:11px 13px;border:1px solid #263650;border-radius:13px;background:#0d1727}.motion-row .muted{flex:1;font-size:11px}.mouse-settings{margin-top:18px;padding-top:14px;border-top:1px solid #283a55}.mouse-settings label{display:flex;align-items:center;justify-content:space-between;gap:12px}.mouse-settings input[type=range]{min-height:22px;padding:0;accent-color:#4f8cff}.mouse-settings label.check{justify-content:flex-start;font-weight:600}.mouse-settings input[type=checkbox]{width:17px;min-height:17px;margin:0;accent-color:#4f8cff}.focus-exit{display:none}body.focus-mode .focus-exit{display:inline-flex;position:fixed;z-index:30;right:8px;top:7px;box-shadow:0 5px 18px #0007}
 @media(max-width:760px){.motion-row{flex-wrap:wrap}.motion-row .muted{flex-basis:100%}.motion-row .btn{flex:1}}
 @media(orientation:landscape) and (max-height:560px){.motion-row{margin:0 0 6px;padding:5px 8px}.motion-row .muted{display:none}.mouse-settings{margin-top:10px;padding-top:8px}}
+
+/* Let the page scroll naturally; only the controls that consume a gesture block it. */
+html,body{width:100%;overflow-x:hidden}
+body{overscroll-behavior-y:auto}
+.shell{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+.tabs{-webkit-overflow-scrolling:touch;overflow-x:auto;overflow-y:hidden}
+.pad-key,.mode,.tab{min-height:44px}
+.pad-key:focus-visible,.mode:focus-visible,.tab:focus-visible,.btn:focus-visible,.stick:focus-visible{outline:3px solid #8bb2ff;outline-offset:3px}
+.dpad{grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px)}
+
+@media(max-width:760px) and (orientation:portrait){
+  .controller{grid-template-columns:minmax(0,1fr)}
+  .sticks{gap:clamp(10px,4vw,20px)}
+  .stick{width:min(42vw,190px);max-width:min(42vw,190px)}
+  .face-row{gap:clamp(4px,1.5vw,14px);justify-content:space-between}
+  .dpad{grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:0}
+  .faces{width:132px;height:132px}
+  .face{width:44px;height:44px;min-height:44px}
+  .face.y,.face.a{left:44px}
+  .face.x,.face.b{top:44px}
+  .shoulder{min-height:46px}
+}
+
+.focus-exit{min-height:44px}
+body.focus-mode .focus-exit{right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top))}
+body.focus-mode .shell{max-width:none;padding:max(4px,env(safe-area-inset-top)) max(8px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left))}
+body.focus-mode main{min-height:100dvh;padding:4px 0 8px}
+body.focus-mode .toolbar{justify-content:flex-start;min-height:44px;margin-bottom:8px}
+body.focus-mode .toolbar>div{display:none}
+body.focus-mode .motion-row{margin-bottom:8px;padding:7px 10px}
+body.focus-mode .motion-row .muted,body.focus-mode .controller-footer{display:none}
+body.focus-mode .controller{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:stretch;gap:clamp(8px,1.6vw,20px)}
+body.focus-mode .zone{padding:clamp(8px,1.5vw,18px)}
+body.focus-mode .stick{width:min(100%,34vh,28vw,230px);max-width:none;margin:6px auto}
+body.focus-mode .face-row{min-height:clamp(120px,28vh,230px)}
+body.focus-mode .centers{margin:clamp(4px,1vh,8px) 0}
+body.focus-mode .dpad{grid-template-columns:repeat(3,clamp(44px,6vh,60px));grid-template-rows:repeat(3,clamp(44px,6vh,60px));gap:clamp(1px,.6vh,6px)}
+body.focus-mode .faces{--face-size:clamp(44px,6.2vh,62px);width:calc(var(--face-size)*3);height:calc(var(--face-size)*3)}
+body.focus-mode .face{width:var(--face-size);height:var(--face-size);min-height:var(--face-size)}
+body.focus-mode .face.y,body.focus-mode .face.a{left:50%;transform:translateX(-50%)}
+body.focus-mode .face.x,body.focus-mode .face.b{top:50%;transform:translateY(-50%)}
+body.focus-mode .face.a{bottom:0;top:auto}
+body.focus-mode .face.b{right:0;left:auto}
+
+@media(orientation:portrait){
+  body.focus-mode .controller{grid-template-columns:minmax(0,1fr)}
+  body.focus-mode .sticks .stick{width:min(42vw,24vh,190px)}
+  body.focus-mode .face-row{min-height:clamp(150px,24vh,210px)}
+}
+
+@media(orientation:landscape) and (max-height:560px){
+  body.focus-mode .controller{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr)}
+  body.focus-mode .stick{width:min(100%,24vh,25vw,160px)}
+  body.focus-mode .face-row{min-height:clamp(108px,30vh,160px)}
+  body.focus-mode .dpad{grid-template-columns:repeat(3,clamp(44px,10vh,48px));grid-template-rows:repeat(3,clamp(44px,10vh,48px))}
+  body.focus-mode .faces{--face-size:clamp(44px,10vh,48px)}
+  body.focus-mode .motion-row{margin-bottom:5px;padding:4px 7px}
+  .dpad{grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,44px);gap:0}
+  .faces{width:132px;height:132px}
+  .face{width:44px;height:44px;min-height:44px}
+  .face.y,.face.a{left:44px}
+  .face.x,.face.b{top:44px}
+}
