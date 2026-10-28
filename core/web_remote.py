@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 import logging
 import secrets
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
+from simple_websocket import ConnectionClosed, Server as WebSocketServer
 from werkzeug.serving import make_server
 
 from core.remote_actions import RemoteActionSession, load_remote_permissions
@@ -310,6 +312,55 @@ class WebRemoteServer:
             return None, None
         return token, session
 
+    @staticmethod
+    def _apply_controller_state(session: dict[str, Any], data: dict[str, Any]) -> bool:
+        """Apply one validated state snapshot without an HTTP round trip."""
+        with session["lock"]:
+            if session.get("closed", False):
+                return False
+            mapper, previous, current = session["mapper"], session.get("mode"), data["mode"]
+            if previous != current:
+                if previous == "gamepad":
+                    mapper.reset_gamepad()
+                if previous == "mouse":
+                    mapper.release_mouse_buttons()
+                session["mode"] = current
+            if current == "mouse":
+                mapper.handle_mouse_data(data["mouse"])
+            else:
+                mapper.handle_hid_data({
+                    "buttons": data["buttons"],
+                    "analog": data["analog"],
+                    "joystick": data["joystick"],
+                })
+        return True
+
+    def _touch_stream_session(self, token: str, session: dict[str, Any]) -> bool:
+        """Keep a live WebSocket session alive without periodic HTTP heartbeats."""
+        with self._lock:
+            if self._sessions.get(token) is not session or session.get("closed", False):
+                return False
+            session["last_seen"] = time.monotonic()
+            return True
+
+    @staticmethod
+    def _release_stream_inputs(session: dict[str, Any]) -> None:
+        """Release any held controls if the persistent input channel closes."""
+        with session["lock"]:
+            if session.get("closed", False):
+                return
+            mapper = session.get("mapper")
+            if mapper is not None:
+                try:
+                    mapper.reset_gamepad()
+                except Exception:
+                    pass
+                try:
+                    mapper.release_mouse_buttons()
+                except Exception:
+                    pass
+            session["mode"] = "gamepad"
+
     def _register_routes(self) -> None:
         app = self.app
 
@@ -395,6 +446,94 @@ class WebRemoteServer:
                     return jsonify({"ok": False, "error": "Could not register this controller with the desktop UI."}), 500
             return jsonify({"ok": True, "token": token, "name": session["name"]})
 
+        @app.route("/api/stream", methods=["GET"], websocket=True)
+        def stream():
+            # One authenticated persistent channel carries state snapshots. This
+            # avoids a TLS/HTTP request-response round trip for every touch move.
+            try:
+                ws = WebSocketServer.accept(
+                    request.environ, ping_interval=15, max_message_size=8192
+                )
+            except Exception:
+                return jsonify({"ok": False, "error": "WebSocket upgrade required."}), 426
+
+            token = None
+            session = None
+            try:
+                first = ws.receive(timeout=5)
+                if not isinstance(first, str):
+                    ws.close(reason=1008, message=b"Authentication required")
+                    return ""
+                try:
+                    hello = json.loads(first)
+                except (TypeError, ValueError):
+                    hello = None
+                if not isinstance(hello, dict) or hello.get("type") != "auth":
+                    ws.close(reason=1008, message=b"Authentication required")
+                    return ""
+                token_value = hello.get("token")
+                if not isinstance(token_value, str) or not token_value:
+                    ws.close(reason=1008, message=b"Authentication required")
+                    return ""
+                token = token_value
+                with self._lock:
+                    candidate = self._sessions.get(token)
+                    if (
+                        candidate is not None
+                        and not candidate.get("closed", False)
+                        and time.monotonic() - candidate["last_seen"] <= SESSION_IDLE_SECONDS
+                    ):
+                        session = candidate
+                        session["last_seen"] = time.monotonic()
+                if session is None:
+                    ws.send(json.dumps({"type": "error", "error": "session_expired"}))
+                    ws.close(reason=1008, message=b"Session expired")
+                    return ""
+
+                ws.send(json.dumps({"type": "ready"}))
+                while not self._stop_event.is_set():
+                    try:
+                        raw = ws.receive(timeout=1)
+                    except ConnectionClosed:
+                        break
+                    if raw is None:
+                        # The socket itself is the liveness signal. No browser
+                        # timer needs to send a separate HTTP heartbeat.
+                        if not self._touch_stream_session(token, session):
+                            break
+                        continue
+                    if isinstance(raw, bytes):
+                        raw = raw.decode("utf-8", errors="strict")
+                    try:
+                        message = json.loads(raw)
+                    except (UnicodeDecodeError, TypeError, ValueError):
+                        continue
+                    if not isinstance(message, dict):
+                        continue
+                    if message.get("type") == "ping":
+                        if not self._touch_stream_session(token, session):
+                            break
+                        continue
+                    if message.get("type") != "state":
+                        continue
+                    data = validate_web_controller_state(message.get("state"))
+                    if data is None:
+                        continue
+                    if not self._apply_controller_state(session, data):
+                        break
+                    if not self._touch_stream_session(token, session):
+                        break
+            except (ConnectionClosed, OSError, RuntimeError, ValueError):
+                pass
+            finally:
+                if session is not None:
+                    self._release_stream_inputs(session)
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            return ""
+
         @app.post("/api/state")
         def state():
             _token, session = self._authorize(request.headers.get("Authorization", ""))
@@ -403,20 +542,8 @@ class WebRemoteServer:
             data = validate_web_controller_state(request.get_json(silent=True))
             if data is None:
                 return jsonify({"ok": False, "error": "Invalid controller state."}), 400
-            with session["lock"]:
-                if session.get("closed", False):
-                    return jsonify({"ok": False, "error": "Session expired. Pair this browser again."}), 401
-                mapper, previous, current = session["mapper"], session.get("mode"), data["mode"]
-                if previous != current:
-                    if previous == "gamepad":
-                        mapper.reset_gamepad()
-                    if previous == "mouse":
-                        mapper.release_mouse_buttons()
-                    session["mode"] = current
-                if current == "mouse":
-                    mapper.handle_mouse_data(data["mouse"])
-                else:
-                    mapper.handle_hid_data({"buttons": data["buttons"], "analog": data["analog"], "joystick": data["joystick"]})
+            if not self._apply_controller_state(session, data):
+                return jsonify({"ok": False, "error": "Session expired. Pair this browser again."}), 401
             return jsonify({"ok": True})
 
         @app.post("/api/action")
