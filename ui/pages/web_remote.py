@@ -100,8 +100,6 @@ class WebRemotePage(QWidget):
         status_caption.setObjectName("webCaption")
         self.status_badge = QLabel("●  STOPPED")
         self.status_badge.setObjectName("webStatusStopped")
-        self.clients_label = QLabel("0 connected")
-        self.clients_label.setObjectName("webMuted")
         self.permissions_button = QPushButton("⚙")
         self.permissions_button.setObjectName("webPermissionsButton")
         self.permissions_button.setToolTip("Remote access permissions")
@@ -117,6 +115,12 @@ class WebRemotePage(QWidget):
         self.url_label.setObjectName("webUrl")
         self.url_label.setWordWrap(True)
         self.url_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        fingerprint_caption = QLabel("TLS FINGERPRINT")
+        fingerprint_caption.setObjectName("webCaption")
+        self.fingerprint_label = QLabel("—")
+        self.fingerprint_label.setObjectName("webFingerprint")
+        self.fingerprint_label.setWordWrap(True)
+        self.fingerprint_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.copy_button = QPushButton("Copy URL")
         self.copy_button.setObjectName("webCopyButton")
         self.copy_button.setFixedSize(96, 32)
@@ -125,12 +129,14 @@ class WebRemotePage(QWidget):
         setup_layout.addWidget(url_caption, 1, 0)
         setup_layout.addWidget(self.url_label, 1, 1)
         setup_layout.addWidget(self.copy_button, 1, 2)
+        setup_layout.addWidget(fingerprint_caption, 2, 0)
+        setup_layout.addWidget(self.fingerprint_label, 2, 1, 1, 2)
 
         self.start_button = QPushButton("Start Web Server")
         self.start_button.setObjectName("webStartButton")
         self.start_button.setMinimumHeight(36)
         self.start_button.clicked.connect(self._toggle_server)
-        setup_layout.addWidget(self.start_button, 2, 0, 1, 3)
+        setup_layout.addWidget(self.start_button, 3, 0, 1, 3)
         root.addWidget(setup)
 
         pairing = QFrame()
@@ -164,8 +170,9 @@ class WebRemotePage(QWidget):
         self.rotate_button = QPushButton("New code")
         self.rotate_button.setMinimumHeight(34)
         self.rotate_button.clicked.connect(self._rotate_code)
-        clients_title = QLabel("CONNECTED BROWSERS")
+        clients_title = QLabel("CONNECTED BROWSERS · 0")
         clients_title.setObjectName("webCaption")
+        self.client_list_header = clients_title
         self.client_list = QListWidget()
         self.client_list.setObjectName("webClientsList")
         self.client_list.setMinimumHeight(48)
@@ -195,6 +202,7 @@ class WebRemotePage(QWidget):
             QLabel#webCaption { color: #8296b4; font-size: 9px; font-weight: 800; }
             QLabel#webSectionTitle { color: #f0f4ff; font-size: 14px; font-weight: 750; }
             QLabel#webUrl { color: #85bcff; font-size: 12px; font-weight: 700; }
+            QLabel#webFingerprint { color: #879ab7; font-family: Consolas; font-size: 9px; }
             QLabel#webStatusStopped { color: #ff9cac; font-size: 11px; font-weight: 800; }
             QLabel#webStatusRunning { color: #68e3b7; font-size: 11px; font-weight: 800; }
             QLabel#webPairCode { color: #8ab8ff; font-family: Consolas; font-size: 23px; font-weight: 900; letter-spacing: 3px; }
@@ -281,14 +289,16 @@ class WebRemotePage(QWidget):
         self.client_list.setEnabled(running)
         if running:
             self.url_label.setText(self.web_server.local_url)
+            self.fingerprint_label.setText(self.web_server.fingerprint)
         else:
             self.url_label.setText("Start the server to get the URL.")
+            self.fingerprint_label.setText("—")
+            self.client_list_header.setText("CONNECTED BROWSERS · 0")
             self.qr_image.clear()
             self.qr_image.setText("QR appears after startup")
             self.code_label.setText("— — — — — —")
             self.expiry_label.setText("Start the server to create a code.")
-            self.clients_label.setText("0 connected")
-            self.client_list.clear()
+                self.client_list.clear()
             self._last_clients = ()
             self._last_client_count = 0
 
@@ -333,7 +343,7 @@ class WebRemotePage(QWidget):
         import time
         names = tuple(self.web_server.connected_clients)
         count = len(names)
-        self.clients_label.setText(f"{count} connected")
+        self.client_list_header.setText(f"CONNECTED BROWSERS · {count}")
         if names != self._last_clients:
             self._last_clients = names
             self.client_list.clear()
