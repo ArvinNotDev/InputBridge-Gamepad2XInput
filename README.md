@@ -58,7 +58,9 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Browser touch mouse with cursor movement, left/right/middle buttons, and scrolling
 * Browser keyboard input with text, editing, navigation, and special-key events
 * Per-session choice between XInput gamepad output and direct Windows mouse output
-* Responsive HTTPS browser companion with touch gamepad, touch mouse, remote keyboard, media, clipboard, launch shortcuts, presentation and permission-gated power controls
+* Responsive HTTPS browser companion with a persistent low-latency input stream, touch gamepad, touch mouse, remote keyboard, media, clipboard, launch shortcuts, presentation and permission-gated power controls
+* Native-style Xbox and PlayStation controller layouts with on-screen face-button, shoulder and trigger labels that follow the selected console style
+* Full-screen Gamepad Focus with gyro-assisted Driving mode and calibratable steering
 * Independent browser gamepad sessions, so multiple phones/tablets can create separate virtual XInput devices
 * System-tray integration
 * Dark and light themes
@@ -223,42 +225,44 @@ Hotkeys can be used independently of standard controller mappings and are stored
 
 ## Browser Web Companion
 
-Use the desktop app's **Web Companion** tab to control the PC from a phone,
-tablet, or another computer. It serves the touch-friendly interface over HTTPS;
-no native mobile app is required.
+Use **Web Companion** to turn a phone, tablet, or another computer into a controller
+for the Windows desktop. It serves the mobile-friendly interface over HTTPS; no
+separate mobile app is required.
 
-1. Start VPadConnect on Windows, open **Web Companion**, and choose **Start Web Server**.
-2. Open the displayed HTTPS URL or scan the QR code. Both devices must be on the
-   same Wi-Fi/LAN; use the PC's displayed address on port **8765**.
-3. The QR opens the browser at the Web Companion URL and carries the short-lived
-   pairing code and certificate fingerprint in the URL fragment. The page fills
-   the code automatically. If entering the URL manually, enter the code shown on
-   the desktop and compare the displayed SHA-256 fingerprint before pairing.
-4. Use **Gamepad**, **Touch mouse**, and **PC Remote**. The PC user controls
-   keyboard, media, clipboard, app launch, presentation, and power permissions
-   from the desktop.
+1. Start VPadConnect and open **Web Companion**.
+2. Select **Start Web Server**, then open the displayed HTTPS URL or scan the QR
+   code. Keep both devices on the same Wi-Fi/LAN; the server uses port **8765**.
+3. The QR link carries a short-lived pairing code and the public TLS certificate
+   fingerprint. The browser fills the code automatically. When pairing manually,
+   enter the desktop code and compare the SHA-256 fingerprint before proceeding.
+4. Use **Gamepad**, **Touch mouse**, or **PC Remote**. Optional PC actions remain
+   controlled by the desktop permission settings.
 
-The Gamepad tab supports portrait and landscape layouts and has a full-screen
-**Gamepad Focus** mode with an **Edit layout** control. Drag the sticks, D-pad,
-face buttons, and control groups to arrange them, or choose Classic, Racing,
-Left-handed, or Compact presets. Layout changes persist in that browser.
-Controller input uses one authenticated WebSocket per browser. Changed states are
-sent at the browser's animation-frame cadence over that persistent connection, so
-joystick movement does not wait for an HTTP response after every update. The normal
-WebSocket path sends no periodic application-level HTTP heartbeat; an HTTP state
-fallback remains available if WebSockets cannot connect.
-Browser preferences are saved for that browser origin;
-the pairing token stays in per-tab session storage. Each paired browser gets an
-independent virtual controller. The server allows up to eight active browser
-sessions; pairing codes expire after five minutes, and inactive sessions release
-their inputs automatically.
+### Mobile gamepad
 
-The QR carries a public certificate fingerprint, never the private TLS key.
-Browsers may first show a self-signed certificate warning. Before proceeding,
-inspect the certificate details in the browser and compare its SHA-256
-fingerprint with the value shown on the desktop. Browser JavaScript cannot
-independently pin the TLS certificate, so do not bypass a warning when the
-fingerprints do not match or cannot be checked. Use the Web Companion only on a
+**Gamepad Focus** expands the controller for play in portrait or landscape. Choose
+between **Xbox** and **PlayStation** layouts using the controller-style button beside
+the driving and calibration controls. The face-button symbols, shoulder labels and
+trigger labels update to match the selected style, while input is mapped to the
+corresponding XInput controls.
+
+**Driving** mode supports phone-tilt steering. Enable motion access when requested,
+hold the device at a comfortable neutral angle, and select **Calibrate center**.
+Steering sensitivity can be adjusted without leaving the controller.
+
+Controller input travels over an authenticated persistent WebSocket per paired
+browser, so changes do not wait for an HTTP response after every stick movement.
+The server supports up to eight concurrent browser sessions, each with an
+independent virtual controller. If the WebSocket is unavailable, the browser retains
+an HTTP state fallback. Idle sessions expire automatically and release held inputs.
+
+### Connection and certificate notes
+
+The QR carries a public certificate fingerprint, never the private TLS key. A browser
+may show a self-signed certificate warning on first connection. Compare its SHA-256
+fingerprint with the value shown on the desktop before proceeding. JavaScript in the
+browser cannot independently pin the TLS certificate, so do not bypass a warning if
+the fingerprints do not match or cannot be checked. Use Web Companion only on a
 trusted network.
 
 ### Native-client parity checklist
