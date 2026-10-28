@@ -146,6 +146,62 @@ def test_pairing_and_state_endpoints_reject_bad_or_missing_credentials():
     assert no_token.status_code == 401
 
 
+def test_browser_keyboard_actions_keep_permissions_validation_and_session_state_isolated(monkeypatch):
+    import core.remote_actions as remote_actions
+    import core.web_remote as web_remote
+
+    _install_mock_phone_mappers(monkeypatch)
+    permissions = {
+        "keyboard": True, "media": False, "clipboard": False,
+        "app_launch": False, "presentation": False, "power": False,
+    }
+    key_calls = []
+    monkeypatch.setattr(web_remote, "load_remote_permissions", lambda: dict(permissions))
+    monkeypatch.setattr(
+        remote_actions, "_keyboard_call", lambda method, key: key_calls.append((method, key))
+    )
+    server = web_remote.WebRemoteServer(object(), object(), object())
+    token_a = _pair_browser(server, "Browser A")
+    token_b = _pair_browser(server, "Browser B")
+    assert server._sessions[token_a]["remote"] is not server._sessions[token_b]["remote"]
+
+    def action(token, request_id, name, payload):
+        return server.app.test_client().post(
+            "/api/action",
+            headers={"Authorization": f"Bearer {token}"} if token else {},
+            json={"request_id": request_id, "action": name, "payload": payload},
+        )
+
+    left = action(token_a, "left-arrow", "keyboard_key", {"key": "LEFT"})
+    assert left.status_code == 200
+    assert left.get_json()["result"] == {"key": "LEFT"}
+    assert key_calls == [("send", "left")]
+
+    assert action(token_a, "hold-ctrl", "keyboard_modifier", {
+        "key": "CTRL", "pressed": True,
+    }).status_code == 200
+    assert action(token_b, "release-ctrl", "keyboard_modifier", {
+        "key": "CTRL", "pressed": False,
+    }).status_code == 200
+    assert key_calls == [("send", "left"), ("press", "ctrl")]
+
+    disconnected = server.app.test_client().post(
+        "/api/disconnect", headers={"Authorization": f"Bearer {token_a}"}, json={}
+    )
+    assert disconnected.status_code == 200
+    assert key_calls[-1] == ("release", "ctrl")
+    assert action(token_a, "closed-key", "keyboard_key", {"key": "LEFT"}).status_code == 401
+    assert action(token_b, "right-arrow", "keyboard_key", {"key": "RIGHT"}).status_code == 200
+    assert key_calls[-1] == ("send", "right")
+
+    malformed = action(token_b, "bad-key", "keyboard_key", {"key": "POWERSHELL"})
+    assert malformed.status_code == 400
+    permissions["keyboard"] = False
+    denied = action(token_b, "denied-key", "keyboard_key", {"key": "UP"})
+    assert denied.status_code == 403
+    assert action("", "no-token", "keyboard_key", {"key": "DOWN"}).status_code == 401
+
+
 def test_paired_browsers_have_distinct_mappers_and_isolated_inputs(monkeypatch):
     from core.web_remote import WebRemoteServer
 

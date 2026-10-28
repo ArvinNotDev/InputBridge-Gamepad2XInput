@@ -24,6 +24,13 @@ def test_protocol_rejects_invalid_keys_modifiers_and_oversized_text():
     assert validate_remote_request(_request("keyboard_text", {"text": "bad\u0001"})) is None
 
 
+def test_protocol_accepts_navigation_keys_used_by_mobile_remote_clients():
+    for key in ("LEFT", "UP", "DOWN", "RIGHT"):
+        result = validate_remote_request(_request("keyboard_key", {"key": key}))
+        assert result is not None
+        assert result["payload"] == {"key": key}
+
+
 def test_protocol_rejects_untrusted_app_and_power_action_arguments():
     assert validate_remote_request(_request("launch_app", {"app": "powershell"})) is None
     assert validate_remote_request(_request("power_action", {"command": "run arbitrary"})) is None

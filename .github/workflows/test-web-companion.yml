@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "core/web_remote.py"
+      - "core/remote_protocol.py"
       - "ui/web/**"
       - "ui/pages/web_remote.py"
       - "ui/main_window.py"
       - "ui/i18n.py"
       - "tests/test_web_remote.py"
+      - "tests/test_remote_protocol.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "InputBridge-Gamepad2XInput*.spec"
@@ -17,11 +19,13 @@ on:
   pull_request:
     paths:
       - "core/web_remote.py"
+      - "core/remote_protocol.py"
       - "ui/web/**"
       - "ui/pages/web_remote.py"
       - "ui/main_window.py"
       - "ui/i18n.py"
       - "tests/test_web_remote.py"
+      - "tests/test_remote_protocol.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "InputBridge-Gamepad2XInput*.spec"
@@ -53,7 +57,7 @@ jobs:
 
       - name: Compile changed Python modules
         run: |
-          python -m compileall -q core/web_remote.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py
+          python -m compileall -q core/web_remote.py core/remote_protocol.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
 
       - name: Validate browser JavaScript syntax
         run: node --check ui/web/static/app.js
@@ -62,7 +66,7 @@ jobs:
         run: node --test tests/test_web_frontend.cjs
 
       - name: Run web protocol, session, and security-header tests
-        run: python -m pytest -q tests/test_web_remote.py
+        run: python -m pytest -q tests/test_web_remote.py tests/test_remote_protocol.py
 
       - name: Confirm no mobile package was built
         shell: pwsh

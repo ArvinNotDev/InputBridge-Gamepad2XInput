@@ -44,6 +44,7 @@ function createElement(id, attributes = {}) {
         preventDefault() {},
         ...values,
       };
+      if (name === "click" && this.disabled) return event;
       if (name === "click" && typeof this.onclick === "function") this.onclick(event);
       for (const handler of listeners.get(name) || []) handler(event);
       return event;
@@ -60,10 +61,13 @@ function createElement(id, attributes = {}) {
   };
 }
 
-function createHarness() {
+function createHarness(settings = {}) {
   const calls = [];
   const elements = new Map();
   const gamepadButton = createElement("button-A", { "data-button": "A" });
+  const quickKeys = ["LEFT", "UP", "DOWN", "RIGHT"].map((key) =>
+    createElement(`key-${key}`, { "data-key": key, "data-permission": "keyboard" }),
+  );
   const leftStick = createElement("leftStick");
   const rightStick = createElement("rightStick");
   leftStick.knob = createElement("left-knob");
@@ -101,6 +105,8 @@ function createHarness() {
       if (selector === ".tab") return [mouseTab];
       if (selector === ".view") return views;
       if (selector === ".pad-key[data-button]") return [gamepadButton];
+      if (selector === "[data-key]") return quickKeys;
+      if (selector === "[data-permission]") return quickKeys;
       if (selector === ".knob") return [leftStick.knob, rightStick.knob];
       if (selector === ".pad-key.pressed,.btn.pressed") {
         return [gamepadButton].filter((element) => element.classList.contains("pressed"));
@@ -128,7 +134,10 @@ function createHarness() {
       return Promise.reject(new Error("connection lost"));
     }
     const body = url === "/api/action"
-      ? { ok: true, result: { capabilities: {} } }
+      ? { ok: true, result: { capabilities: settings.capabilities || {
+        pc_status: true, keyboard: true, media: true, clipboard: true,
+        app_launch: true, presentation: true, power: true,
+      } } }
       : { ok: true };
     return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
   };
@@ -157,6 +166,7 @@ function createHarness() {
     gamepadButton,
     leftStick,
     mouseTab,
+    quickKeys,
     sessionValues,
     touchpad,
     tickFrame() {
@@ -176,6 +186,42 @@ function stateRequests(harness) {
     .filter(({ url }) => url === "/api/state")
     .map(({ options }) => JSON.parse(options.body));
 }
+
+test("web keyboard navigation buttons send authenticated arrow-key actions", async () => {
+  const harness = createHarness();
+  await settle();
+
+  for (const key of ["LEFT", "UP", "DOWN", "RIGHT"]) {
+    const button = harness.quickKeys.find((item) => item.getAttribute("data-key") === key);
+    button.dispatch("click", { detail: 1 });
+    await settle();
+  }
+
+  const requests = harness.calls
+    .filter(({ url }) => url === "/api/action")
+    .map(({ options }) => ({ options, body: JSON.parse(options.body) }))
+    .filter(({ body }) => body.action === "keyboard_key");
+  assert.deepEqual(requests.map(({ body }) => body.payload.key), ["LEFT", "UP", "DOWN", "RIGHT"]);
+  assert.ok(requests.every(({ options }) =>
+    options.headers.Authorization === "Bearer test-session-token"));
+});
+
+test("web keyboard navigation buttons stay disabled without PC keyboard permission", async () => {
+  const harness = createHarness({
+    capabilities: {
+      pc_status: true, keyboard: false, media: false, clipboard: false,
+      app_launch: false, presentation: false, power: false,
+    },
+  });
+  await settle();
+
+  const leftArrow = harness.quickKeys.find((button) => button.getAttribute("data-key") === "LEFT");
+  assert.equal(leftArrow.disabled, true);
+  leftArrow.dispatch("click", { detail: 1 });
+  await settle();
+  assert.equal(harness.calls.some(({ url, options }) =>
+    url === "/api/action" && JSON.parse(options.body).action === "keyboard_key"), false);
+});
 
 test("a gamepad button stays held until every touch pointer releases it", async () => {
   const harness = createHarness();
