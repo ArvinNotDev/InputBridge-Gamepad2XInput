@@ -32,6 +32,7 @@ hiddenimports = [
     "qrcode.image.pil",
     "flask",
     "werkzeug.serving",
+    "simple_websocket",
 ]
 
 
