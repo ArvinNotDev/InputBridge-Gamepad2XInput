@@ -242,8 +242,11 @@ The Gamepad tab supports portrait and landscape layouts and has a full-screen
 **Gamepad Focus** mode with an **Edit layout** control. Drag the sticks, D-pad,
 face buttons, and control groups to arrange them, or choose Classic, Racing,
 Left-handed, or Compact presets. Layout changes persist in that browser.
-Input updates are sent as soon as the previous state request completes; while idle,
-the browser sends only an occasional keepalive instead of continuous state traffic.
+Controller input uses one authenticated WebSocket per browser. Changed states are
+sent at the browser's animation-frame cadence over that persistent connection, so
+joystick movement does not wait for an HTTP response after every update. The normal
+WebSocket path sends no periodic application-level HTTP heartbeat; an HTTP state
+fallback remains available if WebSockets cannot connect.
 Browser preferences are saved for that browser origin;
 the pairing token stays in per-tab session storage. Each paired browser gets an
 independent virtual controller. The server allows up to eight active browser
