@@ -9,9 +9,9 @@ from typing import Any
 from PySide6.QtCore import QCoreApplication, QCameraPermission, QEvent, QObject, QPointF, QStandardPaths, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QDialog, QFormLayout, QFrame, QGridLayout,
+    QApplication, QBoxLayout, QCheckBox, QDialog, QFormLayout, QFrame, QGridLayout,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit,
-    QPushButton, QScrollArea, QSizePolicy, QSlider, QStackedWidget, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QScroller, QSizePolicy, QSlider, QStackedWidget, QVBoxLayout, QWidget,
 )
 try:
     from PySide6.QtMultimedia import QCamera, QMediaCaptureSession, QMediaDevices
@@ -211,21 +211,39 @@ def card(title: str = "") -> tuple[QFrame, QVBoxLayout]:
 
 
 def scroll_page(title: str, description: str) -> tuple[QWidget, QVBoxLayout]:
+    """Build a genuinely touch-scrollable page that adapts to short screens."""
     page = QWidget()
     outer = QVBoxLayout(page)
-    outer.setContentsMargins(12, 12, 12, 10)
-    outer.setSpacing(10)
-    outer.addWidget(label(title, "pageTitle"))
-    outer.addWidget(label(description, "muted"))
+    outer.setContentsMargins(10, 8, 10, 8)
+    outer.setSpacing(6)
+    heading = label(title, "pageTitle")
+    description_label = label(description, "muted")
+    outer.addWidget(heading)
+    outer.addWidget(description_label)
     scroll = QScrollArea()
+    scroll.setObjectName("pageScrollArea")
     scroll.setWidgetResizable(True)
     scroll.setFrameShape(QFrame.Shape.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    scroll.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
+    scroll.viewport().setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
+    # Use kinetic touch scrolling on phones/tablets rather than requiring a
+    # scrollbar drag; native button/stick gestures still go to their widgets.
+    try:
+        QScroller.grabGesture(scroll.viewport(), QScroller.ScrollerGesture)
+    except (AttributeError, RuntimeError):
+        pass
     inside = QWidget()
+    inside.setObjectName("scrollPageContents")
     body = QVBoxLayout(inside)
     body.setContentsMargins(0, 2, 2, 8)
-    body.setSpacing(11)
+    body.setSpacing(8)
     scroll.setWidget(inside)
     outer.addWidget(scroll, 1)
+    page._scroll_area = scroll
+    page._page_heading = heading
+    page._page_description = description_label
     return page, body
 
 
@@ -953,6 +971,7 @@ class MainWindow(QMainWindow):
         v.setContentsMargins(10, 9, 10, 9)
         v.setSpacing(9)
         header = QFrame()
+        self.header = header
         header.setObjectName("header")
         h = QHBoxLayout(header)
         h.setContentsMargins(14, 10, 14, 10)
@@ -960,14 +979,20 @@ class MainWindow(QMainWindow):
         brand.addWidget(label("INPUTBRIDGE", "brand"))
         brand.addWidget(label("Mobile controller  ·  secure link", "tinyMuted"))
         h.addLayout(brand, 1)
+        self.focus_button = button("⛶ Focus", "violet")
+        self.focus_button.setMinimumHeight(38)
+        self.focus_button.setToolTip("Use a full-screen, landscape-friendly gamepad")
+        self.focus_button.clicked.connect(self._toggle_focus_gamepad)
+        h.addWidget(self.focus_button)
         self.badge = label("DISCONNECTED", "badgeRed")
         self.badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.badge.setMinimumWidth(105)
+        self.badge.setMinimumWidth(96)
         h.addWidget(self.badge)
         v.addWidget(header)
         self.stack = QStackedWidget()
         v.addWidget(self.stack, 1)
         nav = QFrame()
+        self.navigation = nav
         nav.setObjectName("nav")
         nh = QHBoxLayout(nav)
         nh.setContentsMargins(4, 4, 4, 4)
@@ -993,6 +1018,8 @@ class MainWindow(QMainWindow):
         self._build_mouse()
         self._build_remote()
         self._build_settings()
+        self._focus_gamepad = False
+        self._update_responsive_layout()
         self._select_tab(0)
 
     def _build_connect(self):
@@ -1038,52 +1065,88 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         self.standard_btn = button("Standard", "primary" if self.client.mode == "standard" else "normal")
         self.driving_btn = button("Driving", "primary" if self.client.mode == "driving" else "normal")
+        for b in (self.standard_btn, self.driving_btn):
+            b.setMinimumHeight(38)
         self.standard_btn.clicked.connect(lambda: self._set_mode("standard"))
         self.driving_btn.clicked.connect(lambda: self._set_mode("driving"))
         row.addWidget(self.standard_btn)
         row.addWidget(self.driving_btn)
         mode.addLayout(row)
-        sticks = self._card(self.gamepad_layout, "Analog sticks")
+
+        # A two-column layout uses landscape space efficiently; it becomes a
+        # vertical stack in portrait. The scroll container remains available in
+        # either orientation, so short devices never clip the lower controls.
+        self.gamepad_columns = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self.gamepad_columns.setContentsMargins(0, 0, 0, 0)
+        self.gamepad_columns.setSpacing(8)
+        left_column = QVBoxLayout()
+        right_column = QVBoxLayout()
+        left_column.setSpacing(7)
+        right_column.setSpacing(7)
+        self.gamepad_columns.addLayout(left_column, 1)
+        self.gamepad_columns.addLayout(right_column, 1)
+        self.gamepad_layout.addLayout(self.gamepad_columns)
+
+        sticks = self._card(left_column, "Analog sticks")
+        self.stick_widgets = [StickPad("left", self.client.set_stick), StickPad("right", self.client.set_stick)]
         row = QHBoxLayout()
-        row.addWidget(StickPad("left", self.client.set_stick), 1)
-        row.addWidget(StickPad("right", self.client.set_stick), 1)
+        row.setSpacing(4)
+        for stick in self.stick_widgets:
+            row.addWidget(stick, 1)
         sticks.addLayout(row)
-        triggers = self._card(self.gamepad_layout, "Analog triggers")
-        for title, key in (("L2 · Left trigger", "L2"), ("R2 · Right trigger", "R2")):
+
+        triggers = self._card(left_column, "Triggers")
+        self.trigger_sliders = []
+        for title, key in (("L2", "L2"), ("R2", "R2")):
             row = QHBoxLayout()
+            row.setSpacing(5)
             row.addWidget(label(title))
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(0, 255)
+            slider.setMinimumHeight(24)
             slider.valueChanged.connect(lambda value, k=key: self.client.set_trigger(k, value))
+            self.trigger_sliders.append(slider)
             row.addWidget(slider, 1)
             triggers.addLayout(row)
-        buttons = self._card(self.gamepad_layout, "Face buttons")
+
+        buttons = self._card(right_column, "Gamepad buttons")
         grid = QGridLayout()
+        grid.setSpacing(5)
+        self.gamepad_buttons = []
         for key, r, c, kind in (("Y", 0, 1, "yellow"), ("X", 1, 0, "violet"), ("B", 1, 2, "red"), ("A", 2, 1, "green")):
             b = button(key, kind)
-            b.setMinimumHeight(53)
+            b.setMinimumHeight(45)
             b.pressed.connect(lambda k=key: self.client.set_button(k, True))
             b.released.connect(lambda k=key: self.client.set_button(k, False))
+            self.gamepad_buttons.append(b)
             grid.addWidget(b, r, c)
         buttons.addLayout(grid)
+
         extra = QGridLayout()
+        extra.setSpacing(4)
         for i, (title, key) in enumerate((("LB", "LB"), ("RB", "RB"), ("Back", "BACK"), ("Start", "START"), ("Guide", "GUIDE"), ("L3", "L3"), ("R3", "R3"))):
             b = button(title)
+            b.setMinimumHeight(36)
             b.pressed.connect(lambda k=key: self.client.set_button(k, True))
             b.released.connect(lambda k=key: self.client.set_button(k, False))
-            extra.addWidget(b, i // 3, i % 3)
+            self.gamepad_buttons.append(b)
+            extra.addWidget(b, i // 4, i % 4)
         buttons.addLayout(extra)
-        buttons.addWidget(label("D-pad", "muted"))
+
+        dpad_card = self._card(left_column, "D-pad")
         dpad = QGridLayout()
+        dpad.setSpacing(4)
         for title, key, r, c in (("▲", "DPAD_UP", 0, 1), ("◀", "DPAD_LEFT", 1, 0), ("●", "", 1, 1), ("▶", "DPAD_RIGHT", 1, 2), ("▼", "DPAD_DOWN", 2, 1)):
             b = button(title, "primary" if key else "normal")
+            b.setMinimumHeight(38)
             if key:
                 b.pressed.connect(lambda k=key: self.client.set_button(k, True))
                 b.released.connect(lambda k=key: self.client.set_button(k, False))
             else:
                 b.setEnabled(False)
+            self.gamepad_buttons.append(b)
             dpad.addWidget(b, r, c)
-        buttons.addLayout(dpad)
+        dpad_card.addLayout(dpad)
         self.gamepad_layout.addStretch(1)
 
     def _build_mouse(self):
@@ -1255,6 +1318,49 @@ class MainWindow(QMainWindow):
             b.style().polish(b)
         if index == 3 and self.client.connected:
             self._remote_request("pc_status", {}, "pc_status")
+        if hasattr(self, "focus_button"):
+            self.focus_button.setVisible(not self._focus_gamepad or index == 1)
+
+    def _toggle_focus_gamepad(self):
+        self._focus_gamepad = not self._focus_gamepad
+        if self._focus_gamepad:
+            self._select_tab(1)
+        self.header.setVisible(not self._focus_gamepad)
+        self.navigation.setVisible(not self._focus_gamepad)
+        for page in self.stack.findChildren(QWidget):
+            heading = getattr(page, "_page_heading", None)
+            description = getattr(page, "_page_description", None)
+            if heading is not None:
+                heading.setVisible(not self._focus_gamepad)
+            if description is not None:
+                description.setVisible(not self._focus_gamepad)
+        self.focus_button.setText("✕ Exit Focus" if self._focus_gamepad else "⛶ Focus")
+        if self._focus_gamepad:
+            self.showFullScreen()
+        else:
+            self.showNormal()
+        self._update_responsive_layout()
+
+    def _update_responsive_layout(self):
+        """Switch the controller between compact landscape and roomy portrait."""
+        landscape = self.width() > self.height()
+        if hasattr(self, "gamepad_columns"):
+            direction = QBoxLayout.Direction.LeftToRight if landscape else QBoxLayout.Direction.TopToBottom
+            self.gamepad_columns.setDirection(direction)
+        compact = bool(landscape or getattr(self, "_focus_gamepad", False))
+        for stick in getattr(self, "stick_widgets", []):
+            stick.setFixedHeight(96 if compact else 126)
+            stick.setMinimumWidth(72 if compact else 96)
+        for widget in getattr(self, "gamepad_buttons", []):
+            widget.setMinimumHeight(34 if compact else 42)
+        for slider in getattr(self, "trigger_sliders", []):
+            slider.setMinimumHeight(22 if compact else 28)
+        if hasattr(self, "gamepad_page"):
+            self.gamepad_page.updateGeometry()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_responsive_layout()
 
     def _scan_qr(self):
         scanner = PairingScanner(self)
@@ -1517,8 +1623,10 @@ QSlider::groove:horizontal {{ height: 5px; background: #293850; border-radius: 2
 QSlider::sub-page:horizontal {{ background: #4f8cff; border-radius: 2px; }}
 QSlider::handle:horizontal {{ width: 17px; margin: -7px 0; border-radius: 8px; background: #f4f7ff; border: 2px solid #4f8cff; }}
 QScrollArea {{ border: none; background: transparent; }}
-QScrollBar:vertical {{ width: 5px; background: transparent; }}
-QScrollBar::handle:vertical {{ background: #35445c; border-radius: 2px; min-height: 20px; }}
+QScrollArea#pageScrollArea {{ background: transparent; }}
+QScrollBar:vertical {{ width: 7px; background: #0a1220; border-radius: 3px; }}
+QScrollBar::handle:vertical {{ background: #435776; border-radius: 3px; min-height: 28px; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QMessageBox {{ background: {PALETTE['surface']}; }}
 """
 
