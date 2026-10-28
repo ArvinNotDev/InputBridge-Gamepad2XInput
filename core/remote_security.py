@@ -151,8 +151,8 @@ def ensure_web_server_identity(
             previous_dns = set(san.get_values_for_type(x509.DNSName))
             previous_ips = {str(item) for item in san.get_values_for_type(x509.IPAddress)}
             now = datetime.now(timezone.utc)
-            not_before = previous.not_valid_before.replace(tzinfo=timezone.utc)
-            not_after = previous.not_valid_after.replace(tzinfo=timezone.utc)
+            not_before = previous.not_valid_before_utc
+            not_after = previous.not_valid_after_utc
             if (dns_names.issubset(previous_dns) and ip_names.issubset(previous_ips)
                     and not_before <= now < not_after):
                 # Let SSLContext validate that the stored private key matches.

@@ -41,6 +41,7 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
+    excludes=["PyQt6"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
