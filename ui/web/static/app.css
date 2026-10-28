@@ -29,6 +29,7 @@ body{overscroll-behavior-y:auto}
   .face.x,.face.b{top:44px}
   .shoulder{min-height:46px}
 }
+.motion-row .steering-control{display:flex;align-items:center;gap:8px;min-width:185px;margin:0;width:auto;font-size:11px;font-weight:600}.motion-row .steering-control span{white-space:nowrap}.motion-row .steering-control output{color:#9bbcf4}.motion-row .steering-control input[type=range]{width:100px;min-height:22px;padding:0;accent-color:#4f8cff}@media(max-width:760px){.motion-row .steering-control{flex:1;min-width:160px}}@media(orientation:landscape) and (max-height:560px){.motion-row .steering-control{min-width:150px;gap:4px}.motion-row .steering-control input[type=range]{width:76px;min-height:20px}}body.focus-mode .motion-row .steering-control{display:flex}
 
 .focus-exit{min-height:44px}
 body.focus-mode .focus-exit{right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top))}

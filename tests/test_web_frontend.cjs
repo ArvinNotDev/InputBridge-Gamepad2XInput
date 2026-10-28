@@ -45,7 +45,8 @@ function createElement(id, attributes = {}) {
         ...values,
       };
       if (name === "click" && this.disabled) return event;
-      if (name === "click" && typeof this.onclick === "function") this.onclick(event);
+      const propertyHandler = this[`on${name}`];
+      if (typeof propertyHandler === "function") propertyHandler.call(this, event);
       for (const handler of listeners.get(name) || []) handler(event);
       return event;
     },
@@ -64,6 +65,18 @@ function createElement(id, attributes = {}) {
 function createHarness(settings = {}) {
   const calls = [];
   const elements = new Map();
+  const deviceName = createElement("deviceName");
+  deviceName.value = "Web Controller";
+  elements.set("deviceName", deviceName);
+  const mouseSensitivity = createElement("mouseSensitivity");
+  mouseSensitivity.value = "17";
+  elements.set("mouseSensitivity", mouseSensitivity);
+  const steeringSensitivity = createElement("steeringSensitivity");
+  steeringSensitivity.value = "10";
+  elements.set("steeringSensitivity", steeringSensitivity);
+  const tapToClick = createElement("tapToClick");
+  tapToClick.checked = true;
+  elements.set("tapToClick", tapToClick);
   const gamepadButton = createElement("button-A", { "data-button": "A" });
   const quickKeys = ["LEFT", "UP", "DOWN", "RIGHT"].map((key) =>
     createElement(`key-${key}`, { "data-key": key, "data-permission": "keyboard" }),
@@ -81,12 +94,17 @@ function createHarness(settings = {}) {
     createElement(`view-${name}`),
   );
   const documentListeners = new Map();
+  const windowListeners = new Map();
   const body = createElement("body");
   const documentElement = createElement("documentElement");
   const sessionValues = new Map([
     ["ib.web.token", "test-session-token"],
     ["ib.web.name", "Test browser"],
   ]);
+  const preferenceValues = new Map();
+  if (settings.preferences) {
+    preferenceValues.set("ib.web.preferences", JSON.stringify(settings.preferences));
+  }
   let now = 1000;
   let failNextState = false;
   const frames = [];
@@ -122,10 +140,14 @@ function createHarness(settings = {}) {
     },
   };
   const window = {
-    location: { hash: "", pathname: "/", search: "" },
-    addEventListener() {},
-    removeEventListener() {},
-    confirm() { return true; },
+    location: { hash: settings.hash || "", pathname: "/", search: "" },
+    confirmCalls: 0,
+    DeviceOrientationEvent: function DeviceOrientationEvent() {},
+    addEventListener(name, handler) { windowListeners.set(name, handler); },
+    removeEventListener(name, handler) {
+      if (windowListeners.get(name) === handler) windowListeners.delete(name);
+    },
+    confirm() { this.confirmCalls += 1; return true; },
   };
   const fetch = (url, options = {}) => {
     calls.push({ url, options });
@@ -133,12 +155,17 @@ function createHarness(settings = {}) {
       failNextState = false;
       return Promise.reject(new Error("connection lost"));
     }
+    const requestBody = options.body ? JSON.parse(options.body) : {};
     const body = url === "/api/action"
       ? { ok: true, result: { capabilities: settings.capabilities || {
         pc_status: true, keyboard: true, media: true, clipboard: true,
         app_launch: true, presentation: true, power: true,
       } } }
-      : { ok: true };
+      : url === "/api/info"
+        ? { ok: true, fingerprint: settings.fingerprint || "ab".repeat(32) }
+        : url === "/api/pair"
+          ? { ok: true, token: "paired-session-token", name: requestBody.name }
+          : { ok: true };
     return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
   };
   const sandbox = {
@@ -150,6 +177,12 @@ function createHarness(settings = {}) {
       setItem(key, value) { sessionValues.set(key, value); },
       removeItem(key) { sessionValues.delete(key); },
     },
+    localStorage: {
+      getItem(key) { return preferenceValues.get(key) || null; },
+      setItem(key, value) { preferenceValues.set(key, value); },
+      removeItem(key) { preferenceValues.delete(key); },
+    },
+    DeviceOrientationEvent: window.DeviceOrientationEvent,
     URLSearchParams,
     performance: { now() { now += 5; return now; } },
     requestAnimationFrame(callback) { frames.push(callback); },
@@ -162,12 +195,18 @@ function createHarness(settings = {}) {
   return {
     calls,
     document,
+    window,
     elements,
     gamepadButton,
     leftStick,
     mouseTab,
     quickKeys,
     sessionValues,
+    preferenceValues,
+    dispatchWindow(name, event) {
+      const handler = windowListeners.get(name);
+      if (handler) handler(event);
+    },
     touchpad,
     tickFrame() {
       const callback = frames.shift();
@@ -186,6 +225,120 @@ function stateRequests(harness) {
     .filter(({ url }) => url === "/api/state")
     .map(({ options }) => JSON.parse(options.body));
 }
+
+test("browser control preferences restore and persist without storing the session token", async () => {
+  const harness = createHarness({
+    preferences: {
+      name: "Living room tablet",
+      mouseSensitivity: 2.4,
+      steeringSensitivity: 1.8,
+      tapToClick: false,
+      preset: "driving",
+    },
+  });
+  await settle();
+
+  assert.equal(harness.elements.get("deviceName").value, "Living room tablet");
+  assert.equal(harness.elements.get("mouseSensitivity").value, "24");
+  assert.equal(harness.elements.get("steeringSensitivity").value, "18");
+  assert.equal(harness.elements.get("tapToClick").checked, false);
+  assert.equal(harness.elements.get("driving").classList.contains("active"), true);
+
+  harness.elements.get("deviceName").value = "Bedroom phone";
+  harness.elements.get("deviceName").dispatch("input");
+  harness.elements.get("mouseSensitivity").value = "25";
+  harness.elements.get("mouseSensitivity").dispatch("input");
+  harness.elements.get("steeringSensitivity").value = "20";
+  harness.elements.get("steeringSensitivity").dispatch("input");
+  harness.elements.get("tapToClick").checked = true;
+  harness.elements.get("tapToClick").dispatch("change");
+  harness.elements.get("standard").dispatch("click");
+
+  assert.deepEqual(JSON.parse(harness.preferenceValues.get("ib.web.preferences")), {
+    name: "Bedroom phone",
+    mouseSensitivity: 2.5,
+    steeringSensitivity: 2,
+    tapToClick: true,
+    preset: "standard",
+  });
+  assert.equal(harness.sessionValues.get("ib.web.token"), "test-session-token");
+  assert.equal(harness.preferenceValues.has("ib.web.token"), false);
+});
+
+test("invalid saved browser preferences fall back to safe control defaults", async () => {
+  const harness = createHarness({
+    preferences: {
+      name: "   ",
+      mouseSensitivity: 99,
+      steeringSensitivity: "2.0",
+      tapToClick: "false",
+      preset: "unknown",
+    },
+  });
+  await settle();
+
+  assert.equal(harness.elements.get("deviceName").value, "Web Controller");
+  assert.equal(harness.elements.get("mouseSensitivity").value, "17");
+  assert.equal(harness.elements.get("steeringSensitivity").value, "10");
+  assert.equal(harness.elements.get("tapToClick").checked, true);
+  assert.equal(harness.elements.get("standard").classList.contains("active"), true);
+  assert.equal(harness.elements.get("driving").classList.contains("active"), false);
+});
+
+test("saved steering sensitivity changes tilt response in driving mode", async () => {
+  async function maximumSteer(sensitivity) {
+    const harness = createHarness({
+      preferences: { steeringSensitivity: sensitivity, preset: "driving" },
+    });
+    await settle();
+    harness.elements.get("tiltToggle").dispatch("click");
+    harness.dispatchWindow("deviceorientation", { gamma: 0 });
+    for (let i = 0; i < 15; i += 1) {
+      harness.dispatchWindow("deviceorientation", { gamma: 5 });
+    }
+    await settle();
+    return Math.max(...stateRequests(harness).map((request) => request.joystick.left_x));
+  }
+
+  assert.ok(await maximumSteer(2) > await maximumSteer(1));
+});
+
+test("desktop QR link pre-fills its pairing code and verifies its fingerprint", async () => {
+  const fingerprint = "ab".repeat(32);
+  const harness = createHarness({
+    hash: `#pair=123456&fp=${fingerprint}`,
+    fingerprint,
+  });
+  await settle();
+
+  assert.equal(harness.elements.get("pairCode").value, "123456");
+  harness.elements.get("pairButton").dispatch("click");
+  await settle();
+
+  const pairRequest = harness.calls.find(({ url }) => url === "/api/pair");
+  assert.ok(pairRequest);
+  assert.deepEqual(JSON.parse(pairRequest.options.body), {
+    code: "123456",
+    name: "Web Controller",
+  });
+  assert.equal(harness.window.confirmCalls, 0);
+  assert.equal(harness.sessionValues.get("ib.web.token"), "paired-session-token");
+});
+
+test("QR fingerprint mismatch blocks pairing before a session is created", async () => {
+  const harness = createHarness({
+    hash: `#pair=123456&fp=${"ab".repeat(32)}`,
+    fingerprint: "cd".repeat(32),
+  });
+  await settle();
+
+  harness.elements.get("pairButton").dispatch("click");
+  await settle();
+
+  assert.equal(harness.calls.some(({ url }) => url === "/api/pair"), false);
+  assert.match(harness.elements.get("pairMessage").textContent, /fingerprint mismatch/i);
+  assert.equal(harness.window.confirmCalls, 0);
+});
 
 test("web keyboard navigation buttons send authenticated arrow-key actions", async () => {
   const harness = createHarness();
