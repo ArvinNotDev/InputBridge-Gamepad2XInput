@@ -58,3 +58,35 @@ def test_pairing_and_state_endpoints_reject_bad_or_missing_credentials():
     assert bad_code.status_code == 400
     no_token = client.post("/api/state", json={"mode": "gamepad"})
     assert no_token.status_code == 401
+
+
+def test_web_tls_certificate_covers_advertised_lan_ip_and_reuses_matching_identity(tmp_path):
+    import ssl
+    from cryptography import x509
+    from core.remote_security import create_web_server_ssl_context
+
+    certificate_path = tmp_path / "web_server.crt"
+    key_path = tmp_path / "web_server.key"
+    context, fingerprint = create_web_server_ssl_context(
+        ["192.168.77.21"], certificate_path, key_path
+    )
+    certificate = x509.load_pem_x509_certificate(certificate_path.read_bytes())
+    sans = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    ip_names = {str(value) for value in sans.get_values_for_type(x509.IPAddress)}
+    assert "192.168.77.21" in ip_names
+    assert "127.0.0.1" in ip_names
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_2
+    assert len(fingerprint.replace(":", "")) == 64
+
+    _context_again, fingerprint_again = create_web_server_ssl_context(
+        ["192.168.77.21"], certificate_path, key_path
+    )
+    assert fingerprint_again == fingerprint
+
+    _new_context, fingerprint_new_host = create_web_server_ssl_context(
+        ["192.168.77.22"], certificate_path, key_path
+    )
+    assert fingerprint_new_host != fingerprint
+    new_cert = x509.load_pem_x509_certificate(certificate_path.read_bytes())
+    new_sans = new_cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+    assert "192.168.77.22" in {str(value) for value in new_sans.get_values_for_type(x509.IPAddress)}

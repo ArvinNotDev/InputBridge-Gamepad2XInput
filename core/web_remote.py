@@ -16,7 +16,7 @@ from werkzeug.serving import make_server
 
 from core.remote_actions import RemoteActionSession, load_remote_permissions
 from core.remote_protocol import PROTOCOL_VERSION
-from core.remote_security import create_server_ssl_context
+from core.remote_security import create_web_server_ssl_context
 
 BUTTON_KEYS = {"A", "B", "X", "Y", "LB", "RB", "BACK", "START", "GUIDE", "L3", "R3",
                "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"}
@@ -118,6 +118,7 @@ class WebRemoteServer:
         self.host = host
         self.port = int(port)
         self.fingerprint = ""
+        self._advertised_host = ""
         self.pairing_code = ""
         self.pairing_deadline = 0.0
         self._lock = threading.RLock()
@@ -145,7 +146,8 @@ class WebRemoteServer:
 
     @property
     def local_url(self) -> str:
-        return "https://" + get_lan_ip() + ":" + str(self.port) + "/"
+        host = self._advertised_host or get_lan_ip()
+        return "https://" + host + ":" + str(self.port) + "/"
 
     def pairing_url(self) -> str:
         # Pairing data is in the URL fragment, so the code is not sent in HTTP requests or logs.
@@ -165,7 +167,8 @@ class WebRemoteServer:
             if type(port) is not int or not 1024 <= port <= 65535:
                 raise ValueError("The HTTPS port must be between 1024 and 65535.")
             self.port = port
-        tls_context, self.fingerprint = create_server_ssl_context()
+        self._advertised_host = get_lan_ip()
+        tls_context, self.fingerprint = create_web_server_ssl_context([self._advertised_host])
         self._stop_event.clear()
         self.rotate_pairing_code()
         logging.getLogger("werkzeug").setLevel(logging.ERROR)
