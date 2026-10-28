@@ -48,9 +48,10 @@ jobs:
 
       - name: Prepare Android SDK and NDK
         run: |
-          git clone --depth 1 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
+          git clone --depth 1 --branch 6.12 https://code.qt.io/pyside/pyside-setup.git "$RUNNER_TEMP/pyside-setup"
           cd "$RUNNER_TEMP/pyside-setup"
-          python "$RUNNER_TEMP/pyside-setup/tools/cross_compile_android/main.py" \
+          python -m pip install -r requirements.txt -r tools/cross_compile_android/requirements.txt
+          python tools/cross_compile_android/main.py \
             --download-only --skip-update --auto-accept-license
 
       - name: Download PySide6 Android wheels
