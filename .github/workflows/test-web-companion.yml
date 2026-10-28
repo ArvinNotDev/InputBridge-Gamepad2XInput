@@ -61,7 +61,7 @@ jobs:
       - name: Install project and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "Flask>=3.0,<4.0" "cryptography>=42.0" pytest
+          python -m pip install "Flask>=3.0,<4.0" "cryptography>=42.0" "simple-websocket>=1.1,<2.0" pytest
 
       - name: Compile changed Python modules
         run: |
