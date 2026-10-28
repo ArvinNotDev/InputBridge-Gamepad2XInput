@@ -298,7 +298,7 @@ class WebRemotePage(QWidget):
             self.qr_image.setText("QR appears after startup")
             self.code_label.setText("— — — — — —")
             self.expiry_label.setText("Start the server to create a code.")
-                self.client_list.clear()
+            self.client_list.clear()
             self._last_clients = ()
             self._last_client_count = 0
 
