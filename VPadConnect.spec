@@ -33,6 +33,7 @@ hiddenimports = [
     "qrcode.image.pil",
     "flask",
     "werkzeug.serving",
+    "simple_websocket",
 ]
 
 datas += collect_data_files("vgamepad")
