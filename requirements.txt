@@ -12,3 +12,4 @@ cryptography>=42.0
 pyperclip>=1.8.2
 qrcode[pil]>=7.4
 Flask>=3.0,<4.0
+simple-websocket>=1.1,<2.0
