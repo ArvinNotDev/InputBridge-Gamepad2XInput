@@ -182,20 +182,9 @@ function createHarness(settings = {}) {
       this.readyState = 0;
       this.bufferedAmount = 0;
       webSockets.push(this);
-      setTimeout(() => {
-        if (this.readyState !== 0) return;
-        this.readyState = 1;
-        if (this.onopen) this.onopen({});
-      }, 0);
     }
     send(raw) {
-      const packet = JSON.parse(raw);
-      this.sent.push(packet);
-      if (packet.type === "auth") {
-        setTimeout(() => {
-          if (this.onmessage) this.onmessage({ data: JSON.stringify({ type: "ready" }) });
-        }, 0);
-      }
+      this.sent.push(JSON.parse(raw));
     }
     close() {
       this.readyState = 3;
@@ -593,8 +582,9 @@ test("paired controller streams input over one persistent WebSocket without stat
   assert.equal(harness.webSockets.length, 1);
   const socket = harness.webSockets[0];
   assert.equal(socket.url, "wss://vpadconnect.test/api/stream");
+  socket.readyState = 1;
+  socket.onopen({});
   assert.deepEqual(socket.sent[0], { type: "auth", token: "test-session-token" });
-  await settle();
   socket.onmessage({ data: JSON.stringify({ type: "ready" }) });
 
   harness.tickFrame();
