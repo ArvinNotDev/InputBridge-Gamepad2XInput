@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   web-companion-tests:
-    runs-on: windows-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -47,7 +47,7 @@ jobs:
       - name: Install project and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pytest
+          python -m pip install "Flask>=3.0,<4.0" pytest
 
       - name: Compile changed Python modules
         run: |
@@ -57,8 +57,6 @@ jobs:
         run: node --check ui/web/static/app.js
 
       - name: Run web protocol, session, and security-header tests
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q tests/test_web_remote.py
 
       - name: Confirm no mobile package was built

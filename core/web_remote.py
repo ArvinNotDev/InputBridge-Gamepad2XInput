@@ -14,7 +14,6 @@ from typing import Any, Callable
 from flask import Flask, jsonify, render_template, request
 from werkzeug.serving import make_server
 
-from core.mapper import Phone_mapper
 from core.remote_actions import RemoteActionSession, load_remote_permissions
 from core.remote_protocol import PROTOCOL_VERSION
 from core.remote_security import create_server_ssl_context
@@ -295,6 +294,10 @@ class WebRemoteServer:
                 return jsonify({"ok": False, "error": "Pairing code is wrong or expired. Create a fresh QR code on the PC."}), 403
             session_uuid = "web-" + uuid.uuid4().hex
             try:
+                # Import platform-specific controller emulation only when a
+                # browser successfully pairs. Protocol and route tests can run
+                # without loading HID/XInput/Qt desktop dependencies.
+                from core.mapper import Phone_mapper
                 mapper = Phone_mapper(session_uuid, "x360", self.controllers_page, self.hotkey_page, self.settings)
             except Exception:
                 with self._lock:
