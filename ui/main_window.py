@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
             QApplication.quit()
             return
 
-        # For all other indices, show corresponding page (indices 0..6)
+        # For all remaining tabs, show the matching stacked page (indices 0..7).
         if 0 <= index < self.pages.count():
             self.pages.setCurrentIndex(index)
 

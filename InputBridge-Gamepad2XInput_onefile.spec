@@ -30,6 +30,8 @@ hiddenimports = [
     "cryptography.hazmat.bindings._rust",
     "qrcode",
     "qrcode.image.pil",
+    "flask",
+    "werkzeug.serving",
 ]
 
 

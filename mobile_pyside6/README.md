@@ -29,7 +29,7 @@ This launches the same Qt Widgets interface for development on a desktop with a 
 - Remote PC text entry, special keys, modifiers, allowlisted keyboard shortcuts, media keys, explicit clipboard read/write, approved app launch shortcuts, presentation controls, PC status, and confirmation-gated power actions.
 - Phone-side controls are enabled only when the desktop server reports that the corresponding permission is allowed. Power actions remain gated by the desktop setting and phone confirmation.
 - Camera QR scan with runtime permission handling and a manual JSON/clipboard fallback when the camera or QR decoder is unavailable.
-- Responsive dark Qt Widgets interface designed for touch use.
+- Responsive dark Qt Widgets interface designed for touch use, portrait/landscape layouts, touch/kinetic scrolling, and a full-screen Gamepad Focus mode with an always-visible exit control.
 
 ## Security and compatibility
 

@@ -50,6 +50,8 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Configurable gamepad deadzones and axis inversion
 * Remote phone touchpad with cursor movement, left/right/middle buttons, and scrolling
 * Per-phone choice between XInput gamepad output and direct Windows mouse output
+* Responsive HTTPS browser companion with touch gamepad, touch mouse, remote keyboard, media, clipboard, launch shortcuts, presentation and permission-gated power controls
+* Independent browser gamepad sessions, so multiple phones/tablets can create separate virtual XInput devices
 * System-tray integration
 * Dark and light themes
 * Persistent application settings
@@ -530,9 +532,37 @@ The recommended phone-client source is the **PySide6 Mobile** client in
 The previous Kivy implementation remains available separately in
 `mobile_kivy_legacy/main.py` as the **Legacy Kivy Mobile** version. The two clients
 share the desktop protocol, while the PySide6 source provides Connect, Gamepad,
-Mouse, Remote and Settings screens, secure QR pairing, one-finger pointer
+Mouse and Settings screens, secure QR pairing, one-finger pointer
 movement, two-finger scrolling, optional tap-to-click and adjustable mouse
-sensitivity. Source-only tests do not prove access to real phone camera/sensors.
+sensitivity. The mobile UI supports portrait and landscape layouts, touch scrolling,
+and a full-screen Gamepad Focus mode. Source-only tests do not prove access to real
+phone camera/sensors.
+
+## Browser Web Companion
+
+The desktop app includes a separate **Web Companion** tab. It starts an HTTPS
+Flask server that lets a phone, tablet, or another PC use a browser as a controller;
+no native phone app or APK is needed for this browser interface.
+
+1. Install the desktop requirements and start InputBridge on Windows.
+2. Open **Web Companion**, select a local HTTPS port (default 8765), and choose
+   **Start Web Server**.
+3. Scan its QR code with the phone camera, or open the displayed URL and enter
+   the short-lived pairing code. Both devices need to be on the same trusted LAN.
+4. If the browser warns about the self-signed HTTPS certificate, compare its
+   SHA-256 fingerprint against the one displayed in the desktop tab before
+   proceeding. The native client verifies its certificate pin in-app; browser
+   certificate trust must be handled by the browser itself.
+5. Use the browser's **Gamepad**, **Touch mouse**, and **PC Remote** tabs. Keyboard,
+   media, clipboard, approved app shortcuts, presentation and power commands
+   continue to obey the permissions configured on the desktop **Server** tab.
+
+Each paired browser gets a separate virtual XInput controller. The web service
+supports up to eight browser sessions at once and runs on port 8765 by default,
+separately from the native phone socket server on port 5000. Stop the Web
+Companion server when it is no longer needed and do not expose it to untrusted
+networks. Its temporary pairing code expires after five minutes; inactive browser
+sessions release input state automatically.
 
 ## Project Status
 
