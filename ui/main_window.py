@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         self.menu.setElideMode(Qt.ElideNone)
         self.menu.setShape(QTabBar.Shape.RoundedNorth)
         self.menu.addTab("Controller Emulation")                       # 0
-        self.menu.addTab("Mobile Controller")                          # 1
+        self.menu.addTab("Remote Controllers")                         # 1
         self.menu.addTab("Hotkeys")                                    # 2
         self.menu.addTab("Profiles")                                   # 3
         self.menu.addTab("Input Test")                                 # 4
@@ -197,9 +197,9 @@ class MainWindow(QMainWindow):
         )
         self.about_page = AboutPage()
         self.pages.addWidget(self.about_page)
-        # Browser controllers share the existing mapper registration path with
-        # the TLS phone client, so each paired browser appears as its own XInput
-        # device alongside mobile and physical controllers.
+        # Browser controllers share the existing mapper registration path, so
+        # each paired browser appears as its own XInput device alongside
+        # physical controllers.
         self.web_remote_page = WebRemotePage(
             self.settings, controllers_page, hotkey_page, self.server_page,
             status_changed=self._refresh_tray_menu,
@@ -294,7 +294,7 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         for label, index in (
             ("Controller Emulation", self.IDX_CONTROLLER_EMULATION),
-            ("Mobile Controller", self.IDX_REMOTE_GAMEPAD),
+            ("Remote Controllers", self.IDX_REMOTE_GAMEPAD),
             ("Hotkeys", self.IDX_HOTKEY),
             ("Profiles", self.IDX_PROFILES),
             ("Settings", self.IDX_SETTINGS),
@@ -325,12 +325,12 @@ class MainWindow(QMainWindow):
         web_count = int(getattr(web_server, "client_count", 0)) if web_server else 0
         mapped_count = len(getattr(self.controller_emulation_page, "mappers", {}))
         self._tray_status_action.setText(
-            f"Phone: {'on' if running else 'off'} · Web: {'on' if web_running else 'off'} · "
+            f"Remote server: {'on' if running else 'off'} · Web: {'on' if web_running else 'off'} · "
             f"Clients: {client_count}+{web_count} · Mapped: {mapped_count}"
         )
-        self._tray_server_action.setText("Stop phone server" if running else "Start phone server")
+        self._tray_server_action.setText("Stop remote server" if running else "Start remote server")
         self.tray_icon.setToolTip(
-            f"{self.WINDOW_TITLE} — Phone server {'running' if running else 'stopped'}, "
+            f"{self.WINDOW_TITLE} — Remote server {'running' if running else 'stopped'}, "
             f"Web Companion {'running' if web_running else 'stopped'}"
         )
         self._tray_hide_action.setEnabled(self.isVisible())

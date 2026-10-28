@@ -1,7 +1,0 @@
-# Dependencies for phone_client_with_auth.py and camera-based QR pairing.
-# For Android builds, include these in the python-for-android/Buildozer
-# requirements and declare CAMERA + INTERNET in the Android manifest.
-Kivy>=2.3.0
-plyer>=2.1.0
-numpy>=1.24
-pyzbar>=0.1.9

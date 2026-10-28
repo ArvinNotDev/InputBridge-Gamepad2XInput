@@ -23,7 +23,7 @@ LANGUAGE_NAMES = {
 
 _TRANSLATIONS = {
     "fa": {
-        "Mobile Controller": "کنترلر موبایل",
+        "Remote Controllers": "کنترلرهای راه دور",
         "Input Test": "تست ورودی",
         "Controller Emulation": "شبیه‌سازی دسته",
         "Remote Gamepad": "📱 دستهٔ راه دور",
@@ -39,7 +39,7 @@ _TRANSLATIONS = {
         "Presentation controls": "کنترل ارائه",
         "Power actions (off by default)": "عملیات برق (به‌طور پیش‌فرض خاموش)",
         "TLS fingerprint: start the server to create this PC's identity.": "اثر انگشت TLS: برای ساخت هویت این رایانه، سرور را شروع کنید.",
-        "TLS SHA-256 fingerprint — enter this exact value on the phone before pairing:": "اثر انگشت SHA-256 گواهی — پیش از جفت‌سازی، همین مقدار را در گوشی وارد کنید:",
+        "TLS SHA-256 fingerprint — enter this exact value in the remote client before pairing:": "اثر انگشت SHA-256 گواهی — پیش از جفت‌سازی، همین مقدار را در برنامهٔ کنترل از راه دور وارد کنید:",
         "About": "ℹ️ دربارهٔ برنامه",
         "Web Companion": "کنترل از طریق مرورگر",
         "Quit": "🚪 خروج",
@@ -168,7 +168,7 @@ _TRANSLATIONS = {
         "Español": "اسپانیایی",
     },
     "es": {
-        "Mobile Controller": "Mando móvil",
+        "Remote Controllers": "Mandos remotos",
         "Input Test": "Prueba de entrada",
         "Controller Emulation": "Emulación de mandos",
         "Remote Gamepad": "📱 Gamepad remoto",
@@ -184,7 +184,7 @@ _TRANSLATIONS = {
         "Presentation controls": "Controles de presentación",
         "Power actions (off by default)": "Acciones de energía (desactivadas por defecto)",
         "TLS fingerprint: start the server to create this PC's identity.": "Huella TLS: inicia el servidor para crear la identidad de este PC.",
-        "TLS SHA-256 fingerprint — enter this exact value on the phone before pairing:": "Huella SHA-256 TLS: introduce este valor exacto en el teléfono antes de emparejar.",
+        "TLS SHA-256 fingerprint — enter this exact value in the remote client before pairing:": "Huella SHA-256 TLS: introduce este valor exacto en el cliente remoto antes de emparejar.",
         "About": "ℹ️ Acerca de",
         "Web Companion": "Control desde el navegador",
         "Quit": "🚪 Salir",

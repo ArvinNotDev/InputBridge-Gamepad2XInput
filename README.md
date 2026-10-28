@@ -48,9 +48,9 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Fixed 10% mouse deadzone to filter stick noise and accidental cursor drift
 * Adjustable mouse sensitivity with nonlinear fine-control response
 * Configurable gamepad deadzones and axis inversion
-* Remote phone touchpad with cursor movement, left/right/middle buttons, and scrolling
-* Remote phone keyboard typing with text, editing, navigation, and special-key events
-* Per-phone choice between XInput gamepad output and direct Windows mouse output
+* Browser touch mouse with cursor movement, left/right/middle buttons, and scrolling
+* Browser keyboard input with text, editing, navigation, and special-key events
+* Per-session choice between XInput gamepad output and direct Windows mouse output
 * Responsive HTTPS browser companion with touch gamepad, touch mouse, remote keyboard, media, clipboard, launch shortcuts, presentation and permission-gated power controls
 * Independent browser gamepad sessions, so multiple phones/tablets can create separate virtual XInput devices
 * System-tray integration
@@ -65,9 +65,9 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 * Separate writable user configuration from bundled application resources
 
 The physical-controller-to-keyboard mapping target remains reserved for future
-work. This is separate from **phone-to-PC remote keyboard input**, which is
-available through the companion phone client's Remote screen after explicit
-permission is enabled on the PC.
+work. This is separate from **browser-to-PC remote keyboard input**, which is
+available through the Web Companion's PC Remote tab after the PC user enables
+the relevant permission.
 
 ## Download
 
@@ -105,7 +105,9 @@ However, the **ViGEmBus driver itself may need to be installed separately**, esp
 ### For mouse control and hotkeys
 
 If you only use mouse mode or controller hotkeys, the virtual gamepad driver is
-not required. Direct physical-controller-to-keyboard mapping is not enabled; phone remote-keyboard input is a separate feature and requires its PC permission.
+not required. Direct physical-controller-to-keyboard mapping is not enabled;
+browser remote-keyboard input is a separate feature and requires its PC
+permission.
 
 ## Quick Start
 
@@ -212,87 +214,57 @@ Custom controller hotkeys can be configured to trigger actions from controller i
 
 Hotkeys can be used independently of standard controller mappings and are stored in the application's persistent configuration.
 
-## Phone-to-PC Remote Control
+## Browser Web Companion
 
-InputBridge now provides two separately named mobile clients:
+Use the desktop app's **Web Companion** tab to control the PC from a phone,
+tablet, or another computer. It serves the touch-friendly interface over HTTPS;
+no native mobile app is required.
 
-- **PySide6 Mobile (recommended):** the modern Qt for Python client in `mobile_pyside6/`. It contains Connect, Gamepad, Mouse, Remote and Settings screens with a touch-first dark interface.
-- **Legacy Kivy Mobile:** the previous client is preserved in `mobile_kivy_legacy/main.py`, along with its legacy Buildozer configuration and dependency list. It is kept separate so the two approaches cannot be confused.
+1. Start InputBridge on Windows, open **Web Companion**, and choose **Start Web Server**.
+2. Scan the desktop's Web Companion QR code with the phone's built-in camera, or
+   open the displayed URL. Both devices should be on the same trusted network.
+3. The QR opens the browser at the Web Companion URL and carries the short-lived
+   pairing code and certificate fingerprint in the URL fragment. The page fills
+   the code automatically. If entering the URL manually, enter the code shown on
+   the desktop and compare the displayed SHA-256 fingerprint before pairing.
+4. Use **Gamepad**, **Touch mouse**, and **PC Remote**. The PC user controls
+   keyboard, media, clipboard, app launch, presentation, and power permissions
+   from the desktop.
 
-### PySide6 mobile source and Android runtime
+The QR carries a public certificate fingerprint, never the private TLS key.
+Browsers may first show a self-signed certificate warning; compare its
+fingerprint with the one shown on the desktop before continuing. The web server
+allows up to eight independent browser controller sessions. Pairing codes expire
+after five minutes, and inactive sessions release their inputs automatically.
 
-The PySide6 client source is maintained in `mobile_pyside6/`. This repository intentionally does **not** build or publish a mobile APK/AAB. CI only validates the Python source and tests.
+### Native-client parity checklist
 
-A Python source file using PySide6 cannot directly become a native Android application by itself: Android does not provide the Python interpreter and Qt/PySide runtime required by the source. Qt documents the packaging requirement in its [official Android deployment guide](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html).
+| Native-client workflow or preference | Web Companion status and Phase 4 decision |
+| --- | --- |
+| Scan a pairing QR inside the app | The desktop QR is a browser URL with the pairing code and TLS fingerprint in its fragment. A phone's built-in QR scanner opens that URL and the browser pre-fills the code. No separate camera scanner is needed; users can also enter the code manually. |
+| Device name | Available in the pairing form. Phase 4 persists the name in browser preferences so it is ready for later pairings. |
+| Stable native device ID | Not carried over. The server assigns a separate session identity and token to each paired browser, which fits independent browser controllers. |
+| Saved host, port, and certificate pin | The opened browser origin identifies the Web Companion host and port. The QR supplies the expected fingerprint; manual pairing asks the user to compare the desktop fingerprint. Separate native endpoint fields and pin storage are unnecessary for this workflow. |
+| Gamepad mode and tilt steering | Standard/Driving modes, tilt enablement, and centre calibration are present. Phase 4 adds adjustable steering sensitivity and persists the mode and sensitivity. Tilt permission and calibration remain session-specific. |
+| Pointer sensitivity and tap-to-click | Already adjustable in the browser. Phase 4 persists both settings. |
+| Keyboard, media, clipboard, app shortcuts, presentation, PC status, and power | Available in PC Remote and governed by desktop-side permissions. Power actions that can disrupt the PC require confirmation in the browser. |
 
-For source development, follow [the PySide6 mobile README](mobile_pyside6/README.md). The interface, controller-state protocol, pairing validation, and remote-action flow can be tested on a desktop. Real Android camera/sensor behavior and native phone deployment cannot be verified by source-only tests.
+The useful native control preferences are now browser preferences stored by the
+browser origin. Pairing tokens remain in per-tab session storage. The web
+interface does not implement file transfer, live screen viewing, notification
+forwarding, or LAN discovery. The current desktop remote protocol does not
+expose those workflows for the browser to migrate.
 
-### Secure pairing and connection
+### Supported remote actions
 
-1. Start the updated InputBridge desktop app and open **Server**.
-2. Start the server and choose **Show Phone Pairing QR**.
-3. On the phone, open **Connect → Scan pairing QR**. If scanning is unavailable, paste the complete QR JSON payload or enter the PC address, port, and SHA-256 certificate fingerprint manually.
-4. Keep the phone and PC on the same local network. The mobile client verifies the live TLS certificate against the QR/saved SHA-256 pin before it sends controller state or pairing data.
-5. If the phone has not been trusted, enter the short pairing code shown beside that device in the desktop Server page.
-6. Use **Gamepad**, **Mouse**, or **Remote**. Remote actions remain gated by the individual permissions explicitly enabled in the desktop app.
-
-The QR contains only the PC endpoint and public certificate fingerprint; the private TLS key is never exported. If the desktop certificate is replaced, verify the new fingerprint deliberately and scan the new QR. Do not accept a fingerprint sent through an untrusted channel.
-
-### PySide6 mobile features
-
-- Gamepad buttons, bumpers, menu/system buttons, D-pad, dual analogue sticks and L2/R2 triggers.
-- Standard and Driving modes with optional accelerometer steering and centre calibration when QtSensors is available.
-- Touchpad cursor movement, left/right/middle clicks, tap-to-click, scrolling and pointer sensitivity.
-- Remote text input, special keys, modifiers, approved shortcuts, media controls, explicit clipboard read/write, approved app shortcuts, presentation controls, PC status, and confirmation-gated power actions.
-- Pinned TLS transport, retry handling, device identity persistence, and server capability/permission awareness.
-
-### Legacy Kivy client
-
-The previous Kivy implementation lives at `mobile_kivy_legacy/main.py`. Its Buildozer file and phone dependencies were moved with it. Use this legacy directory only if you specifically want the Kivy version; the recommended client is `mobile_pyside6/`.
-
-### Remote actions currently implemented
-
-* Remote text input, common special keys, modifier keys, and allowlisted shortcuts.
-* System media keys for volume, mute, playback, previous/next track, and stop.
-* Explicit clipboard send/read actions (automatic background clipboard
-  synchronization is not implemented).
-* Fixed, approved app shortcuts (browser, File Explorer, Calculator, Notepad,
-  and the Downloads folder); arbitrary shell commands are not accepted.
-* Presentation key controls, PC name/OS/local-time status, and permission-gated
-  power actions. Disruptive power actions require confirmation on the phone.
-* A desktop permission panel. All remote-action permissions, including power,
-  start disabled and must be enabled by the PC user.
-
-### Current scope and compatibility
-
-This update changes the remote transport from raw TCP to TLS. **The desktop
-server and phone client must be updated together**; an older phone client that
-expects an unencrypted connection will not connect to the updated server.
-The existing pairing code still establishes device trust after the TLS pin is
-verified. The TLS certificate pin provides transport identity, while the
-pairing flow provides the app's trusted-device authorization.
-
-Automatic LAN discovery, automatic reconnection, bidirectional file transfers,
-URL sharing/history, screenshots/live screen preview, Windows notification
-forwarding, battery/CPU/RAM telemetry, custom user-defined app shortcuts, and
-a dedicated presentation UI are not implemented by this milestone and are not
-advertised as available features. Clipboard synchronization is explicit only;
-there is no background clipboard polling.
-
-### Mobile clients
-
-`phone_client_with_auth.py` remains the Kivy/Android-friendly client. It now has
-a dedicated **Keyboard** tab and opens a focused **Secure pairing** popup for
-the code shown in the desktop Server page.
-
-`phone_client_pyside6.py` is a completely self-contained PySide6 client. It
-contains Connect, Controller, Mouse, Keyboard, and Settings tabs in one file,
-persists the device identity and last server, and uses the same authenticated
-newline-delimited protocol. Run it with:
-
-```text
-python phone_client_pyside6.py
-```
+- Remote text, common keys, modifiers, and allowlisted keyboard shortcuts.
+- Media keys for volume, mute, playback, and track controls.
+- Explicit clipboard read/write; background clipboard synchronization is not
+  implemented.
+- Approved app shortcuts only; arbitrary shell commands are not accepted.
+- Presentation controls, PC status, and permission-gated power actions.
+- A desktop permission panel. Optional remote-action permissions start disabled
+  and must be enabled by the PC user.
 
 ## Configuration Files
 
@@ -539,46 +511,6 @@ Conceptually:
 ```
 
 This separation makes it possible to extend the project with additional input and output methods without tightly coupling them to the GUI.
-
-## Remote Client
-
-The recommended phone-client source is the **PySide6 Mobile** client in
-`mobile_pyside6/main.py`. Its current CI workflow validates the source and unit tests only; it does not build or publish an APK/AAB. To run this as a native Android app, the Python, Qt and PySide runtime still has to be packaged as documented by [Qt for Python](https://doc.qt.io/qtforpython-6/deployment/deployment-pyside6-android-deploy.html).
-
-The previous Kivy implementation remains available separately in
-`mobile_kivy_legacy/main.py` as the **Legacy Kivy Mobile** version. The two clients
-share the desktop protocol, while the PySide6 source provides Connect, Gamepad,
-Mouse and Settings screens, secure QR pairing, one-finger pointer
-movement, two-finger scrolling, optional tap-to-click and adjustable mouse
-sensitivity. The mobile UI supports portrait and landscape layouts, touch scrolling,
-and a full-screen Gamepad Focus mode. Source-only tests do not prove access to real
-phone camera/sensors.
-
-## Browser Web Companion
-
-The desktop app includes a separate **Web Companion** tab. It starts an HTTPS
-Flask server that lets a phone, tablet, or another PC use a browser as a controller;
-no native phone app or APK is needed for this browser interface.
-
-1. Install the desktop requirements and start InputBridge on Windows.
-2. Open **Web Companion**, select a local HTTPS port (default 8765), and choose
-   **Start Web Server**.
-3. Scan its QR code with the phone camera, or open the displayed URL and enter
-   the short-lived pairing code. Both devices need to be on the same trusted LAN.
-4. If the browser warns about the self-signed HTTPS certificate, compare its
-   SHA-256 fingerprint against the one displayed in the desktop tab before
-   proceeding. The native client verifies its certificate pin in-app; browser
-   certificate trust must be handled by the browser itself.
-5. Use the browser's **Gamepad**, **Touch mouse**, and **PC Remote** tabs. Keyboard,
-   media, clipboard, approved app shortcuts, presentation and power commands
-   continue to obey the permissions configured on the desktop **Server** tab.
-
-Each paired browser gets a separate virtual XInput controller. The web service
-supports up to eight browser sessions at once and runs on port 8765 by default,
-separately from the native phone socket server on port 5000. Stop the Web
-Companion server when it is no longer needed and do not expose it to untrusted
-networks. Its temporary pairing code expires after five minutes; inactive browser
-sessions release input state automatically.
 
 ## Project Status
 

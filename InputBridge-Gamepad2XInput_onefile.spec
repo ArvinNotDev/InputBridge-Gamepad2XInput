@@ -44,7 +44,6 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["kivy", "phone_client_with_auth"],
     noarchive=False,
 )
 

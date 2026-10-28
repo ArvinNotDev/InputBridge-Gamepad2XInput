@@ -177,8 +177,8 @@ class WebRemotePage(QWidget):
             "The web companion uses HTTPS, temporary pairing codes, per-browser session tokens, "
             "bounded input messages, an idle-session watchdog and the same desktop permissions as PC Remote. "
             "Browsers may warn about this app's self-signed certificate: compare the SHA-256 fingerprint "
-            "above with the value shown by the PC, and only proceed on your trusted network. Unlike the "
-            "native phone client, a browser cannot silently pin this certificate from JavaScript."
+            "above with the value shown by the PC, and only proceed on your trusted network. A web page "
+            "cannot silently pin this certificate from JavaScript."
         )
         security_body.setWordWrap(True)
         security_body.setObjectName("webMuted")

@@ -119,9 +119,9 @@ def ensure_web_server_identity(
 ) -> tuple[Path, Path]:
     """Create a web-only identity whose SANs include the host/IP used in the QR URL.
 
-    The native phone server keeps its existing pinned certificate. A LAN IP change
+    The legacy TCP remote-client server keeps its existing pinned certificate. A LAN IP change
     may rotate this separate browser identity, but never silently rotates the
-    certificate pinned by the native mobile client.
+    certificate pinned by compatible remote clients.
     """
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization

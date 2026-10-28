@@ -507,7 +507,7 @@ class Mapper:
 
 class Phone_mapper:
     """
-    Maps input from a network client (phone) to an emulator (X360 or keyboard).
+    Maps input from an authenticated remote client to an emulator.
     """
 
     def __init__(
@@ -544,7 +544,7 @@ class Phone_mapper:
 
     def handle_hid_data(self, data: dict) -> None:
         """
-        Dispatch JSON gamepad state from phone to the appropriate handler.
+        Dispatch normalized remote gamepad state to the appropriate handler.
         """
         if not self._connected:
             return
@@ -587,7 +587,7 @@ class Phone_mapper:
             self._mouse_buttons[name] = pressed
 
     def handle_keyboard_data(self, data: dict) -> None:
-        """Apply a bounded text/key event received from a phone client."""
+        """Apply a bounded text/key event received from a remote client."""
         if not self._connected or not isinstance(data, dict) or _keyboard is None:
             return
         action = data.get("action", "text")
@@ -602,7 +602,7 @@ class Phone_mapper:
                 _keyboard.release(key)
         except Exception:
             # A disconnected desktop session or unsupported key should not
-            # tear down the phone connection.
+            # tear down the remote connection.
             return
 
     def release_mouse_buttons(self) -> None:
@@ -622,7 +622,7 @@ class Phone_mapper:
 
     def _handle_keyboard_input(self, data: dict) -> None:
         """
-        Placeholder for keyboard emulation mapping from phone input.
+        Placeholder for keyboard emulation mapping from controller input.
         """
         pass
 
@@ -649,7 +649,7 @@ class Phone_mapper:
         invertion: Tuple[bool, bool],
     ) -> Tuple[int, int]:
         """
-        Apply deadzone and inversion for phone joystick input (0–255).
+        Apply deadzone and inversion for remote joystick input (0–255).
         """
         invert_x, invert_y = invertion
 
@@ -689,12 +689,12 @@ class Phone_mapper:
             self.hotkey_commander.do(func, False)
 
     # -------------------------------------------------------------------------
-    # X360 mapping (phone JSON)
+    # X360 mapping (remote-controller JSON)
     # -------------------------------------------------------------------------
 
     def _handle_x360_input(self, data: dict) -> None:
         """
-        Decode JSON controller state from phone and forward it to the X360 emulator.
+        Decode JSON controller state and forward it to the X360 emulator.
         """
         buttons = data.get("buttons", {})
         analog = data.get("analog", {})

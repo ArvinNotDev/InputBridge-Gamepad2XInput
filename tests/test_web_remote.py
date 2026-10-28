@@ -1,7 +1,7 @@
 from core.web_remote import validate_web_controller_state
 
 
-def _install_mock_phone_mappers(monkeypatch):
+def _install_mock_mappers(monkeypatch):
     """Provide pair-route mappers without importing Windows/HID dependencies."""
     import sys
     import types
@@ -9,7 +9,7 @@ def _install_mock_phone_mappers(monkeypatch):
 
     instances = []
 
-    class MockPhoneMapper:
+    class MockMapper:
         def __init__(self, uuid, _emulate_to, _controllers_page, _hotkey_page, _settings):
             self.uuid = uuid
             self.emulator = SimpleNamespace(device_path=uuid)
@@ -49,7 +49,7 @@ def _install_mock_phone_mappers(monkeypatch):
             self.calls.append("shutdown")
 
     mapper_module = types.ModuleType("core.mapper")
-    mapper_module.Phone_mapper = MockPhoneMapper
+    mapper_module.Phone_mapper = MockMapper
     monkeypatch.setitem(sys.modules, "core.mapper", mapper_module)
     return instances
 
@@ -110,7 +110,7 @@ def test_flask_serves_responsive_ui_and_security_headers():
     assert page.headers["X-Frame-Options"] == "DENY"
 
 
-def test_flask_serves_mobile_focus_and_touch_gesture_styles():
+def test_flask_serves_responsive_focus_and_touch_gesture_styles():
     from core.web_remote import WebRemoteServer
 
     client = WebRemoteServer(object(), object(), object()).app.test_client()
@@ -136,6 +136,19 @@ def test_public_server_info_reports_the_tls_fingerprint_and_https_scheme():
     assert response.get_json()["secure"] is True
 
 
+def test_pairing_url_carries_code_and_public_fingerprint_in_the_fragment():
+    from core.web_remote import WebRemoteServer
+
+    server = WebRemoteServer(object(), object(), object(), host="192.168.1.20", port=8765)
+    server._advertised_host = "192.168.1.20"
+    server.pairing_code = "123456"
+    server.fingerprint = "AB" * 32
+
+    assert server.pairing_url() == (
+        "https://192.168.1.20:8765/#pair=123456&fp=" + "AB" * 32
+    )
+
+
 def test_pairing_and_state_endpoints_reject_bad_or_missing_credentials():
     from core.web_remote import WebRemoteServer
 
@@ -150,7 +163,7 @@ def test_browser_keyboard_actions_keep_permissions_validation_and_session_state_
     import core.remote_actions as remote_actions
     import core.web_remote as web_remote
 
-    _install_mock_phone_mappers(monkeypatch)
+    _install_mock_mappers(monkeypatch)
     permissions = {
         "keyboard": True, "media": False, "clipboard": False,
         "app_launch": False, "presentation": False, "power": False,
@@ -205,7 +218,7 @@ def test_browser_keyboard_actions_keep_permissions_validation_and_session_state_
 def test_paired_browsers_have_distinct_mappers_and_isolated_inputs(monkeypatch):
     from core.web_remote import WebRemoteServer
 
-    mappers = _install_mock_phone_mappers(monkeypatch)
+    mappers = _install_mock_mappers(monkeypatch)
     registered = []
     server = WebRemoteServer(object(), object(), object(), mapper_added=registered.append)
     token_a = _pair_browser(server, "Browser A")
@@ -262,7 +275,7 @@ def test_paired_browsers_have_distinct_mappers_and_isolated_inputs(monkeypatch):
 def test_switching_one_browser_mode_does_not_reset_the_other_mapper(monkeypatch):
     from core.web_remote import WebRemoteServer
 
-    mappers = _install_mock_phone_mappers(monkeypatch)
+    mappers = _install_mock_mappers(monkeypatch)
     server = WebRemoteServer(object(), object(), object())
     token_a = _pair_browser(server, "Browser A")
     token_b = _pair_browser(server, "Browser B")
@@ -280,7 +293,7 @@ def test_switching_one_browser_mode_does_not_reset_the_other_mapper(monkeypatch)
 def test_disconnect_releases_only_its_browser_and_other_browser_remains_active(monkeypatch):
     from core.web_remote import WebRemoteServer
 
-    mappers = _install_mock_phone_mappers(monkeypatch)
+    mappers = _install_mock_mappers(monkeypatch)
     server = WebRemoteServer(object(), object(), object())
     token_a = _pair_browser(server, "Browser A")
     token_b = _pair_browser(server, "Browser B")
@@ -308,7 +321,7 @@ def test_expired_browser_session_is_closed_and_cannot_send_more_commands(monkeyp
     import time
     from core.web_remote import SESSION_IDLE_SECONDS, WebRemoteServer
 
-    mappers = _install_mock_phone_mappers(monkeypatch)
+    mappers = _install_mock_mappers(monkeypatch)
     server = WebRemoteServer(object(), object(), object())
     token_a = _pair_browser(server, "Browser A")
     token_b = _pair_browser(server, "Browser B")
@@ -336,7 +349,7 @@ def test_expired_browser_session_is_closed_and_cannot_send_more_commands(monkeyp
 def test_repeated_pair_and_disconnect_cycles_leave_no_live_sessions_or_mappers(monkeypatch):
     from core.web_remote import WebRemoteServer
 
-    mappers = _install_mock_phone_mappers(monkeypatch)
+    mappers = _install_mock_mappers(monkeypatch)
     server = WebRemoteServer(object(), object(), object())
     for index in range(4):
         token = _pair_browser(server, f"Browser {index}")
@@ -361,7 +374,7 @@ def test_concurrent_mode_changes_on_one_browser_are_serialized(monkeypatch):
     import threading
     from core.web_remote import WebRemoteServer
 
-    mappers = _install_mock_phone_mappers(monkeypatch)
+    mappers = _install_mock_mappers(monkeypatch)
     server = WebRemoteServer(object(), object(), object())
     token = _pair_browser(server, "Browser A")
     mapper = mappers[0]

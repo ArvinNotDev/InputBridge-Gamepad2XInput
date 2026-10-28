@@ -456,13 +456,14 @@ class ServerPage(QWidget):
 
         self.fingerprint_label = QLabel(
             "TLS certificate fingerprint: start the server to create this PC's identity. "
-            "The QR pairs the phone without manually copying this public fingerprint."
+            "The QR pairs a compatible remote client without manually copying this public fingerprint. "
+            "Browser sessions use the separate Web Companion QR."
         )
         self.fingerprint_label.setObjectName("tlsFingerprintLabel")
         self.fingerprint_label.setWordWrap(True)
         self.fingerprint_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
 
-        self.pairing_qr_button = QPushButton("Show Phone Pairing QR")
+        self.pairing_qr_button = QPushButton("Show Remote Client QR")
         self.pairing_qr_button.setCursor(Qt.PointingHandCursor)
         self.pairing_qr_button.setFixedHeight(40)
         self.pairing_qr_button.setObjectName("pairingQrButton")
@@ -755,20 +756,20 @@ class ServerPage(QWidget):
             return
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("InputBridge — Secure Phone Pairing")
+        dialog.setWindowTitle("InputBridge — Secure Remote Client Pairing")
         dialog.setMinimumSize(420, 520)
         content = QVBoxLayout(dialog)
         content.setContentsMargins(22, 18, 22, 18)
         content.setSpacing(10)
 
-        title = QLabel("Pair your phone securely")
+        title = QLabel("Pair a compatible remote client securely")
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size:20px; font-weight:700; color:#0f766e;")
         content.addWidget(title)
 
         explanation = QLabel(
-            f"Connect your phone to the same network, open InputBridge, and tap "
-            f"“Scan Pairing QR”.\nPC address: {host}:{PORT}"
+            f"Connect a compatible remote client to the same network and scan this QR. "
+            f"Browser users should scan the Web Companion QR instead.\nPC address: {host}:{PORT}"
         )
         explanation.setWordWrap(True)
         explanation.setAlignment(Qt.AlignCenter)
@@ -863,7 +864,7 @@ class ServerPage(QWidget):
             secure_conn = self.tls_context.wrap_socket(
                 raw_conn, server_side=True, do_handshake_on_connect=False
             )
-            # Give mobile devices more time for a TLS handshake over busy Wi-Fi.
+            # Give remote clients more time for a TLS handshake over busy Wi-Fi.
             secure_conn.settimeout(10.0)
             secure_conn.do_handshake()
             secure_conn.settimeout(0.5)
@@ -1003,7 +1004,7 @@ class ServerPage(QWidget):
                                         except OSError as exc:
                                             trusted_saved = False
                                             print(
-                                                f"[Server] Could not save trusted phone: {exc}"
+                                                f"[Server] Could not save trusted remote client: {exc}"
                                             )
                                         else:
                                             trusted_saved = True
@@ -1128,7 +1129,7 @@ class ServerPage(QWidget):
                     mapper.release_mouse_buttons()
                     mapper.shutdown()
                 except Exception as exc:
-                    print(f"[Server] Failed to shutdown phone mapper: {exc}")
+                    print(f"[Server] Failed to shut down remote mapper: {exc}")
             try:
                 conn.close()
             except OSError:
