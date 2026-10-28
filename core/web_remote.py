@@ -446,12 +446,8 @@ class WebRemoteServer:
                     return jsonify({"ok": False, "error": "Could not register this controller with the desktop UI."}), 500
             return jsonify({"ok": True, "token": token, "name": session["name"]})
 
-        @app.get("/api/stream")
+        @app.route("/api/stream", methods=["GET"], websocket=True)
         def stream():
-            # Keep this as a regular WSGI route: simple-websocket performs the
-            # upgrade against Werkzeug's underlying socket in the request environ.
-            if request.headers.get("Upgrade", "").lower() != "websocket":
-                return jsonify({"ok": False, "error": "WebSocket upgrade required."}), 426
             # One authenticated persistent channel carries state snapshots. This
             # avoids a TLS/HTTP request-response round trip for every touch move.
             try:
