@@ -28,9 +28,14 @@ cd "$PYSIDE_SETUP_DIR"
 python -m pip install -r requirements.txt -r tools/cross_compile_android/requirements.txt
 python tools/cross_compile_android/main.py --plat-name aarch64 --download-only --skip-update --auto-accept-license
 
-NDK_ROOT="$(find "$HOME/.pyside6_android_deploy/android-ndk" -mindepth 1 -maxdepth 1 -type d -name 'android-ndk-r*' -print -quit)"
+NDK_ROOT="$(python -c 'from pathlib import Path; import sys; root=Path(sys.argv[1]); candidates=[p for p in root.glob("android-ndk-r*") if p.is_dir() and list(p.glob("toolchains/llvm/prebuilt/*/bin/llvm-readobj")) and list(p.glob("toolchains/llvm/prebuilt/*/bin/clang"))]; print(sorted(candidates)[-1] if candidates else "")' "$HOME/.pyside6_android_deploy/android-ndk")"
 SDK_ROOT="$HOME/.pyside6_android_deploy/android-sdk"
-test -n "$NDK_ROOT" && test -d "$SDK_ROOT"
+if [ -z "$NDK_ROOT" ]; then
+  echo "No extracted Android NDK with llvm-readobj/clang was found in the Qt Android cache." >&2
+  ls -la "$HOME/.pyside6_android_deploy/android-ndk" >&2 || true
+  exit 1
+fi
+test -d "$SDK_ROOT"
 
 # Use the official Qt for Python wheels. The CPython _ctypes/libffi and
 # host Clang/Shiboken generator source builds are intentionally avoided.

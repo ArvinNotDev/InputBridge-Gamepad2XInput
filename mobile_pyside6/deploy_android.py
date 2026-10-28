@@ -132,10 +132,25 @@ def main() -> int:
 
     cache = Path.home() / ".pyside6_android_deploy"
     ndk_root = cache / "android-ndk"
-    ndk_candidates = sorted(ndk_root.glob("android-ndk-r*")) if ndk_root.is_dir() else []
+    # The downloader may leave an archive or stale directory whose name
+    # matches android-ndk-r*. Pick only an extracted NDK that actually contains
+    # the LLVM utilities required by Qt's dependency scanner.
+    ndk_candidates = []
+    if ndk_root.is_dir():
+        for candidate in ndk_root.glob("android-ndk-r*"):
+            if not candidate.is_dir():
+                continue
+            readobj = list(candidate.glob("toolchains/llvm/prebuilt/*/bin/llvm-readobj"))
+            clang = list(candidate.glob("toolchains/llvm/prebuilt/*/bin/clang"))
+            if readobj and clang:
+                ndk_candidates.append(candidate)
     sdk_path = cache / "android-sdk"
     if not ndk_candidates:
-        raise FileNotFoundError(f"Android NDK was not found under {ndk_root}")
+        found = ", ".join(path.name for path in ndk_root.glob("android-ndk-r*")) if ndk_root.is_dir() else "directory missing"
+        raise FileNotFoundError(
+            f"No extracted Android NDK with llvm-readobj and clang was found under {ndk_root}. "
+            f"Entries seen: {found}. Re-run the SDK/NDK download step and remove stale archives if necessary."
+        )
     if not sdk_path.is_dir():
         raise FileNotFoundError(f"Android SDK was not found under {sdk_path}")
 
