@@ -1,7 +1,11 @@
 # VPadConnect
 
 <p align="center">
-  <img src="docs/branding/vpadconnect-logo.svg" alt="VPadConnect — Virtual Gamepad. Connected Control." width="760">
+  <img src="ui/assets/vpadconnect-icon.ico" alt="VPadConnect application icon" width="88">
+</p>
+
+<p align="center">
+  <img src="docs/branding/vpadconnect-logo.svg" alt="VPadConnect — Virtual Gamepad. Connected Control." width="700">
 </p>
 
 <p align="center">
@@ -224,8 +228,8 @@ tablet, or another computer. It serves the touch-friendly interface over HTTPS;
 no native mobile app is required.
 
 1. Start VPadConnect on Windows, open **Web Companion**, and choose **Start Web Server**.
-2. Scan the desktop's Web Companion QR code with the phone's built-in camera, or
-   open the displayed URL. Both devices should be on the same trusted network.
+2. Open the displayed HTTPS URL or scan the QR code. Both devices must be on the
+   same Wi-Fi/LAN; use the PC's displayed address on port **8765**.
 3. The QR opens the browser at the Web Companion URL and carries the short-lived
    pairing code and certificate fingerprint in the URL fragment. The page fills
    the code automatically. If entering the URL manually, enter the code shown on
@@ -275,8 +279,7 @@ expose those workflows for the browser to migrate.
   implemented.
 - Approved app shortcuts only; arbitrary shell commands are not accepted.
 - Presentation controls, PC status, and permission-gated power actions.
-- A desktop permission panel. Optional remote-action permissions start disabled
-  and must be enabled by the PC user.
+- A desktop permission panel for remote actions. Permissions are enabled by default and can be changed from Web Companion settings.
 
 ## Configuration Files
 
