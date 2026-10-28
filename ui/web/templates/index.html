@@ -14,7 +14,7 @@
 
 <section id="workspace" class="hidden">
 <div class="heading"><div><div class="eyebrow">REMOTE CONSOLE</div><h1 id="welcome">Your desktop</h1><p class="muted">Gamepad, touch mouse and PC tools in one place.</p></div><button id="focus" class="btn ghost" type="button" aria-pressed="false">⛶ Focus</button></div>
-<nav class="tabs"><button class="tab active" data-tab="gamepad">◉ Gamepad</button><button class="tab" data-tab="mouse">⌁ Touch mouse</button><button class="tab" data-tab="remote">⌨ PC Remote</button><button class="tab" data-tab="session">⚙ Session</button></nav>
+<nav class="tabs"><button class="tab active" data-tab="gamepad">◉ Gamepad</button><button class="tab" data-tab="mouse">⌁ Touch mouse</button><button class="tab" data-tab="remote">⌨ PC Remote</button><button class="tab" data-tab="session">⚙ Settings</button></nav>
 
 <section id="view-gamepad" class="view active">
 <div class="toolbar"><div><h2>Virtual controller</h2><p class="muted">Touch the controls to play. In landscape, the full controller stays on screen.</p></div><div class="mode-switch"><button id="standard" class="mode active" type="button">Standard</button><button id="driving" class="mode" type="button">Driving</button></div><button id="exitFocus" class="btn ghost focus-exit" type="button" aria-pressed="false">✕ Exit Focus</button></div>
@@ -28,7 +28,7 @@
 <section id="view-mouse" class="view"><article class="panel mouse-panel"><h2>Touch mouse</h2><p class="muted">Drag to move the Windows pointer. Use the wheel or two fingers to scroll.</p>
 <div id="touchpad" class="touchpad"><div class="touchgrid"></div><span>DRAG TO MOVE</span></div><div class="mouse-row"><button class="btn primary" data-mouse="left">Left click</button><button class="btn" data-mouse="right">Right click</button><button class="btn" data-mouse="middle">Middle click</button></div>
 <div class="mouse-row"><button id="scrollUp" class="btn">↑ Scroll up</button><button id="scrollDown" class="btn">↓ Scroll down</button><button id="mouseMode" class="btn ghost">Use mouse output</button></div>
-<div class="mouse-settings"><label for="mouseSensitivity">Pointer sensitivity <output id="mouseSensitivityValue">1.7×</output></label><input id="mouseSensitivity" type="range" min="5" max="40" value="17"><label class="check"><input id="tapToClick" type="checkbox" checked> Tap trackpad to click</label></div>
+
 </article></section>
 
 <section id="view-remote" class="view"><div class="remote-grid">
@@ -45,8 +45,40 @@
 <article class="panel danger"><h2>Power actions</h2><p class="muted">Only available when enabled on the PC. Destructive actions ask for confirmation.</p><div class="row wrap"><button class="btn" data-power="lock" data-permission="power">Lock</button><button class="btn" data-power="sleep" data-permission="power">Sleep</button><button class="btn" data-power="logoff" data-permission="power">Log off</button><button class="btn" data-power="display_off" data-permission="power">Display off</button><button class="btn danger-btn" data-power="restart" data-permission="power">Restart</button><button class="btn danger-btn" data-power="shutdown" data-permission="power">Shut down</button></div></article>
 </div></section>
 
-<section id="view-session" class="view"><article class="panel"><h2>Desktop status</h2><p id="pcStatus" class="muted">Connect to load desktop status.</p><button id="refresh" class="btn primary">Refresh status</button></article>
+<section id="view-session" class="view">
+<div class="settings-grid">
+<article class="panel settings-card">
+<div class="settings-card-head"><span class="settings-icon">⌁</span><div><h2>Touchpad & mouse</h2><p class="muted">Tune pointer movement and scrolling.</p></div></div>
+<label for="mouseSensitivity">Pointer sensitivity <output id="mouseSensitivityValue">1.7×</output></label><input id="mouseSensitivity" type="range" min="5" max="40" value="17">
+<label for="scrollSensitivity">Scroll speed <output id="scrollSensitivityValue">1.0×</output></label><input id="scrollSensitivity" type="range" min="5" max="30" value="10">
+<label class="check setting-toggle"><input id="reverseScroll" type="checkbox"> Reverse scrolling direction</label>
+<label class="check setting-toggle"><input id="tapToClick" type="checkbox" checked> Tap trackpad to click</label>
+</article>
+<article class="panel settings-card">
+<div class="settings-card-head"><span class="settings-icon">🎮</span><div><h2>Controller</h2><p class="muted">Choose your familiar layout and steering response.</p></div></div>
+<div class="setting-row"><div><strong>Button layout</strong><span class="muted">Face-button symbols and shoulder labels</span></div><button id="settingsControllerStyle" class="btn ghost" type="button">Xbox layout</button></div>
+<label for="settingsSteeringSensitivity">Gyro steering sensitivity <output id="settingsSteeringSensitivityValue">1.0×</output></label><input id="settingsSteeringSensitivity" type="range" min="5" max="40" value="10">
+<p class="setting-hint">Use Driving mode and Calibrate center on the Gamepad tab to set a neutral phone angle.</p>
+</article>
+<article class="panel settings-card">
+<div class="settings-card-head"><span class="settings-icon">✦</span><div><h2>Feedback & display</h2><p class="muted">Make mobile play more comfortable.</p></div></div>
+<label class="check setting-toggle"><input id="hapticsEnabled" type="checkbox"> Haptic feedback on button press</label>
+<p class="setting-hint">Uses short phone vibration where the browser and device support it.</p>
+<label class="check setting-toggle"><input id="keepScreenAwake" type="checkbox"> Keep screen awake while connected</label>
+<p id="wakeLockStatus" class="setting-hint">Screen wake lock is off.</p>
+</article>
+<article class="panel settings-card settings-reset-card">
+<div class="settings-card-head"><span class="settings-icon">↺</span><div><h2>Preferences</h2><p class="muted">Settings are saved in this browser.</p></div></div>
+<p class="setting-hint">Reset pointer, scrolling, controller, and feedback options to their defaults.</p>
+<button id="resetSettings" class="btn ghost" type="button">Restore default settings</button>
+</article>
+</div>
+<div class="settings-section-label">Connection</div>
+<div class="settings-grid connection-settings">
+<article class="panel"><h2>Desktop status</h2><p id="pcStatus" class="muted">Connect to load desktop status.</p><button id="refresh" class="btn primary">Refresh status</button></article>
 <article class="panel"><h2>This browser</h2><p id="sessionInfo" class="muted">Paired controller</p><button id="disconnect" class="btn danger-btn">Disconnect this device</button></article>
-<article class="panel"><h2>Security & permissions</h2><p class="muted">Each browser gets its own virtual controller. PC actions remain allowlisted and permission-gated by VPadConnect. Inactive sessions release held controls automatically.</p><p id="permissionSummary" class="permission-summary">Permissions load from the PC.</p><p id="actionMessage" class="message"></p></article></section>
+<article class="panel"><h2>Security & permissions</h2><p class="muted">Each browser gets its own virtual controller. PC actions remain allowlisted and permission-gated by VPadConnect. Inactive sessions release held controls automatically.</p><p id="permissionSummary" class="permission-summary">Permissions load from the PC.</p><p id="actionMessage" class="message"></p></article>
+</div>
+</section>
 </section>
 </main><footer><span>VPadConnect · Web Companion</span><span>Trusted LAN · HTTPS</span></footer></div><div id="toast" class="toast"></div></body></html>
