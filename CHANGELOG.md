@@ -7,10 +7,11 @@ here. Version numbers follow semantic-versioning conventions where practical.
 
 ### Mobile controller responsiveness and customization
 
-- Removed the fixed 40 ms state-send throttle. Touch, stick, trigger, mouse, and
-  motion-steering changes now coalesce to the latest state while one request is
-  in flight, and idle clients use a low-frequency keepalive instead of streaming
-  unchanged state continuously.
+- Replaced per-move HTTPS requests and the 1.8-second application heartbeat
+  with one authenticated persistent WebSocket per browser. Dirty input snapshots
+  are sent on the animation-frame loop without waiting for per-update HTTP replies;
+  the WebSocket's ping/pong and disconnect cleanup keep sessions live and release
+  held controls. The HTTP state endpoint remains as a compatibility fallback.
 - Added full-screen Edit layout mode with drag-and-drop positions for control
   groups, individual face buttons, and D-pad directions. Added Classic, Racing,
   Left-handed, and Compact presets with browser-local persistence.
