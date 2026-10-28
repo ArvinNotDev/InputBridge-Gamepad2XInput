@@ -17,6 +17,7 @@ from PySide6.QtCore import (
     QRect,
     Qt,
     QObject,
+    Property,
 )
 from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (
@@ -65,9 +66,7 @@ class AnimatedTabBar(QTabBar):
         self._indicator_rect = QRect(rect)
         self.update()
 
-    indicatorRect = __import__("PySide6.QtCore", fromlist=["Property"]).Property(
-        QRect, get_indicator_rect, set_indicator_rect
-    )
+    indicatorRect = Property(QRect, get_indicator_rect, set_indicator_rect)
 
     def _target_indicator_rect(self, index: int) -> QRect:
         if index < 0 or index >= self.count():
