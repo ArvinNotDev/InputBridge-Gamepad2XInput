@@ -231,7 +231,7 @@ def scroll_page(title: str, description: str) -> tuple[QWidget, QVBoxLayout]:
     # Use kinetic touch scrolling on phones/tablets rather than requiring a
     # scrollbar drag; native button/stick gestures still go to their widgets.
     try:
-        QScroller.grabGesture(scroll.viewport(), QScroller.ScrollerGesture)
+        QScroller.grabGesture(scroll.viewport(), QScroller.ScrollerGestureType.TouchGesture)
     except (AttributeError, RuntimeError):
         pass
     inside = QWidget()
