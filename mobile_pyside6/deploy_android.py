@@ -21,6 +21,22 @@ if not (script_dir / "android_deploy.py").is_file():
     raise RuntimeError(f"Qt Android deploy script is missing from {script_dir}")
 sys.path.insert(0, str(script_dir))
 
+# Match the prerequisite check performed by Qt's console-script wrapper. The
+# helper calls android_deploy.main() directly so it can patch the generated
+# Buildozer config before the Android build starts.
+import importlib.util
+import subprocess
+
+requirements_file = script_dir / "requirements-android.txt"
+if requirements_file.is_file():
+    missing = []
+    for line in requirements_file.read_text(encoding="utf-8").splitlines():
+        package = line.strip().split("==", 1)[0]
+        if package and not package.startswith("#") and not importlib.util.find_spec(package):
+            missing.append(package)
+    if missing:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(requirements_file)])
+
 from deploy_lib.android.buildozer import Buildozer  # noqa: E402
 import android_deploy  # noqa: E402
 
