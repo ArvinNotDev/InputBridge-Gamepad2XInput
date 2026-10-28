@@ -104,13 +104,20 @@ class AnimatedTabBar(QTabBar):
         self._indicator_animation.setEndValue(target)
         self._indicator_animation.start()
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        # Tab geometry is final after the bar is shown, so paint the initial
+        # underline at the active tab instead of animating from an empty rect.
+        self._indicator_rect = self._target_indicator_rect(self.currentIndex())
+        self.update()
+
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._indicator_animation.stop()
         self._indicator_rect = self._target_indicator_rect(self.currentIndex())
         self.update()
 
-    def paintEvent(self, event) -> None:
+    def paintEvent(self, event) -> None
         super().paintEvent(event)
         rect = self._indicator_rect
         if rect.width() <= 0 or rect.height() <= 0:
