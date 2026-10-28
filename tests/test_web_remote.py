@@ -103,8 +103,11 @@ def test_persistent_controller_stream_route_is_registered():
     server = WebRemoteServer(object(), object(), object())
     routes = {rule.rule: rule for rule in server.app.url_map.iter_rules()}
     assert "/api/stream" in routes
-    assert getattr(routes["/api/stream"], "websocket", False) is True
+    assert routes["/api/stream"].endpoint.endswith("stream")
+    assert "GET" in routes["/api/stream"].methods
     assert "/api/state" in routes
+    response = server.app.test_client().get("/api/stream")
+    assert response.status_code == 426
 
 
 def test_flask_serves_responsive_ui_and_security_headers():
