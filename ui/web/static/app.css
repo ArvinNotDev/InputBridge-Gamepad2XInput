@@ -409,3 +409,35 @@ body.focus-mode #view-mouse .mouse-row{flex-shrink:0;margin-top:6px}
 body.focus-mode #view-mouse .mouse-row .btn{min-height:40px}
 @media(max-width:520px){.mouse-heading{align-items:flex-start}.mouse-live-indicator{font-size:8px;padding:6px 8px}.air-mouse-tools{padding:11px}.air-mouse-actions .btn{flex:1;padding-left:10px;padding-right:10px}.air-mouse-sensitivity{flex-wrap:wrap}.air-mouse-sensitivity input[type=range]{width:100%}}
 @media(orientation:landscape) and (max-height:560px){.air-mouse-tools{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center}.air-mouse-actions{grid-row:span 2}.air-mouse-sensitivity{display:grid;grid-template-columns:auto 1fr;gap:4px}.air-mouse-sensitivity input[type=range]{width:100%}body.focus-mode #view-mouse .air-mouse-tools{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+
+/* ViGEmBus is optional for the rest of Web Companion. Keep unavailable XInput
+   controls visible but blurred, and let the notice remain fully interactive. */
+#view-gamepad{position:relative;isolation:isolate}
+#view-gamepad.gamepad-unavailable .toolbar,
+#view-gamepad.gamepad-unavailable .motion-row,
+#view-gamepad.gamepad-unavailable #controller,
+#view-gamepad.gamepad-unavailable .controller-footer{
+  filter:blur(5px);opacity:.48;pointer-events:none;user-select:none;
+}
+#view-gamepad .gamepad-unavailable-notice{
+  position:absolute;z-index:8;top:48%;left:50%;transform:translate(-50%,-50%);
+  width:min(620px,calc(100% - 24px));padding:clamp(20px,4vw,32px);
+  border:1px solid #745b3b;border-radius:20px;
+  background:linear-gradient(145deg,rgba(36,31,27,.98),rgba(20,27,40,.98));
+  box-shadow:0 28px 80px #0009;text-align:center;backdrop-filter:blur(16px);
+}
+.gamepad-notice-icon{width:54px;height:54px;display:grid;place-items:center;margin:0 auto 14px;
+  border:1px solid #98734b;border-radius:17px;background:#5a4027;color:#ffe0b2;
+  font-size:28px;font-weight:900}
+.gamepad-unavailable-notice h2{font-size:clamp(20px,3vw,26px);margin:0 0 10px}
+.gamepad-unavailable-notice p{color:#e2d1bb;font-size:13px;margin:0 auto 12px;max-width:490px}
+.gamepad-unavailable-notice p.muted{color:#a5b4cb}
+.gamepad-notice-actions{display:flex;justify-content:center;align-items:center;gap:9px;flex-wrap:wrap;margin-top:18px}
+.gamepad-notice-actions .btn{min-height:44px;text-decoration:none}
+.tab.unavailable{border-color:#745b3b;color:#e7c59a}
+.tab.unavailable::after{content:" · driver needed";font-size:10px;color:#deb47b}
+@media(max-width:600px){
+  #view-gamepad .gamepad-unavailable-notice{top:50%;padding:20px 16px}
+  .gamepad-notice-actions{align-items:stretch;flex-direction:column}
+  .gamepad-notice-actions .btn{width:100%}
+}
