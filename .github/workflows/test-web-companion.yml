@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "core/mouse.py"
       - "core/web_remote.py"
       - "core/remote_protocol.py"
       - "core/remote_actions.py"
@@ -17,12 +18,14 @@ on:
       - "tests/test_remote_protocol.py"
       - "tests/test_remote_actions.py"
       - "tests/test_remote_security.py"
+      - "tests/test_mouse_failsafe.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "VPadConnect*.spec"
       - ".github/workflows/test-web-companion.yml"
   pull_request:
     paths:
+      - "core/mouse.py"
       - "core/web_remote.py"
       - "core/remote_protocol.py"
       - "core/remote_actions.py"
@@ -36,6 +39,7 @@ on:
       - "tests/test_remote_protocol.py"
       - "tests/test_remote_actions.py"
       - "tests/test_remote_security.py"
+      - "tests/test_mouse_failsafe.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "VPadConnect*.spec"
@@ -68,6 +72,9 @@ jobs:
       - name: Compile changed Python modules
         run: |
           python -m compileall -q core/mouse.py tests/test_mouse_failsafe.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/pages/settings.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
+
+      - name: Test relative mouse failsafe recovery
+        run: python -m pytest -q tests/test_mouse_failsafe.py
 
       - name: Validate browser JavaScript syntax
         run: node --check ui/web/static/app.js
