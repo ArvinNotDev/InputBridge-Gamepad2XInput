@@ -7,6 +7,8 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 
 from core import emulator
+from core.vigem import is_vigem_installed
+from ui.vigem_gate import VigemGate
 
 
 class X360MonitorDialog(QDialog):
@@ -657,8 +659,9 @@ class X360TestCard(QFrame):
 
 class ControllersPage(QWidget):
     battery_updated = Signal(object, int, bool)  # path, percent, charging
+    vigem_recheck_requested = Signal()
 
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, *, vigem_available: bool | None = None):
         super().__init__()
         self.settings = settings
         try:
@@ -666,7 +669,10 @@ class ControllersPage(QWidget):
         except Exception:
             self._vibration_enabled = True
 
-        layout = QVBoxLayout(self)
+        page_layout = QVBoxLayout(self)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        content = QWidget(self)
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(8)
 
@@ -691,6 +697,13 @@ class ControllersPage(QWidget):
         layout.addWidget(subtitle)
         layout.addWidget(self.scroll, 1)
 
+        self.vigem_gate = VigemGate(content)
+        self.vigem_gate.recheck_requested.connect(self.vigem_recheck_requested.emit)
+        self.vigem_gate.set_vigem_available(
+            is_vigem_installed() if vigem_available is None else vigem_available
+        )
+        page_layout.addWidget(self.vigem_gate, 1)
+
         self.empty_label = QLabel(
             "No active XInput controllers. Start controller emulation to inspect one here."
         )
@@ -706,6 +719,9 @@ class ControllersPage(QWidget):
         self.refresh_timer = QTimer(self)
         self.refresh_timer.timeout.connect(self.refresh_list)
         self.refresh_timer.start(1000)
+
+    def set_vigem_available(self, available: bool) -> None:
+        self.vigem_gate.set_vigem_available(available)
 
     def add_x360_instance(self, instance):
         if hasattr(instance, 'device_path'):

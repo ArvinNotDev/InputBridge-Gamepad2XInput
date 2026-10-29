@@ -146,7 +146,7 @@ class Mapper:
         """
         Dispatch raw HID report to the appropriate handler.
         """
-        if not self._connected:
+        if not self._connected or self.emulator is None:
             return
 
         if isinstance(self.emulator, EmulateX360):
@@ -535,6 +535,10 @@ class Phone_mapper:
             self.emulator = EmulateX360(self.uuid, self.uuid, hotkey_page.hotkey)
         elif emulate_to == "keyboard":
             self.emulator = EmulateKeyboard()
+        elif emulate_to == "none":
+            # Keep secure browser pairing, touch mouse and PC Remote usable
+            # when this PC cannot create a virtual XInput device.
+            self.emulator = None
         else:
             raise ValueError(f"Invalid emulate_to target: {emulate_to}")
 

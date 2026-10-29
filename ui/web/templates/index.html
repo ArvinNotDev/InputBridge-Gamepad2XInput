@@ -14,9 +14,20 @@
 
 <section id="workspace" class="hidden">
 <div class="heading"><div><div class="eyebrow">REMOTE CONSOLE</div><h1 id="welcome">Your desktop</h1><p class="muted">Gamepad, touch mouse and PC tools in one place.</p></div><button id="focus" class="btn ghost" type="button" aria-pressed="false">⛶ Focus</button></div>
-<nav class="tabs"><button class="tab active" data-tab="gamepad">◉ Gamepad</button><button class="tab" data-tab="mouse">⌁ Touch mouse</button><button class="tab" data-tab="remote">⌨ PC Remote</button><button class="tab" data-tab="session">⚙ Settings</button></nav>
+<nav class="tabs"><button id="gamepadTab" class="tab active" data-tab="gamepad">◉ Gamepad</button><button class="tab" data-tab="mouse">⌁ Touch mouse</button><button class="tab" data-tab="remote">⌨ PC Remote</button><button class="tab" data-tab="session">⚙ Settings</button></nav>
 
 <section id="view-gamepad" class="view active">
+<div id="gamepadUnavailableNotice" class="gamepad-unavailable-notice hidden" role="status" aria-live="polite">
+  <div class="gamepad-notice-icon">⌁</div>
+  <div class="eyebrow">OPTIONAL WINDOWS DRIVER</div>
+  <h2>Virtual gamepad unavailable</h2>
+  <p id="gamepadUnavailableDetail">ViGEmBus is not installed on the Windows PC. Install it to enable virtual Xbox/XInput output.</p>
+  <p class="muted">Touch mouse, PC Remote, and other VPadConnect features remain available.</p>
+  <div class="gamepad-notice-actions">
+    <a class="btn primary" href="https://github.com/nefarius/ViGEmBus/releases/latest" target="_blank" rel="noopener noreferrer">Install ViGEmBus on the Windows PC ↗</a>
+    <button id="recheckGamepadDriver" class="btn ghost" type="button">Recheck status</button>
+  </div>
+</div>
 <div class="toolbar"><div><h2>Virtual controller</h2><p class="muted">Touch the controls to play. In landscape, the full controller stays on screen.</p></div><div class="mode-switch" role="group" aria-label="Controller preset"><button id="standard" class="mode active" type="button" aria-pressed="true">Standard</button><button id="driving" class="mode" type="button" aria-pressed="false">Driving</button><button id="shooter" class="mode" type="button" aria-pressed="false">Shooter</button></div></div>
 <div class="motion-row"><button id="tiltToggle" class="btn">Enable tilt steering</button><button id="tiltCalibrate" class="btn ghost">Calibrate center</button><button id="controllerStyle" class="btn ghost" type="button" aria-label="Switch controller layout" aria-pressed="false">Xbox layout</button><label class="steering-control" for="steeringSensitivity"><span>Steering sensitivity <output id="steeringSensitivityValue">1.0×</output></span><input id="steeringSensitivity" type="range" min="5" max="40" value="10"></label><span id="tiltStatus" class="muted">Tilt steering uses device orientation while Driving mode is selected.</span></div>
 <div class="controller xbox-layout" id="controller">

@@ -21,6 +21,7 @@ from werkzeug.serving import make_server
 from core.remote_actions import RemoteActionSession, load_remote_permissions
 from core.remote_protocol import PROTOCOL_VERSION
 from core.remote_security import create_web_server_ssl_context
+from core.vigem import is_vigem_installed
 
 BUTTON_KEYS = {"A", "B", "X", "Y", "LB", "RB", "BACK", "START", "GUIDE", "L3", "R3",
                "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"}
@@ -404,6 +405,7 @@ class WebRemoteServer:
             return jsonify({"app": "VPadConnect Web Companion", "protocol_version": PROTOCOL_VERSION,
                             "fingerprint": self.fingerprint,
                             "pairing_seconds": max(0, int(self.pairing_deadline - time.monotonic())),
+                            "gamepad_available": is_vigem_installed(),
                             "secure": request.is_secure})
 
         @app.post("/api/pair")
@@ -432,20 +434,42 @@ class WebRemoteServer:
             if not valid:
                 return jsonify({"ok": False, "error": "Pairing code is wrong or expired. Create a fresh QR code on the PC."}), 403
             session_uuid = "web-" + uuid.uuid4().hex
+            gamepad_available = is_vigem_installed()
             try:
-                # Import platform-specific controller emulation only when a
-                # browser successfully pairs. Protocol and route tests can run
-                # without loading HID/XInput/Qt desktop dependencies.
+                # Import platform-specific input handling only when a browser
+                # pairs. A failed XInput initialization must not prevent the
+                # independent touch-mouse and PC Remote features from working.
                 from core.mapper import Phone_mapper
-                mapper = Phone_mapper(session_uuid, "x360", self.controllers_page, self.hotkey_page, self.settings)
+                if gamepad_available:
+                    try:
+                        mapper = Phone_mapper(
+                            session_uuid, "x360", self.controllers_page,
+                            self.hotkey_page, self.settings,
+                        )
+                    except Exception:
+                        app.logger.exception(
+                            "ViGEmBus was detected but XInput initialization failed; "
+                            "falling back to a mouse/PC-Remote-only session"
+                        )
+                        gamepad_available = False
+                        mapper = Phone_mapper(
+                            session_uuid, "none", self.controllers_page,
+                            self.hotkey_page, self.settings,
+                        )
+                else:
+                    mapper = Phone_mapper(
+                        session_uuid, "none", self.controllers_page,
+                        self.hotkey_page, self.settings,
+                    )
             except Exception:
                 with self._lock:
                     self._pending_pairs = max(0, self._pending_pairs - 1)
-                app.logger.exception("Could not initialize browser controller")
-                return jsonify({"ok": False, "error": "Could not initialize a virtual controller on this PC."}), 500
+                app.logger.exception("Could not initialize browser session")
+                return jsonify({"ok": False, "error": "Could not initialize this browser session on the PC."}), 500
             token = secrets.token_urlsafe(32)
             session = {"uuid": session_uuid, "name": name.strip(), "mapper": mapper,
-                       "remote": RemoteActionSession(), "last_seen": time.monotonic(), "mode": "gamepad",
+                       "remote": RemoteActionSession(), "last_seen": time.monotonic(),
+                       "mode": "gamepad", "gamepad_available": gamepad_available,
                        "lock": threading.RLock(), "closed": False, "stream_ws": None}
             with self._lock:
                 self._pending_pairs = max(0, self._pending_pairs - 1)
@@ -457,7 +481,7 @@ class WebRemoteServer:
             if rejected:
                 self._close_session(session)
                 return jsonify({"ok": False, "error": "The web server stopped or reached its controller limit. Try again."}), 503
-            if self.mapper_added is not None:
+            if self.mapper_added is not None and mapper.emulator is not None:
                 try:
                     self.mapper_added(mapper.emulator)
                 except Exception:
@@ -465,7 +489,8 @@ class WebRemoteServer:
                         self._sessions.pop(token, None)
                     self._close_session(session)
                     return jsonify({"ok": False, "error": "Could not register this controller with the desktop UI."}), 500
-            return jsonify({"ok": True, "token": token, "name": session["name"]})
+            return jsonify({"ok": True, "token": token, "name": session["name"],
+                            "gamepad_available": gamepad_available})
 
         @app.route("/api/stream", methods=["GET"], websocket=True)
         def stream():
