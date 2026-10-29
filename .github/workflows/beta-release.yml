@@ -56,8 +56,8 @@ jobs:
           # omit that global extra-index directive for this Windows release job.
           $requirements = Get-Content "requirements.txt" | Where-Object { $_ -notmatch '^\s*--extra-index-url\b' }
           $requirements | Set-Content ".release-requirements.txt" -Encoding utf8
-          python -m pip install -r .release-requirements.txt
-          python -m pip install pytest
+          python -m pip install --disable-pip-version-check --timeout 30 --retries 1 -r .release-requirements.txt
+          python -m pip install --disable-pip-version-check --timeout 30 --retries 1 pytest
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
