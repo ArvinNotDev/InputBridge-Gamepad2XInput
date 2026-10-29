@@ -22,6 +22,7 @@ const appHtml = fs.readFileSync(
 function createElement(id, attributes = {}) {
   const classes = new Set();
   const listeners = new Map();
+  const queryResults = new Map();
   return {
     id,
     attributes,
@@ -66,7 +67,10 @@ function createElement(id, attributes = {}) {
     getBoundingClientRect() { return { left: 0, top: 0, width: 200, height: 200 }; },
     querySelector(selector) {
       if (selector === ".knob") return this.knob || createElement(`${id}-knob`);
-      if (selector === "span") return createElement(`${id}-span`);
+      if (selector === "span") {
+        if (!queryResults.has(selector)) queryResults.set(selector, createElement(`${id}-span`));
+        return queryResults.get(selector);
+      }
       return null;
     },
   };
