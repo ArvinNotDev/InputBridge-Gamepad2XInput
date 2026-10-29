@@ -108,6 +108,11 @@ class RawHidTerminalDialog(QDialog):
         self.output.setFont(terminal_font)
         root.addWidget(self.output, 1)
 
+        self.detail_label = QLabel(tr("Waiting for HID reports…", self.language))
+        self.detail_label.setObjectName("rawTerminalDetail")
+        self.detail_label.setWordWrap(True)
+        root.addWidget(self.detail_label)
+
         self._meta_format = QTextCharFormat()
         self._meta_format.setForeground(QColor("#7e94b3"))
         self._hex_format = QTextCharFormat()
@@ -180,6 +185,11 @@ class RawHidTerminalDialog(QDialog):
                 font-size: 9px;
                 font-weight: 800;
                 letter-spacing: 2px;
+            }
+            QLabel#rawTerminalDetail {
+                color: #7f94ad;
+                font-size: 10px;
+                padding-left: 3px;
             }
             QLabel#rawTerminalStatus {
                 min-width: 82px;
@@ -330,8 +340,9 @@ class RawHidTerminalDialog(QDialog):
             detail = (
                 tr("Waiting for HID reports…", self.language)
                 if not self._record_count
-                else tr("Live report stream ready — waiting for input.", self.language)
+                else tr("Live capture is receiving reports.", self.language)
             )
+        self.detail_label.setText(detail)
         self.status_badge.setText(text)
         self.status_badge.setProperty("state", state)
         self.status_badge.style().unpolish(self.status_badge)
