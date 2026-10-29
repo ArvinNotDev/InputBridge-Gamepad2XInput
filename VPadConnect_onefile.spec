@@ -22,7 +22,6 @@ hiddenimports = [
     "hid",
     "vgamepad.win",
     "vgamepad.win.vigem_client",
-    "vgamepad.win.vigem_commons",
     "vgamepad.win.virtual_gamepad",
     "keyboard",
     "pyautogui",
