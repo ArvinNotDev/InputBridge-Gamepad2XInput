@@ -437,16 +437,30 @@ class WebRemoteServer:
             gamepad_available = is_vigem_installed()
             try:
                 # Import platform-specific input handling only when a browser
-                # pairs. Without ViGEmBus, pairing still enables touch mouse
-                # and PC Remote; only virtual gamepad output is unavailable.
+                # pairs. A failed XInput initialization must not prevent the
+                # independent touch-mouse and PC Remote features from working.
                 from core.mapper import Phone_mapper
-                mapper = Phone_mapper(
-                    session_uuid,
-                    "x360" if gamepad_available else "none",
-                    self.controllers_page,
-                    self.hotkey_page,
-                    self.settings,
-                )
+                if gamepad_available:
+                    try:
+                        mapper = Phone_mapper(
+                            session_uuid, "x360", self.controllers_page,
+                            self.hotkey_page, self.settings,
+                        )
+                    except Exception:
+                        app.logger.exception(
+                            "ViGEmBus was detected but XInput initialization failed; "
+                            "falling back to a mouse/PC-Remote-only session"
+                        )
+                        gamepad_available = False
+                        mapper = Phone_mapper(
+                            session_uuid, "none", self.controllers_page,
+                            self.hotkey_page, self.settings,
+                        )
+                else:
+                    mapper = Phone_mapper(
+                        session_uuid, "none", self.controllers_page,
+                        self.hotkey_page, self.settings,
+                    )
             except Exception:
                 with self._lock:
                     self._pending_pairs = max(0, self._pending_pairs - 1)
