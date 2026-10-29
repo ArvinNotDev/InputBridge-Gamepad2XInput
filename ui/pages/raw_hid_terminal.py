@@ -314,13 +314,18 @@ class RawHidTerminalDialog(QDialog):
         raw = bytes(report)
         line = format_raw_hid_report(controller_name, raw)
         prefix, separator, payload = line.partition("  │  ")
+        scroll_bar = self.output.verticalScrollBar()
+        previous_scroll = scroll_bar.value()
+        follow_output = self.auto_scroll.isChecked()
         cursor = self.output.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(prefix + separator, self._meta_format)
         cursor.insertText(payload + "\n", self._hex_format)
         self.output.setTextCursor(cursor)
-        if self.auto_scroll.isChecked():
+        if follow_output:
             self.output.ensureCursorVisible()
+        else:
+            scroll_bar.setValue(previous_scroll)
 
         self._record_count += 1
         self._last_report = line
