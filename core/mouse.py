@@ -59,33 +59,28 @@ class Mouse:
         if not dx and not dy:
             return
 
-        # PyAutoGUI raises FailSafeException at its emergency corner (normally
-        # the top-left pixel). A relative mouse move must still be able to move
-        # the cursor away from that point; otherwise remote mouse input is
-        # silently ignored until a physical mouse moves it out.
-        failsafe_enabled = bool(pyautogui.FAILSAFE)
-        at_failsafe_point = False
-        if failsafe_enabled:
-            try:
-                current_position = tuple(pyautogui.position())
-                failsafe_points = getattr(pyautogui, "FAILSAFE_POINTS", [(0, 0)])
-                at_failsafe_point = current_position in {
-                    tuple(point) for point in failsafe_points
-                }
-            except Exception:
-                at_failsafe_point = False
+        # Use PyAutoGUI's own fail-safe check as the fast path. Reading the
+        # cursor position separately before every remote mouse event duplicates
+        # that OS query and adds latency to high-frequency touchpad movement.
+        # Only bypass the safeguard for the single move that is rejected at a
+        # fail-safe corner, then restore it even if the retry fails.
+        try:
+            pyautogui.moveRel(dx, dy, duration=duration)
+        except Exception as exc:
+            failsafe_exception = getattr(pyautogui, "FailSafeException", None)
+            if (
+                failsafe_exception is None
+                or not isinstance(exc, failsafe_exception)
+                or not bool(pyautogui.FAILSAFE)
+            ):
+                raise
 
-        if at_failsafe_point:
-            # Disable the safeguard for this one relative move only, then
-            # restore it even if the platform's mouse backend raises.
+            failsafe_enabled = bool(pyautogui.FAILSAFE)
             try:
                 pyautogui.FAILSAFE = False
                 pyautogui.moveRel(dx, dy, duration=duration)
             finally:
                 pyautogui.FAILSAFE = failsafe_enabled
-            return
-
-        pyautogui.moveRel(dx, dy, duration=duration)
 
     @staticmethod
     def leftClick():
