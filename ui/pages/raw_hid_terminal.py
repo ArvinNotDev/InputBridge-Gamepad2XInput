@@ -322,7 +322,8 @@ class RawHidTerminalDialog(QDialog):
         self._device_value.setText(self._last_device[:22])
         self._device_value.setToolTip(self._last_device)
         self.copy_button.setEnabled(True)
-        self._refresh_status()
+        if self._record_count == 1:
+            self._refresh_status()
 
     def set_capture_enabled(self, enabled: bool) -> None:
         self._capture_enabled = bool(enabled)
