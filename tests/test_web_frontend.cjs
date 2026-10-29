@@ -337,7 +337,7 @@ test("browser control preferences restore and persist without storing the sessio
     airMouseSensitivity: 2,
     tapToClick: true,
     reverseScroll: true,
-    scrollSensitivity: 2,
+    scrollSensitivity: 20,
     hapticsEnabled: true,
     keepScreenAwake: false,
     preset: "standard",
@@ -553,7 +553,7 @@ test("touchpad scroll slider exposes very low and very high sensitivities", () =
 test("scroll sensitivity scales the faster two-finger touchpad scroll amount", async () => {
   const harness = createHarness();
   await settle();
-  harness.elements.get("scrollSensitivity").value = "20";
+  harness.elements.get("scrollSensitivity").value = "200";
   harness.elements.get("scrollSensitivity").dispatch("input");
   harness.mouseTab.dispatch("click");
   await settle();
