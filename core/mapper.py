@@ -106,10 +106,10 @@ class Mapper:
             with resource_path("profiles", filename).open("r", encoding="utf-8") as config:
                 return json.load(config)
         except FileNotFoundError:
-            print(f"Warning: Profile '{filename}' not found.")
+            logger.warning("Controller profile '%s' not found.", filename)
             return {}
         except json.JSONDecodeError:
-            print(f"Warning: Invalid JSON in profile '{filename}'.")
+            logger.error("Controller profile '%s' contains invalid JSON.", filename)
             return {}
 
     def start(self) -> None:
@@ -140,7 +140,7 @@ class Mapper:
             try:
                 self.emulator.shutdown()
             except Exception as e:
-                print(f"[Mapper] Failed to shutdown emulator: {e}")
+                logger.exception("Failed to shut down emulator for %s", self.controller.name)
 
     # -------------------------------------------------------------------------
     # HID entry points
@@ -798,4 +798,4 @@ class Phone_mapper:
             try:
                 self.emulator.shutdown()
             except Exception as exc:
-                print(f"[Phone_mapper] Failed to shutdown emulator: {exc}")
+                logger.exception("Failed to shut down Web Companion emulator for %s", self.uuid)
