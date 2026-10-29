@@ -670,7 +670,8 @@ class SettingsPage(QWidget):
 
         self._update_profile_label()
         self._apply_reduced_motion()
-        self._refresh_logging_status()
+        log_path = configure_developer_logging(self.settings)
+        self._refresh_logging_status(log_path)
         self.vibration_enabled_changed.emit(self.settings.get_vibration_enabled())
 
     def _apply_all_current_values(self):
@@ -983,24 +984,26 @@ class SettingsPage(QWidget):
             )
 
     def _refresh_logging_status(self, active_path: Path | None = None) -> None:
+        language = self.settings.get_ui_language()
         if active_path is None and self.settings.get_log_to_file():
             active_path = configure_developer_logging(self.settings)
         if self.settings.get_log_to_file() and active_path is not None:
-            self.lbl_logging_status.setText(
-                f"File logging enabled · rotating at 2 MiB, keeping 3 backups\n{active_path}"
-            )
+            title = tr("File logging enabled · rotating at 2 MiB, keeping 3 backups", language)
+            self.lbl_logging_status.setText(f"{title}\n{active_path}")
         elif self.settings.get_log_to_file():
-            self.lbl_logging_status.setText(
-                "Could not activate file logging. Check that the selected folder exists and is writable."
-            )
+            self.lbl_logging_status.setText(tr(
+                "Could not activate file logging. Check that the selected folder exists and is writable.",
+                language,
+            ))
         elif self.settings.get_developer_debug() or self.settings.get_raw_hid_debug():
-            self.lbl_logging_status.setText(
-                "Detailed diagnostics are enabled. Turn on Log to file to retain them after closing the app."
-            )
+            self.lbl_logging_status.setText(tr(
+                "Detailed diagnostics are enabled. Turn on Log to file to retain them after closing the app.",
+                language,
+            ))
         else:
-            self.lbl_logging_status.setText(
-                "File logging is off. Enable it to save diagnostic logs to disk."
-            )
+            self.lbl_logging_status.setText(tr(
+                "File logging is off. Enable it to save diagnostic logs to disk.", language
+            ))
 
     def _apply_reduced_motion(self) -> None:
         app = QApplication.instance()
