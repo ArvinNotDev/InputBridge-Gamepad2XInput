@@ -11,7 +11,7 @@ except Exception:
 from core.emulator import EmulateX360, EmulateKeyboard
 from core.emulator import media_functions, custom_commands
 from core.dualsense_lightbar import resolve_lightbar_color
-from core.mouse import Mouse, MouseMotion, MouseDeltaSmoother
+from core.mouse import Mouse, MouseMotion
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkey_commander import HotkeyCommander
 from core.utils.paths import resource_path
@@ -530,9 +530,6 @@ class Phone_mapper:
         self._last_hotkey_time = 0.0
         self._hotkey_interval = 0.1
         self._mouse_buttons = {"left": False, "right": False, "middle": False}
-        # Smooth only remote mouse movement; gamepad and joystick input remain
-        # immediate and never pass through this worker.
-        self._mouse_motion_smoother = MouseDeltaSmoother(Mouse.moveRel, interval_ms=4.0)
 
         if emulate_to == "x360":
             self.emulator = EmulateX360(self.uuid, self.uuid, hotkey_page.hotkey)
@@ -567,12 +564,7 @@ class Phone_mapper:
         scroll = int(data.get("scroll", 0))
         try:
             if dx or dy:
-                smoother = getattr(self, "_mouse_motion_smoother", None)
-                if smoother is not None:
-                    smoother.add(dx, dy)
-                else:
-                    # Compatibility for lightweight test doubles that bypass __init__.
-                    Mouse.moveRel(dx, dy, duration=0)
+                Mouse.moveRel(dx, dy, duration=0)
         except Exception:
             pass
         try:
@@ -615,9 +607,6 @@ class Phone_mapper:
 
     def release_mouse_buttons(self) -> None:
         """Release remote mouse buttons when changing output mode or disconnecting."""
-        smoother = getattr(self, "_mouse_motion_smoother", None)
-        if smoother is not None:
-            smoother.clear_pending()
         for name, pressed in self._mouse_buttons.items():
             if pressed:
                 try:
@@ -771,9 +760,6 @@ class Phone_mapper:
     def shutdown(self) -> None:
         self.release_mouse_buttons()
         self._connected = False
-        smoother = getattr(self, "_mouse_motion_smoother", None)
-        if smoother is not None:
-            smoother.close()
         if hasattr(self.emulator, "shutdown"):
             try:
                 self.emulator.shutdown()

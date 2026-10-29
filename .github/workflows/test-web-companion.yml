@@ -75,7 +75,7 @@ jobs:
         run: |
           python -m compileall -q core/mouse.py core/mapper.py tests/test_mouse_failsafe.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/pages/settings.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
 
-      - name: Test mouse fail-safe and motion smoothing
+      - name: Test relative mouse failsafe recovery
         run: python -m pytest -q tests/test_mouse_failsafe.py
 
       - name: Validate browser JavaScript syntax
