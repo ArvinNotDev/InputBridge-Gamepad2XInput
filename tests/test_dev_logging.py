@@ -74,3 +74,20 @@ def test_disabled_file_logging_does_not_create_the_configured_file(tmp_path):
         assert not Path(settings.log_file_path).exists()
     finally:
         _cleanup_managed_logger()
+
+
+def test_clear_logs_removes_backups_when_active_file_is_missing(tmp_path):
+    settings = _Settings(tmp_path / "logs" / "mapper.log")
+    settings.log_to_file = False
+    settings.log_file_path = str(tmp_path / "logs" / "missing.log")
+    backup = Path(f"{settings.log_file_path}.1")
+    backup.parent.mkdir(parents=True)
+    backup.write_text("old log", encoding="utf-8")
+
+    try:
+        assert clear_log_file(settings) is True
+        assert not backup.exists()
+        assert Path(settings.log_file_path).exists()
+        assert Path(settings.log_file_path).read_text(encoding="utf-8") == ""
+    finally:
+        _cleanup_managed_logger()
