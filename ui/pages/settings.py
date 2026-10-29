@@ -17,6 +17,7 @@ from core.dev_logging import configure_developer_logging, resolve_log_path, clea
 
 class SettingsPage(QWidget):
     vibration_enabled_changed = Signal(bool)
+    raw_hid_monitor_state_changed = Signal(bool)
 
     def __init__(self, theme_manager, settings: object, profile_manager=None):
         super().__init__()
@@ -985,6 +986,9 @@ class SettingsPage(QWidget):
             self._raw_hid_terminal = RawHidTerminalDialog(
                 language=self.settings.get_ui_language(),
                 parent=self,
+            )
+            self._raw_hid_terminal.visibility_changed.connect(
+                self.raw_hid_monitor_state_changed.emit
             )
         self._raw_hid_terminal.set_capture_enabled(self.chk_raw_hid.isChecked())
         self._raw_hid_terminal.show()
