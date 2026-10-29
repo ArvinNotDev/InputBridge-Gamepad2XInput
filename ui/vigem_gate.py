@@ -160,4 +160,5 @@ class VigemGate(QWidget):
             self.content.setGraphicsEffect(blur)
             self.content.setEnabled(False)
             self.overlay.show()
+            self.overlay.raise_()
         self.overlay.raise_()
