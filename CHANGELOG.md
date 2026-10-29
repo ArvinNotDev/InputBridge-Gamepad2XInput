@@ -3,7 +3,7 @@
 All notable user-facing changes to VPadConnect are documented
 here. Version numbers follow semantic-versioning conventions where practical.
 
-## [0.2.1-beta.1] — 2026-10-29
+## [0.2.1-beta.1] — 2026-10-30
 
 This is the first pre-1.0 beta under the VPadConnect version line. It gathers the
 current desktop and Web Companion work into a fresh downloadable Windows release.
@@ -17,6 +17,7 @@ current desktop and Web Companion work into a fresh downloadable Windows release
 - Limited UI report delivery to 30 updates per second and disabled delivery while
   the terminal is hidden, avoiding unnecessary pressure on the UI thread.
 - Kept file diagnostics separate, rate-limited, and rotated to bound disk usage.
+- Made Raw HID timestamps use an explicit UTC-to-local conversion for Windows compatibility.
 
 ### Settings and input responsiveness
 
@@ -42,8 +43,8 @@ current desktop and Web Companion work into a fresh downloadable Windows release
 
 - Reset the application version line to `0.2.1-beta.1` to mark the VPadConnect
   beta as a pre-1.0 release.
-- The release workflow builds a Windows x64 **one-file** `VPadConnect.exe`,
-  runs automated tests before publishing, and attaches a SHA-256 checksum file.
+- The release provides a Windows x64 **one-file** `VPadConnect.exe` and a SHA-256
+  checksum file; see the release notes for local build validation results.
 - This is a beta: automated checks do not replace testing on every Windows PC
   and with every physical controller. Please report reproducible issues.
 
@@ -111,7 +112,7 @@ _No unreleased changes._
 - Added live vibration settings and XInput vibration testing.
 
 [0.2.1-beta.1]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1
-[2.0.8]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.8
-[2.0.7]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.7
-[2.0.6]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.6
-[2.0.5]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.5
+[2.0.8]: https://github.com/ArvinNotDev/VPadConnect/tree/3d4b900c1725c762c184bdd638288e07ebbcd906
+[2.0.7]: https://github.com/ArvinNotDev/VPadConnect/tree/58d071976700fab8bd41c7e1a3b8ecf098c29c4d
+[2.0.6]: https://github.com/ArvinNotDev/VPadConnect/tree/f66e8f601f74bb27e0f149e615f17d93c03d4223
+[2.0.5]: https://github.com/ArvinNotDev/VPadConnect/tree/399aa5efb165f08b3e415aa9473898740204c120

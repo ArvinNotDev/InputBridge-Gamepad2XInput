@@ -5,7 +5,7 @@ can be regression-tested without opening the desktop UI.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 
 MAX_TERMINAL_REPORT_BYTES = 256
@@ -21,7 +21,7 @@ def format_raw_hid_report(
     """Return one safe, timestamped terminal line for a raw HID report."""
     raw = bytes(report)
     stamp_value = time.time() if timestamp is None else float(timestamp)
-    stamp = datetime.fromtimestamp(stamp_value).astimezone().strftime("%H:%M:%S.%f")[:-3]
+    stamp = datetime.fromtimestamp(stamp_value, timezone.utc).astimezone().strftime("%H:%M:%S.%f")[:-3]
 
     # Device names are external metadata: strip control characters and bound
     # their width so malformed names cannot inject terminal-like control codes.
