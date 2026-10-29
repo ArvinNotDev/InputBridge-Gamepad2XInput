@@ -598,6 +598,7 @@ class SettingsPage(QWidget):
             (self.chk_button_invert, "toggled"),
             (self.combo_lang, "currentTextChanged"),
             (self.combo_theme, "currentTextChanged"),
+            (self.chk_reduced_motion, "toggled"),
             (self.chk_debug, "toggled"),
             (self.chk_raw_hid, "toggled"),
             (self.chk_log_to_file, "toggled"),
