@@ -46,8 +46,13 @@ def configure_developer_logging(settings: Any) -> Path | None:
     logger.propagate = False
 
     managed = [h for h in logger.handlers if getattr(h, _HANDLER_MARKER, False)]
-    if getattr(logger, _SIGNATURE_MARKER, None) == signature and managed:
-        return log_path if file_enabled else None
+    file_handler_active = any(isinstance(h, RotatingFileHandler) for h in managed)
+    if (
+        getattr(logger, _SIGNATURE_MARKER, None) == signature
+        and managed
+        and (not file_enabled or file_handler_active)
+    ):
+        return log_path if file_enabled and file_handler_active else None
 
     for handler in managed:
         logger.removeHandler(handler)
