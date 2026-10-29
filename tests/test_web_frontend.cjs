@@ -105,9 +105,11 @@ function createHarness(settings = {}) {
   elements.set("rightStick", rightStick);
   elements.set("touchpad", touchpad);
   const mouseTab = createElement("mouse-tab", { "data-tab": "mouse" });
-  const views = ["gamepad", "mouse", "remote", "session"].map((name) =>
-    createElement(`view-${name}`),
-  );
+  const views = ["gamepad", "mouse", "remote", "session"].map((name) => {
+    const view = createElement(`view-${name}`);
+    elements.set(view.id, view);
+    return view;
+  });
   const documentListeners = new Map();
   const windowListeners = new Map();
   const body = createElement("body");
@@ -780,7 +782,9 @@ test("Air Mouse uses device orientation, supports center calibration, and persis
   assert.equal(harness.touchpad.classList.contains("air-mouse-active"), true);
 
   harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 0 });
-  harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 8 });
+  for (let i = 0; i < 24; i += 1) {
+    harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 8 });
+  }
   await settle();
   assert.ok(stateRequests(harness).some((request) => request.mouse.dx !== 0 || request.mouse.dy !== 0));
 
