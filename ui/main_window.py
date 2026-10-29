@@ -269,6 +269,9 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(
             self.theme_manager, self.settings, self.profile_manager
         )
+        self.controller_emulation_page.raw_hid_report.connect(
+            self.settings_page.append_raw_hid_report
+        )
         self.pages.addWidget(self.settings_page)
         self.settings_page.combo_lang.currentIndexChanged.connect(
             lambda _index: self._apply_language()
