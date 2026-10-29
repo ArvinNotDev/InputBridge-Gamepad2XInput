@@ -93,7 +93,7 @@ area.addEventListener("keydown",function(e){var map={ArrowLeft:[-1,0],ArrowRight
 function attachMouse(){var pad=$("touchpad"),active=new Map(),scrollRemainder=0,multiGesture=false;
 function down(e){e.preventDefault();if(active.size>0)multiGesture=true;active.set(e.pointerId,{x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,start:performance.now(),moved:false});try{pad.setPointerCapture(e.pointerId);}catch(_){}}
 function move(e){var point=active.get(e.pointerId);if(!point)return;e.preventDefault();var dx=e.clientX-point.x,dy=e.clientY-point.y;point.x=e.clientX;point.y=e.clientY;if(Math.hypot(e.clientX-point.startX,e.clientY-point.startY)>8)point.moved=true;
-if(active.size>=2){multiGesture=true;scrollRemainder+=((-dy/14)*scrollSensitivity*(reverseScroll?-1:1))/active.size;while(scrollRemainder>=1){state.mouse.scroll+=1;scrollRemainder-=1;}while(scrollRemainder<=-1){state.mouse.scroll-=1;scrollRemainder+=1;}}
+if(active.size>=2){multiGesture=true;scrollRemainder+=((-dy/4)*scrollSensitivity*(reverseScroll?-1:1))/active.size;while(scrollRemainder>=1){state.mouse.scroll+=1;scrollRemainder-=1;}while(scrollRemainder<=-1){state.mouse.scroll-=1;scrollRemainder+=1;}}
 else if(!airMouseEnabled){state.mouse.dx+=Math.round(dx*mouseSensitivity);state.mouse.dy+=Math.round(dy*mouseSensitivity);}
 sendState(false);
 }

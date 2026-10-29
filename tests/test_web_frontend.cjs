@@ -520,7 +520,7 @@ test("two-finger touchpad movement sends mouse scroll input", async () => {
   await settle();
 
   assert.equal(stateRequests(harness).at(-1).mode, "mouse");
-  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -1);
+  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -3);
 });
 
 test("reverse scrolling reverses two-finger touchpad direction", async () => {
@@ -537,11 +537,11 @@ test("reverse scrolling reverses two-finger touchpad direction", async () => {
   for (let i = 0; i < 10; i += 1) harness.tickFrame();
   await settle();
 
-  assert.equal(stateRequests(harness).at(-1).mouse.scroll, 1);
+  assert.equal(stateRequests(harness).at(-1).mouse.scroll, 3);
   assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).reverseScroll, true);
 });
 
-test("scroll sensitivity adjusts two-finger touchpad scroll amount", async () => {
+test("scroll sensitivity scales the faster two-finger touchpad scroll amount", async () => {
   const harness = createHarness();
   await settle();
   harness.elements.get("scrollSensitivity").value = "20";
@@ -555,7 +555,7 @@ test("scroll sensitivity adjusts two-finger touchpad scroll amount", async () =>
   for (let i = 0; i < 10; i += 1) harness.tickFrame();
   await settle();
 
-  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -2);
+  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -7);
   assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).scrollSensitivity, 2);
 });
 
