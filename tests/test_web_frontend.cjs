@@ -172,6 +172,7 @@ function createHarness(settings = {}) {
     location: { hash: settings.hash || "", pathname: "/", search: "", protocol: "https:", host: "vpadconnect.test" },
     confirmCalls: 0,
     DeviceOrientationEvent: function DeviceOrientationEvent() {},
+    DeviceMotionEvent: function DeviceMotionEvent() {},
     addEventListener(name, handler) { windowListeners.set(name, handler); },
     removeEventListener(name, handler) {
       if (windowListeners.get(name) === handler) windowListeners.delete(name);
@@ -234,6 +235,7 @@ function createHarness(settings = {}) {
       removeItem(key) { preferenceValues.delete(key); },
     },
     DeviceOrientationEvent: window.DeviceOrientationEvent,
+    DeviceMotionEvent: window.DeviceMotionEvent,
     URLSearchParams,
     performance: { now() { now += 5; return now; } },
     requestAnimationFrame(callback) { frames.push(callback); },
@@ -774,7 +776,7 @@ test("Focus stays on the selected mouse tab and focuses the touch surface", asyn
 });
 
 
-test("Air Mouse uses device orientation, supports center calibration, and persists sensitivity", async () => {
+test("6-axis Air Mouse maps yaw to horizontal movement, inverts vertical pitch, and supports gyro bias calibration", async () => {
   const harness = createHarness();
   await settle();
 
@@ -782,19 +784,41 @@ test("Air Mouse uses device orientation, supports center calibration, and persis
   assert.equal(harness.elements.get("airMouseToggle").getAttribute("aria-pressed"), "true");
   assert.equal(harness.touchpad.classList.contains("air-mouse-active"), true);
 
-  harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 0 });
-  for (let i = 0; i < 24; i += 1) {
-    harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 8 });
+  for (let i = 0; i < 12; i += 1) {
+    harness.dispatchWindow("devicemotion", {
+      interval: 16,
+      rotationRate: { alpha: 0, beta: 0, gamma: 0 },
+      acceleration: { x: 0, y: 0, z: 0 },
+    });
+  }
+  harness.elements.get("airMouseCalibrate").dispatch("click");
+  assert.match(harness.elements.get("airMouseStatus").textContent, /gyro.*calibrated/i);
+
+  for (let i = 0; i < 40; i += 1) {
+    harness.dispatchWindow("devicemotion", {
+      interval: 16,
+      rotationRate: { alpha: 0, beta: 28, gamma: 0 },
+      acceleration: { x: 0, y: 0, z: 0 },
+    });
   }
   await settle();
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dx !== 0 || request.mouse.dy !== 0));
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx > 0), "turning the phone sideways should move the cursor right");
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx >= 10), "gyro acceleration should feel responsive at default sensitivity");
 
-  harness.elements.get("airMouseCalibrate").dispatch("click");
-  assert.match(harness.elements.get("airMouseStatus").textContent, /center calibrated/i);
+  for (let i = 0; i < 40; i += 1) {
+    harness.dispatchWindow("devicemotion", {
+      interval: 16,
+      rotationRate: { alpha: 28, beta: 0, gamma: 0 },
+      acceleration: { x: 0, y: 0, z: 0 },
+    });
+  }
+  await settle();
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dy < 0), "positive pitch rotation should move the cursor up");
 
-  harness.elements.get("airMouseSensitivity").value = "20";
+  harness.elements.get("airMouseSensitivity").value = "50";
   harness.elements.get("airMouseSensitivity").dispatch("input");
-  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).airMouseSensitivity, 2);
+  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).airMouseSensitivity, 5);
+  assert.equal(harness.elements.get("airMouseSensitivityValue").textContent, "5.0×");
 
   harness.elements.get("airMouseToggle").dispatch("click");
   assert.equal(harness.elements.get("airMouseToggle").getAttribute("aria-pressed"), "false");
