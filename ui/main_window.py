@@ -33,6 +33,7 @@ from core.utils.paths import data_path, resource_path
 from ui.i18n import apply_translations, tr
 from core.version import APP_NAME
 from core.vigem import is_vigem_installed
+from core.dev_logging import configure_developer_logging
 
 class MainWindow(QMainWindow):
 
@@ -63,6 +64,9 @@ class MainWindow(QMainWindow):
             }
         self.hotkey = Hotkey(str(data_path("hotkeys.json")))
         self.settings = SettingsManager()
+        self.settings.normalize()
+        configure_developer_logging(self.settings)
+        app.setProperty("reducedMotion", self.settings.get_ui_reduced_motion())
         self.profile_manager = ProfileManager(self.settings)
         self.profile_manager.create_default_profile()
         self.vigem_available = is_vigem_installed()
@@ -73,7 +77,9 @@ class MainWindow(QMainWindow):
 
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle(self.WINDOW_TITLE)
-        self.setMinimumSize(960, 660)
+        # Keep the shell usable in compact windows; individual settings pages
+        # now scroll independently instead of clipping lower controls.
+        self.setMinimumSize(820, 540)
         self.resize(self.WINDOW_WIDTH, self.WINDOW_HEIGHT)
         app_icon = QIcon(str(resource_path("ui", "assets", "vpadconnect-icon.ico")))
         self.setWindowIcon(app_icon)
@@ -85,6 +91,7 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         central.setObjectName("app_root")
         main_layout = QVBoxLayout(central)
+        self._main_layout = main_layout
         main_layout.setContentsMargins(22, 16, 22, 16)
         main_layout.setSpacing(10)
         self.setCentralWidget(central)
@@ -299,6 +306,22 @@ class MainWindow(QMainWindow):
             self._init_tray_icon()
             app.setQuitOnLastWindowClosed(False)
         app.aboutToQuit.connect(self.shutdown)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_main_layout"):
+            compact = self.width() < 1000
+            self._main_layout.setContentsMargins(
+                12 if compact else 22,
+                10 if compact else 16,
+                12 if compact else 22,
+                10 if compact else 16,
+            )
+            self._main_layout.setSpacing(7 if compact else 10)
+        # Native tab scroll buttons preserve navigation; hide the decorative
+        # donation action when the window becomes compact.
+        if hasattr(self, "donate_button"):
+            self.donate_button.setVisible(self.width() >= 1000)
 
     # --------------------
     # ViGEmBus prerequisite
