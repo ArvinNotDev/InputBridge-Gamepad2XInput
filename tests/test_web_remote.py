@@ -7,12 +7,20 @@ def _install_mock_mappers(monkeypatch):
     import types
     from types import SimpleNamespace
 
+    import core.web_remote as web_remote
+    # Existing route tests exercise the normal XInput path independently of the
+    # machine running pytest; dedicated tests below cover the missing-driver path.
+    monkeypatch.setattr(web_remote, "is_vigem_installed", lambda: True)
+
     instances = []
 
     class MockMapper:
-        def __init__(self, uuid, _emulate_to, _controllers_page, _hotkey_page, _settings):
+        def __init__(self, uuid, emulate_to, _controllers_page, _hotkey_page, _settings):
             self.uuid = uuid
-            self.emulator = SimpleNamespace(device_path=uuid)
+            self.emulate_to = emulate_to
+            self.emulator = (
+                None if emulate_to == "none" else SimpleNamespace(device_path=uuid)
+            )
             self.calls = []
             self.hid_inputs = []
             self.mouse_inputs = []
@@ -21,6 +29,8 @@ def _install_mock_mappers(monkeypatch):
             instances.append(self)
 
         def handle_hid_data(self, data):
+            if self.emulator is None:
+                return
             self.calls.append("hid")
             self.hid_inputs.append(data)
             self.gamepad_state = data
@@ -616,3 +626,41 @@ def test_web_tls_certificate_covers_advertised_lan_ip_and_reuses_matching_identi
     new_cert = x509.load_pem_x509_certificate(certificate_path.read_bytes())
     new_sans = new_cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
     assert "192.168.77.22" in {str(value) for value in new_sans.get_values_for_type(x509.IPAddress)}
+
+
+
+def test_pairing_without_vigem_keeps_mouse_and_pc_remote_available(monkeypatch):
+    import core.web_remote as web_remote
+
+    mappers = _install_mock_mappers(monkeypatch)
+    monkeypatch.setattr(web_remote, "is_vigem_installed", lambda: False)
+    registered = []
+    server = web_remote.WebRemoteServer(
+        object(), object(), object(), mapper_added=registered.append
+    )
+
+    token = _pair_browser(server, "Mouse-only browser")
+    mapper = mappers[0]
+    session = server._sessions[token]
+
+    assert mapper.emulate_to == "none"
+    assert mapper.emulator is None
+    assert session["gamepad_available"] is False
+    assert registered == []
+    assert server.app.test_client().get("/api/info").get_json()["gamepad_available"] is False
+
+    response = _send_browser_state(
+        server,
+        token,
+        {"mode": "mouse", "mouse": {"dx": 11, "dy": -4, "scroll": 0, "left": True}},
+    )
+    assert response.status_code == 200
+    assert mapper.mouse_inputs[-1]["dx"] == 11
+    assert mapper.mouse_inputs[-1]["dy"] == -4
+
+    action = server.app.test_client().post(
+        "/api/action",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"request_id": "remote-status", "action": "pc_status", "payload": {}},
+    )
+    assert action.status_code == 200
