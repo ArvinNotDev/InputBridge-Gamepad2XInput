@@ -21,7 +21,7 @@ from core.dualsense_lightbar import (
     resolve_lightbar_color,
 )
 from ui.i18n import tr
-from core.vigem import VIGEMBUS_RELEASES_URL, is_vigem_installed
+from core.vigem import is_vigem_installed
 from ui.vigem_gate import VigemGate
 
 from core.hidhide import HIDHIDE_RELEASES_URL, HidHideError, HidHideManager
