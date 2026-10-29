@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QDialog, QListWidgetItem, QSizePolicy, QMessageBox, QFrame, QCheckBox,
     QColorDialog, QDialogButtonBox
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QThread, QObject, QUrl
+from PySide6.QtCore import Qt, Signal, Slot, QTimer, QThread, QObject, QUrl
 from PySide6.QtGui import QDesktopServices, QColor
 
 from ui.pages.modal.add_controller import AddControllerDialog
@@ -721,6 +721,7 @@ class ControllerEmulation(QWidget):
         super().__init__()
         self._raw_hid_report_lock = threading.Lock()
         self._last_raw_hid_emit_at = 0.0
+        self._raw_hid_monitor_active = False
         layout_dashboard = QVBoxLayout(self)
         self.controllers_page = controllers_page
         hid.hid_manager = HIDManager(settings.get_poll_interval_ms() / 1000.0)
@@ -1051,10 +1052,20 @@ class ControllerEmulation(QWidget):
             color, enabled = resolve_lightbar_color(updated, battery_state)
             output.set_color(color, enabled=enabled)
 
+    @Slot(bool)
+    def set_raw_hid_monitor_active(self, active: bool) -> None:
+        """Enable report delivery only while the live terminal is visible."""
+        with self._raw_hid_report_lock:
+            self._raw_hid_monitor_active = bool(active)
+            if not active:
+                self._last_raw_hid_emit_at = 0.0
+
     def _publish_raw_hid_report(self, controller_name: str, report: bytes) -> None:
         """Rate-limit cross-thread GUI updates to 30 reports per second globally."""
         now = time.monotonic()
         with self._raw_hid_report_lock:
+            if not self._raw_hid_monitor_active:
+                return
             if now - self._last_raw_hid_emit_at < (1.0 / 30.0):
                 return
             self._last_raw_hid_emit_at = now
