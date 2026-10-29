@@ -1,4 +1,5 @@
 import json
+import logging
 import math
 import time
 from typing import Tuple
@@ -15,6 +16,8 @@ from core.mouse import Mouse, MouseMotion
 from core.utils.controller_monitor import controllerMonitor
 from core.utils.hotkey_commander import HotkeyCommander
 from core.utils.paths import resource_path
+
+logger = logging.getLogger("vpadconnect.mapper")
 
 
 class Mapper:
@@ -41,9 +44,11 @@ class Mapper:
         self.controller = controller
         self.controller_type = controller_type
         self._connected = False
-        self.debug = debug
+        self.debug = bool(debug)
         self.settings = settings
         self.controllers_page = controllers_page
+        self._last_raw_report_log_at = 0.0
+        self._last_debug_state_log_at = 0.0
 
         self.mouse_mode = False
         self.mouse_mode_hotkey = False
@@ -102,26 +107,26 @@ class Mapper:
             with resource_path("profiles", filename).open("r", encoding="utf-8") as config:
                 return json.load(config)
         except FileNotFoundError:
-            print(f"Warning: Profile '{filename}' not found.")
+            logger.warning("Controller profile '%s' not found.", filename)
             return {}
         except json.JSONDecodeError:
-            print(f"Warning: Invalid JSON in profile '{filename}'.")
+            logger.error("Controller profile '%s' contains invalid JSON.", filename)
             return {}
 
     def start(self) -> None:
-        """
-        Begin processing HID reports for this controller.
-        """
+        """Begin processing HID reports for this controller."""
         if not self._connected:
             self._connected = True
-            print(f"[Mapper] Started mapping for {self.controller.name}")
+            logger.info("Started mapping for %s (%s)", self.controller.name, self.controller_type)
+            if self._debug_enabled():
+                logger.debug("Mapping profile loaded for %s: %s", self.controller.name, self.controller_config.keys())
 
     def stop(self) -> None:
         """
         Stop processing HID reports and shut down the emulator if supported.
         """
         if self._connected:
-            print(f"[Mapper] Stopped mapping for {self.controller.name}")
+            logger.info("Stopped mapping for %s", self.controller.name)
         self._connected = False
         self._mouse_motion.reset()
 
@@ -136,18 +141,33 @@ class Mapper:
             try:
                 self.emulator.shutdown()
             except Exception as e:
-                print(f"[Mapper] Failed to shutdown emulator: {e}")
+                logger.exception("Failed to shut down emulator for %s", self.controller.name)
 
     # -------------------------------------------------------------------------
     # HID entry points
     # -------------------------------------------------------------------------
 
     def handle_hid_data(self, data: bytes) -> None:
-        """
-        Dispatch raw HID report to the appropriate handler.
-        """
+        """Dispatch raw HID report to the appropriate handler."""
         if not self._connected or self.emulator is None:
             return
+
+        # Raw report logging is opt-in and throttled to at most ten reports per
+        # second per physical controller to keep logs readable and bounded.
+        try:
+            raw_debug = bool(self.settings.get_raw_hid_debug())
+        except Exception:
+            raw_debug = False
+        now = time.monotonic()
+        if raw_debug and now - self._last_raw_report_log_at >= 0.1:
+            report = bytes(data)
+            preview = report[:64].hex(" ")
+            suffix = " …" if len(report) > 64 else ""
+            logger.debug(
+                "RAW HID controller=%s length=%d bytes=%s%s",
+                self.controller.name, len(report), preview, suffix,
+            )
+            self._last_raw_report_log_at = now
 
         if isinstance(self.emulator, EmulateX360):
             self._handle_x360_input(data)
@@ -155,11 +175,15 @@ class Mapper:
             self._handle_keyboard_input(data)
 
     def handle_error(self, msg: str) -> None:
-        """
-        Handle device-level errors.
-        """
-        print(f"[Mapper] Error from device {self.controller.name}: {msg}")
+        """Handle device-level errors."""
+        logger.error("Device error from %s: %s", self.controller.name, msg)
         self.stop()
+
+    def _debug_enabled(self) -> bool:
+        try:
+            return bool(self.settings.get_developer_debug())
+        except Exception:
+            return self.debug
 
     # -------------------------------------------------------------------------
     # Helpers
@@ -408,6 +432,26 @@ class Mapper:
 
         dpu, dpd, dpl, dpr = self._get_dpad_from_hat(report, dpad_cfg)
 
+        # Keep detailed decoded-state diagnostics useful without writing one
+        # record for every HID report; full raw reports have their own toggle.
+        now = time.monotonic()
+        if now - self._last_debug_state_log_at >= 0.5:
+            self._last_debug_state_log_at = now
+            if self._debug_enabled():
+                pressed = [
+                    name for name, active in (
+                        ("A", a), ("B", b), ("X", x_), ("Y", y_),
+                        ("LB", lb), ("RB", rb), ("BACK", back), ("START", start),
+                        ("L3", l3), ("R3", r3), ("D-UP", dpu), ("D-DOWN", dpd),
+                        ("D-LEFT", dpl), ("D-RIGHT", dpr),
+                    ) if active
+                ]
+                logger.debug(
+                    "Decoded controller=%s sticks=(%d,%d;%d,%d) triggers=(%d,%d) pressed=%s",
+                    self.controller.name, raw_ljx, raw_ljy, raw_rjx, raw_rjy,
+                    raw_lt, raw_rt, ",".join(pressed) or "none",
+                )
+
         a = self._apply_button_invertion(a, button_inv)
         b = self._apply_button_invertion(b, button_inv)
         x_ = self._apply_button_invertion(x_, button_inv)
@@ -427,6 +471,12 @@ class Mapper:
         mouse_active = bool(self.mouse_mode or self.mouse_mode_hotkey)
         if mouse_active != self._mouse_active:
             self._mouse_active = mouse_active
+            if self._debug_enabled():
+                logger.debug(
+                    "Mouse output %s for %s",
+                    "enabled" if mouse_active else "disabled",
+                    self.controller.name,
+                )
             self._mouse_motion.reset()
             if mouse_active:
                 self.emulator.reset_output()
@@ -437,11 +487,12 @@ class Mapper:
 
         if mouse_active:
             sensitivity = max(0.1, float(self.settings.get_mouse_sensitivity()))
+            mouse_deadzone = self.settings.get_mouse_deadzone()
             nx = self._mouse_response(
-                self._mouse_deadzone(ljx / 32767.0)
+                self._mouse_deadzone(ljx / 32767.0, mouse_deadzone)
             )
             ny = self._mouse_response(
-                self._mouse_deadzone(ljy / 32767.0)
+                self._mouse_deadzone(ljy / 32767.0, mouse_deadzone)
             )
 
             # Pixels per second. The time-based motion integrator below makes
@@ -768,4 +819,4 @@ class Phone_mapper:
             try:
                 self.emulator.shutdown()
             except Exception as exc:
-                print(f"[Phone_mapper] Failed to shutdown emulator: {exc}")
+                logger.exception("Failed to shut down Web Companion emulator for %s", self.uuid)

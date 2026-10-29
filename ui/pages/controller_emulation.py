@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Tuple
 
 from PySide6.QtWidgets import (
@@ -25,6 +26,8 @@ from core.vigem import is_vigem_installed
 from ui.vigem_gate import VigemGate
 
 from core.hidhide import HIDHIDE_RELEASES_URL, HidHideError, HidHideManager
+
+logger = logging.getLogger("vpadconnect.controller_emulation")
 
 
 class HidHideWorker(QObject):
@@ -511,9 +514,9 @@ class HidHideCard(QFrame):
         try:
             self.manager.unhide_our_devices()
         except HidHideError as exc:
-            print(f"[HidHide] Cleanup failed: {exc}")
+            logger.exception("HidHide cleanup failed")
         except Exception as exc:
-            print(f"[HidHide] Unexpected cleanup error: {exc}")
+            logger.exception("Unexpected HidHide cleanup error")
 
 
 class DualSenseLightbarDialog(QDialog):
@@ -886,7 +889,7 @@ class ControllerEmulation(QWidget):
             return
 
         if not device:
-            print("[Controller Emulation] Warning: selected HID could not be mapped to a device entry.")
+            logger.warning("Selected HID could not be mapped to a device entry")
 
     def add_emulated_mapping(self, hid_choice: str, emu: str, device: Optional[dict] = None) -> bool:
         new_path = device.get("path") if device else None
@@ -1074,7 +1077,7 @@ class ControllerEmulation(QWidget):
                 lightbar_output=lightbar_output,
             )
         except Exception as exc:
-            print(f"[Controller Emulation] Failed to start mapping: {exc}")
+            logger.exception("Failed to start controller mapping")
             try:
                 hid.hid_manager.stop_polling(path)
             except Exception:
@@ -1109,7 +1112,7 @@ class ControllerEmulation(QWidget):
             try:
                 worker.data_received.connect(mapper.handle_hid_data)
             except RuntimeError:
-                print(f"[Warning] Worker for {path} was deleted before connecting signals")
+                logger.warning("HID worker for %s was deleted before connecting signals", path)
 
         mapper.start()
         widget.set_connection_state(True)
@@ -1132,7 +1135,7 @@ class ControllerEmulation(QWidget):
     def _on_emulate_requested(self, hid_choice: str, emu: str, widget: EmuListItemWidget):
         item = self._find_item_by_widget(widget)
         if item is None:
-            print("[Controller Emulation] Could not locate QListWidgetItem for widget")
+            logger.warning("Could not locate QListWidgetItem for controller widget")
             widget.set_running(False)
             return
         stored = item.data(Qt.UserRole) or (None, None, None)
@@ -1142,7 +1145,7 @@ class ControllerEmulation(QWidget):
         if not device:
             device = self._find_device_by_display_name(display_name)
             if not device:
-                print("[Controller Emulation] Could not match HID to device")
+                logger.warning("Could not match selected HID to a device")
                 widget.set_running(False)
                 return
 
@@ -1187,7 +1190,7 @@ class ControllerEmulation(QWidget):
         if not record:
             return
 
-        print(f"[Controller Emulation] Device lost at {path}: {message}")
+        logger.warning("Controller device lost at %s: %s", path, message)
         self._stop_mapping(path)
         self._stop_lightbar_output(path)
         record["waiting"] = True
@@ -1231,7 +1234,7 @@ class ControllerEmulation(QWidget):
         try:
             devices = hid.hid_manager.scan_devices() or []
         except Exception as exc:
-            print(f"[Controller Emulation] Reconnect scan failed: {exc}")
+            logger.exception("Controller reconnect scan failed")
             return
 
         occupied_paths = set(self.mappers)
@@ -1283,7 +1286,7 @@ class ControllerEmulation(QWidget):
         try:
             self.hidhide_card.shutdown()
         except Exception as exc:
-            print(f"[ControllerEmulation] HidHide cleanup failed: {exc}")
+            logger.exception("HidHide cleanup failed during controller-emulation shutdown")
         try:
             hid.hid_manager.stop_all()
         except Exception:

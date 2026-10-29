@@ -6,6 +6,8 @@ on:
     paths:
       - "core/mouse.py"
       - "core/mapper.py"
+      - "core/settings.py"
+      - "core/dev_logging.py"
       - "core/web_remote.py"
       - "core/remote_protocol.py"
       - "core/remote_actions.py"
@@ -20,6 +22,8 @@ on:
       - "tests/test_remote_actions.py"
       - "tests/test_remote_security.py"
       - "tests/test_mouse_failsafe.py"
+      - "tests/test_dev_logging.py"
+      - "tests/test_settings_runtime.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "VPadConnect*.spec"
@@ -28,6 +32,8 @@ on:
     paths:
       - "core/mouse.py"
       - "core/mapper.py"
+      - "core/settings.py"
+      - "core/dev_logging.py"
       - "core/web_remote.py"
       - "core/remote_protocol.py"
       - "core/remote_actions.py"
@@ -42,6 +48,8 @@ on:
       - "tests/test_remote_actions.py"
       - "tests/test_remote_security.py"
       - "tests/test_mouse_failsafe.py"
+      - "tests/test_dev_logging.py"
+      - "tests/test_settings_runtime.py"
       - "tests/test_web_frontend.cjs"
       - "requirements.txt"
       - "VPadConnect*.spec"
@@ -73,7 +81,10 @@ jobs:
 
       - name: Compile changed Python modules
         run: |
-          python -m compileall -q core/mouse.py core/mapper.py core/vigem.py tests/test_mouse_failsafe.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/vigem_gate.py ui/pages/settings.py ui/pages/controller_emulation.py ui/pages/controllers.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
+          python -m compileall -q core/mouse.py core/mapper.py core/settings.py core/dev_logging.py core/vigem.py tests/test_mouse_failsafe.py tests/test_dev_logging.py tests/test_settings_runtime.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/vigem_gate.py ui/pages/settings.py ui/pages/controller_emulation.py ui/pages/controllers.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
+
+      - name: Test settings persistence and developer logging
+        run: python -m pytest -q tests/test_dev_logging.py tests/test_settings_runtime.py
 
       - name: Test relative mouse failsafe recovery
         run: python -m pytest -q tests/test_mouse_failsafe.py

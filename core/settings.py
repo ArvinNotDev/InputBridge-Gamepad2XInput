@@ -35,11 +35,13 @@ class SettingsManager:
                     "left_stick_invert_y": "true",
                     "mouse_mode": "false",
                     "mouse_sensitivity": "1.0",
+                    "mouse_deadzone": "0.10",
                     "vibration_enabled": "true"
                 }
                 self.config["ui"] = {
                     "language": "eng",
-                    "theme": "dark"
+                    "theme": "dark",
+                    "reduced_motion": "false",
                 }
                 self.config["developer"] = {
                     "debug": "false",
@@ -154,6 +156,16 @@ class SettingsManager:
             self.config.add_section("device")
         self.config.set("device", "mouse_sensitivity", f"{float(sens):.6f}")
 
+    def get_mouse_deadzone(self) -> float:
+        value = self.config.getfloat("device", "mouse_deadzone", fallback=0.10)
+        return max(0.0, min(0.50, value))
+
+    def set_mouse_deadzone(self, deadzone: float) -> None:
+        if not self.config.has_section("device"):
+            self.config.add_section("device")
+        value = max(0.0, min(0.50, float(deadzone)))
+        self.config.set("device", "mouse_deadzone", f"{value:.3f}")
+
     def get_vibration_enabled(self):
         return self.config.getboolean("device", "vibration_enabled", fallback=True)
 
@@ -230,6 +242,14 @@ class SettingsManager:
         if not self.config.has_section("ui"):
             self.config.add_section("ui")
         self.config.set("ui", "theme", str(theme_name))
+
+    def get_ui_reduced_motion(self) -> bool:
+        return self.config.getboolean("ui", "reduced_motion", fallback=False)
+
+    def set_ui_reduced_motion(self, enabled: bool) -> None:
+        if not self.config.has_section("ui"):
+            self.config.add_section("ui")
+        self.config.set("ui", "reduced_motion", "true" if enabled else "false")
 
     # -------- developer --------
     def get_developer_debug(self):
@@ -332,6 +352,10 @@ class SettingsManager:
         except Exception:
             self.set_mouse_sensitivity(1.0)
         try:
+            self.set_mouse_deadzone(self.get_mouse_deadzone())
+        except Exception:
+            self.set_mouse_deadzone(0.10)
+        try:
             self.set_vibration_enabled(self.get_vibration_enabled())
         except Exception:
             self.set_vibration_enabled(True)
@@ -349,6 +373,10 @@ class SettingsManager:
             self.set_ui_theme(theme)
         except Exception:
             self.set_ui_theme("dark")
+        try:
+            self.set_ui_reduced_motion(self.get_ui_reduced_motion())
+        except Exception:
+            self.set_ui_reduced_motion(False)
 
         # Developer defaults
         if not self.config.has_section("developer"):
