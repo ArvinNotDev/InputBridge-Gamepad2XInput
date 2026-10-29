@@ -5,7 +5,7 @@ from collections import deque
 from pathlib import Path
 import time
 
-from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,6 +28,8 @@ from ui.i18n import tr
 
 class RawHidTerminalDialog(QDialog):
     """Display rate-limited live HID packets without doing work on HID threads."""
+
+    visibility_changed = Signal(bool)
 
     def __init__(self, language: str = "eng", parent: QWidget | None = None):
         super().__init__(parent)
@@ -278,6 +280,14 @@ class RawHidTerminalDialog(QDialog):
         self._metrics_timer.timeout.connect(self._update_metrics)
         self._metrics_timer.start()
         self._refresh_status()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.visibility_changed.emit(True)
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.visibility_changed.emit(False)
 
     def _add_stat_card(self, row: QHBoxLayout, label: str, value: str) -> QLabel:
         card = QFrame(self)
