@@ -802,7 +802,7 @@ test("6-axis Air Mouse maps yaw to horizontal movement, inverts vertical pitch, 
     });
   }
   await settle();
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dx > 0), "turning the phone sideways should move the cursor right");
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx < 0), "positive yaw must move the cursor left after correcting the reversed horizontal axis");
   assert.ok(stateRequests(harness).some((request) => request.mouse.dx >= 10), "gyro acceleration should feel responsive at default sensitivity");
 
   for (let i = 0; i < 40; i += 1) {
