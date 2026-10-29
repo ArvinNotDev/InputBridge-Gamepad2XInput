@@ -380,3 +380,32 @@ body.focus-mode .faces{width:108px;height:108px}
   .donation-card{align-items:stretch;flex-direction:column}
   .donation-button{justify-content:center;width:100%}
 }
+
+
+/* Focus mode follows the selected tool; mouse focus keeps the pointer surface and exit control visible. */
+.mouse-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.mouse-heading h2{margin-bottom:5px}
+.mouse-live-indicator{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:7px 10px;border:1px solid #263b55;border-radius:999px;color:#8fa8c8;font-size:9px;font-weight:800;letter-spacing:1px}
+.mouse-live-indicator i{width:6px;height:6px;border-radius:50%;background:#35d39a;box-shadow:0 0 10px #35d39a66}
+.air-mouse-tools{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:14px;padding:13px 14px;border:1px solid #263650;border-radius:15px;background:linear-gradient(135deg,#111d30,#0b1423)}
+.air-mouse-actions{display:flex;align-items:center;gap:8px}
+.air-mouse-toggle{min-height:42px;font-weight:750}
+.air-mouse-toggle[aria-pressed="true"]{border-color:#26886a;background:linear-gradient(135deg,#145b4b,#16715a);box-shadow:0 0 0 1px #35d39a22,inset 0 1px #ffffff10}
+.air-mouse-sensitivity{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0!important;color:#cbd7e9;font-size:12px}
+.air-mouse-sensitivity input[type=range]{width:min(48%,260px);min-height:22px;accent-color:#35d39a}
+.air-mouse-sensitivity output{color:#9fe9d0;font-variant-numeric:tabular-nums}
+.air-mouse-status{margin:0;color:#8ea5c2;font-size:11px;line-height:1.4}
+.touchpad.air-mouse-active{border-color:#27866b;background:linear-gradient(145deg,#0a201f,#07101d)}
+.touchpad.air-mouse-active .touchgrid{opacity:.22}
+.touchpad.air-mouse-active span{color:#a8e8d4}
+.touchpad:focus-visible{outline:2px solid #6f91ff;outline-offset:3px}
+body.focus-mode #view-mouse.view.active{display:block;min-height:100dvh}
+body.focus-mode #view-mouse .mouse-panel{max-width:none;min-height:100dvh;display:flex;flex-direction:column;gap:0;padding:54px 12px 12px}
+body.focus-mode #view-mouse .mouse-heading{display:none}
+body.focus-mode #view-mouse .air-mouse-tools{flex-shrink:0;margin-top:0;margin-bottom:8px;padding:9px 11px;gap:8px}
+body.focus-mode #view-mouse .air-mouse-status{font-size:10px}
+body.focus-mode #view-mouse .touchpad{flex:1;width:100%;height:auto;min-height:100px;max-height:none;margin:7px 0 9px}
+body.focus-mode #view-mouse .mouse-row{flex-shrink:0;margin-top:6px}
+body.focus-mode #view-mouse .mouse-row .btn{min-height:40px}
+@media(max-width:520px){.mouse-heading{align-items:flex-start}.mouse-live-indicator{font-size:8px;padding:6px 8px}.air-mouse-tools{padding:11px}.air-mouse-actions .btn{flex:1;padding-left:10px;padding-right:10px}.air-mouse-sensitivity{flex-wrap:wrap}.air-mouse-sensitivity input[type=range]{width:100%}}
+@media(orientation:landscape) and (max-height:560px){.air-mouse-tools{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center}.air-mouse-actions{grid-row:span 2}.air-mouse-sensitivity{display:grid;grid-template-columns:auto 1fr;gap:4px}.air-mouse-sensitivity input[type=range]{width:100%}body.focus-mode #view-mouse .air-mouse-tools{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}

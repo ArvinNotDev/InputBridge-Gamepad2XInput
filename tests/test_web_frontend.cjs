@@ -64,6 +64,7 @@ function createElement(id, attributes = {}) {
     getAttribute(name) { return attributes[name] ?? null; },
     setAttribute(name, value) { attributes[name] = String(value); },
     setPointerCapture() {},
+    focus() { this.focused = true; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 200, height: 200 }; },
     querySelector(selector) {
       if (selector === ".knob") return this.knob || createElement(`${id}-knob`);
@@ -750,6 +751,61 @@ test("desktop shutdown invalidates the stored browser session and stops reconnec
   harness.runTimer(5000);
   await settle();
   assert.equal(harness.webSockets.length, 1);
+});
+
+
+
+test("Focus stays on the selected mouse tab and focuses the touch surface", async () => {
+  const harness = createHarness();
+  await settle();
+
+  harness.mouseTab.dispatch("click");
+  assert.equal(harness.elements.get("view-mouse").classList.contains("active"), true);
+  harness.elements.get("focus").dispatch("click");
+
+  assert.equal(harness.document.body.classList.contains("focus-mode"), true);
+  assert.equal(harness.elements.get("view-mouse").classList.contains("active"), true);
+  assert.equal(harness.elements.get("view-gamepad").classList.contains("active"), false);
+  assert.equal(harness.touchpad.focused, true);
+  assert.match(harness.elements.get("toast").textContent, /mouse focus enabled/i);
+});
+
+
+test("Air Mouse uses device orientation, supports center calibration, and persists sensitivity", async () => {
+  const harness = createHarness();
+  await settle();
+
+  harness.elements.get("airMouseToggle").dispatch("click");
+  assert.equal(harness.elements.get("airMouseToggle").getAttribute("aria-pressed"), "true");
+  assert.equal(harness.touchpad.classList.contains("air-mouse-active"), true);
+
+  harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 0 });
+  harness.dispatchWindow("deviceorientation", { beta: 80, gamma: 8 });
+  await settle();
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx !== 0 || request.mouse.dy !== 0));
+
+  harness.elements.get("airMouseCalibrate").dispatch("click");
+  assert.match(harness.elements.get("airMouseStatus").textContent, /center calibrated/i);
+
+  harness.elements.get("airMouseSensitivity").value = "20";
+  harness.elements.get("airMouseSensitivity").dispatch("input");
+  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).airMouseSensitivity, 2);
+
+  harness.elements.get("airMouseToggle").dispatch("click");
+  assert.equal(harness.elements.get("airMouseToggle").getAttribute("aria-pressed"), "false");
+  assert.equal(harness.touchpad.classList.contains("air-mouse-active"), false);
+});
+
+
+test("Air Mouse disables automatically when switching to gamepad output", async () => {
+  const harness = createHarness();
+  await settle();
+  harness.mouseTab.dispatch("click");
+  harness.elements.get("airMouseToggle").dispatch("click");
+  assert.equal(harness.elements.get("airMouseToggle").getAttribute("aria-pressed"), "true");
+
+  harness.elements.get("mouseMode").dispatch("click");
+  assert.equal(harness.elements.get("airMouseToggle").getAttribute("aria-pressed"), "false");
 });
 
 
