@@ -1,4 +1,6 @@
 import logging
+import threading
+import time
 from typing import Optional, Tuple
 
 from PySide6.QtWidgets import (
@@ -710,12 +712,15 @@ class EmuListItemWidget(QWidget):
 
 class ControllerEmulation(QWidget):
     vigem_recheck_requested = Signal()
+    raw_hid_report = Signal(str, bytes)
 
     def __init__(
         self, settings, controllers_page, hotkey_page, *,
         vigem_available: bool | None = None,
     ):
         super().__init__()
+        self._raw_hid_report_lock = threading.Lock()
+        self._last_raw_hid_emit_at = 0.0
         layout_dashboard = QVBoxLayout(self)
         self.controllers_page = controllers_page
         hid.hid_manager = HIDManager(settings.get_poll_interval_ms() / 1000.0)
@@ -1046,6 +1051,17 @@ class ControllerEmulation(QWidget):
             color, enabled = resolve_lightbar_color(updated, battery_state)
             output.set_color(color, enabled=enabled)
 
+    def _publish_raw_hid_report(self, controller_name: str, report: bytes) -> None:
+        """Rate-limit cross-thread GUI updates to 30 reports per second globally."""
+        now = time.monotonic()
+        with self._raw_hid_report_lock:
+            if now - self._last_raw_hid_emit_at < (1.0 / 30.0):
+                return
+            self._last_raw_hid_emit_at = now
+        # Emitting a Qt signal is thread-safe. Connected widgets receive the
+        # queued signal on their own thread; this method never touches widgets.
+        self.raw_hid_report.emit(str(controller_name), bytes(report))
+
     def _start_mapping(
         self,
         item: QListWidgetItem,
@@ -1075,6 +1091,7 @@ class ControllerEmulation(QWidget):
                 self.controllers_page,
                 self.hotkey_page,
                 lightbar_output=lightbar_output,
+                raw_hid_report_callback=self._publish_raw_hid_report,
             )
         except Exception as exc:
             logger.exception("Failed to start controller mapping")
