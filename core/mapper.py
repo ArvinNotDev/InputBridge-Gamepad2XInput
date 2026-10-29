@@ -48,6 +48,7 @@ class Mapper:
         self.settings = settings
         self.controllers_page = controllers_page
         self._last_raw_report_log_at = 0.0
+        self._last_debug_state_log_at = 0.0
 
         self.mouse_mode = False
         self.mouse_mode_hotkey = False
@@ -430,6 +431,26 @@ class Mapper:
         r3 = self._get_button_from_cfg(report, buttons_cfg.get("r3"))
 
         dpu, dpd, dpl, dpr = self._get_dpad_from_hat(report, dpad_cfg)
+
+        # Keep detailed decoded-state diagnostics useful without writing one
+        # record for every HID report; full raw reports have their own toggle.
+        now = time.monotonic()
+        if now - self._last_debug_state_log_at >= 0.5:
+            self._last_debug_state_log_at = now
+            if self._debug_enabled():
+                pressed = [
+                    name for name, active in (
+                        ("A", a), ("B", b), ("X", x_), ("Y", y_),
+                        ("LB", lb), ("RB", rb), ("BACK", back), ("START", start),
+                        ("L3", l3), ("R3", r3), ("D-UP", dpu), ("D-DOWN", dpd),
+                        ("D-LEFT", dpl), ("D-RIGHT", dpr),
+                    ) if active
+                ]
+                logger.debug(
+                    "Decoded controller=%s sticks=(%d,%d;%d,%d) triggers=(%d,%d) pressed=%s",
+                    self.controller.name, raw_ljx, raw_ljy, raw_rjx, raw_rjy,
+                    raw_lt, raw_rt, ",".join(pressed) or "none",
+                )
 
         a = self._apply_button_invertion(a, button_inv)
         b = self._apply_button_invertion(b, button_inv)
