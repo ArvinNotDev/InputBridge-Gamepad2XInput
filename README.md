@@ -48,7 +48,7 @@ VPadConnect is free to use, and its source code is publicly available on GitHub.
 
 <p align="center">
   <a href="https://reymit.ir/arvinnotdev">
-    <img src="https://img.shields.io/badge/☕_Buy_me_a_coffee-Support_VPadConnect-FFB86B?style=for-the-badge&labelColor=202633" alt="Buy me a coffee to support VPadConnect">
+    <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-Support%20VPadConnect-FFB86B?style=for-the-badge&labelColor=202633" alt="Buy me a coffee to support VPadConnect">
   </a>
 </p>
 
@@ -72,7 +72,7 @@ Thank you for helping VPadConnect keep growing. Using the app without donating i
 * Per-session choice between XInput gamepad output and direct Windows mouse output
 * Responsive HTTPS browser companion with a persistent low-latency input stream, touch gamepad, touch mouse, remote keyboard, media, clipboard, launch shortcuts, presentation and permission-gated power controls
 * Native-style Xbox and PlayStation controller layouts with on-screen face-button, shoulder and trigger labels that follow the selected console style
-* Full-screen Gamepad Focus with gyro-assisted Driving mode and calibratable steering
+* Full-screen Gamepad Focus with stable portrait/landscape ABXY layout, gyro-assisted Driving, larger analog throttle/brake controls, and a Shooter preset with digital hold-to-aim/fire triggers
 * Independent browser gamepad sessions, so multiple phones/tablets can create separate virtual XInput devices
 * System-tray integration
 * Dark and light themes
@@ -257,6 +257,12 @@ between **Xbox** and **PlayStation** layouts using the controller-style button b
 the driving and calibration controls. The face-button symbols, shoulder labels and
 trigger labels update to match the selected style, while input is mapped to the
 corresponding XInput controls.
+
+Choose **Standard**, **Driving**, or **Shooter** from the Gamepad preset selector.
+Standard keeps the usual controls. Driving retains analog L2/R2 and gives the
+throttle/brake sliders larger touch targets. Shooter replaces those sliders with
+digital hold controls: L2 acts as aim and R2 as fire, each releasing to zero and
+reaching full input while held. The selected preset is saved in that browser.
 
 **Driving** mode supports phone-tilt steering. Enable motion access when requested,
 hold the device at a comfortable neutral angle, and select **Calibrate center**.
