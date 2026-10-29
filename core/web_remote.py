@@ -27,7 +27,7 @@ BUTTON_KEYS = {"A", "B", "X", "Y", "LB", "RB", "BACK", "START", "GUIDE", "L3", "
 ANALOG_KEYS = {"L2", "R2"}
 JOYSTICK_KEYS = {"left_x", "left_y", "right_x", "right_y"}
 MOUSE_BUTTON_KEYS = {"left", "right", "middle"}
-SESSION_IDLE_SECONDS = 8.0
+SESSION_IDLE_SECONDS = 300.0
 PAIRING_LIFETIME_SECONDS = 300.0
 MAX_WEB_SESSIONS = 8
 
@@ -236,6 +236,7 @@ class WebRemoteServer:
         self._watchdog.start()
 
     def stop(self) -> None:
+        self._notify_streams_shutdown()
         self._stop_event.set()
         server, thread, watchdog = self._server, self._thread, self._watchdog
         self._server = None
@@ -257,6 +258,26 @@ class WebRemoteServer:
             self._close_session(session)
         self.pairing_code = ""
         self.pairing_deadline = 0
+
+    def _notify_streams_shutdown(self) -> None:
+        """Tell paired browsers that the desktop app is stopping intentionally."""
+        with self._lock:
+            streams = []
+            seen: set[int] = set()
+            for session in self._sessions.values():
+                stream = session.get("stream_ws")
+                if stream is not None and id(stream) not in seen:
+                    seen.add(id(stream))
+                    streams.append(stream)
+        for stream in streams:
+            try:
+                stream.send(json.dumps({"type": "error", "error": "server_shutdown"}))
+            except Exception:
+                pass
+            try:
+                stream.close(reason=1001, message=b"Desktop application stopped")
+            except Exception:
+                pass
 
     def _watch_expired_sessions(self) -> None:
         while not self._stop_event.wait(1):
@@ -425,7 +446,7 @@ class WebRemoteServer:
             token = secrets.token_urlsafe(32)
             session = {"uuid": session_uuid, "name": name.strip(), "mapper": mapper,
                        "remote": RemoteActionSession(), "last_seen": time.monotonic(), "mode": "gamepad",
-                       "lock": threading.RLock(), "closed": False}
+                       "lock": threading.RLock(), "closed": False, "stream_ws": None}
             with self._lock:
                 self._pending_pairs = max(0, self._pending_pairs - 1)
                 if self._stop_event.is_set() or len(self._sessions) >= MAX_WEB_SESSIONS:
@@ -481,13 +502,17 @@ class WebRemoteServer:
                     if (
                         candidate is not None
                         and not candidate.get("closed", False)
+                        and not self._stop_event.is_set()
                         and time.monotonic() - candidate["last_seen"] <= SESSION_IDLE_SECONDS
                     ):
                         session = candidate
                         session["last_seen"] = time.monotonic()
+                        session["stream_ws"] = ws
                 if session is None:
-                    ws.send(json.dumps({"type": "error", "error": "session_expired"}))
-                    ws.close(reason=1008, message=b"Session expired")
+                    error_type = "server_shutdown" if self._stop_event.is_set() else "session_expired"
+                    ws.send(json.dumps({"type": "error", "error": error_type}))
+                    ws.close(reason=1001 if error_type == "server_shutdown" else 1008,
+                             message=b"Desktop application stopped" if error_type == "server_shutdown" else b"Session expired")
                     return ""
 
                 ws.send(json.dumps({"type": "ready"}))
@@ -513,6 +538,10 @@ class WebRemoteServer:
                     if message.get("type") == "ping":
                         if not self._touch_stream_session(token, session):
                             break
+                        try:
+                            ws.send(json.dumps({"type": "pong"}))
+                        except (ConnectionClosed, OSError, RuntimeError, ValueError):
+                            break
                         continue
                     if message.get("type") != "state":
                         continue
@@ -527,6 +556,9 @@ class WebRemoteServer:
                 pass
             finally:
                 if session is not None:
+                    with self._lock:
+                        if session.get("stream_ws") is ws:
+                            session["stream_ws"] = None
                     self._release_stream_inputs(session)
                 try:
                     ws.close()

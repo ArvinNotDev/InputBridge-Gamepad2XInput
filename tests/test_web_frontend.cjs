@@ -120,6 +120,16 @@ function createHarness(settings = {}) {
   const heldStateResponses = [];
   const webSockets = [];
   const frames = [];
+  const timers = new Map();
+  let timerSequence = 0;
+  function queueTimeout(callback, delay) {
+    const id = ++timerSequence;
+    timers.set(id, { callback, delay: Number(delay) || 0 });
+    return id;
+  }
+  function clearQueuedTimeout(id) {
+    timers.delete(id);
+  }
 
   const document = {
     readyState: "complete",
@@ -220,8 +230,8 @@ function createHarness(settings = {}) {
     URLSearchParams,
     performance: { now() { now += 5; return now; } },
     requestAnimationFrame(callback) { frames.push(callback); },
-    setTimeout,
-    clearTimeout,
+    setTimeout: queueTimeout,
+    clearTimeout: clearQueuedTimeout,
     history: { replaceState() {} },
   };
   sandbox.WebSocket = settings.websocket ? FakeWebSocket : undefined;
@@ -239,6 +249,14 @@ function createHarness(settings = {}) {
     sessionValues,
     preferenceValues,
     webSockets,
+    runTimer(delay) {
+      const entry = [...timers.entries()].find(([, timer]) => timer.delay === delay);
+      if (!entry) return false;
+      timers.delete(entry[0]);
+      entry[1].callback();
+      return true;
+    },
+    scheduledDelays() { return [...timers.values()].map((timer) => timer.delay); },
     dispatchWindow(name, event) {
       const handler = windowListeners.get(name);
       if (handler) handler(event);
@@ -544,7 +562,7 @@ test("keyboard arrows operate and recenter a focused stick", async () => {
   assert.equal(stateRequests(harness).at(-1).joystick.left_x, 128);
 });
 
-test("visibility loss and a failed connection request clear held input", async () => {
+test("visibility loss clears held input and a temporary network failure preserves the session", async () => {
   const harness = createHarness();
   await settle();
   harness.leftStick.dispatch("pointerdown", { pointerId: 40, clientX: 168 });
@@ -565,8 +583,10 @@ test("visibility loss and a failed connection request clear held input", async (
   harness.setFailNextState();
   harness.gamepadButton.dispatch("pointerdown", { pointerId: 41 });
   await settle();
-  assert.ok(harness.calls.some(({ url }) => url === "/api/disconnect"));
-  assert.equal(harness.sessionValues.has("ib.web.token"), false);
+  assert.equal(harness.calls.some(({ url }) => url === "/api/disconnect"), false);
+  assert.equal(harness.sessionValues.get("ib.web.token"), "test-session-token");
+  assert.equal(harness.elements.get("badge").querySelector("span").textContent, "Reconnecting…");
+  assert.match(harness.elements.get("toast").textContent, /connection to your PC was lost/i);
   assert.equal(harness.gamepadButton.classList.contains("pressed"), false);
 });
 
@@ -674,6 +694,58 @@ test("paired controller streams input over one persistent WebSocket without stat
   harness.tickFrame();
   snapshots = socket.sent.filter((packet) => packet.type === "state");
   assert.equal(snapshots.at(-1).state.joystick.left_x, 128);
+});
+
+
+
+
+test("unexpected WebSocket loss retries after five seconds and reports recovery with toasts", async () => {
+  const harness = createHarness({ websocket: true });
+  await settle();
+
+  const first = harness.webSockets[0];
+  first.readyState = 1;
+  first.onopen({});
+  first.onmessage({ data: JSON.stringify({ type: "ready" }) });
+  first.close();
+
+  assert.equal(harness.sessionValues.get("ib.web.token"), "test-session-token");
+  assert.equal(harness.elements.get("badge").querySelector("span").textContent, "Reconnecting…");
+  assert.match(harness.elements.get("toast").textContent, /connection to your PC was lost/i);
+  assert.ok(harness.scheduledDelays().includes(5000));
+
+  assert.equal(harness.runTimer(5000), true);
+  await settle();
+  assert.equal(harness.webSockets.length, 2);
+  assert.match(harness.elements.get("toast").textContent, /trying to reconnect to your PC/i);
+
+  const second = harness.webSockets[1];
+  second.readyState = 1;
+  second.onopen({});
+  second.onmessage({ data: JSON.stringify({ type: "ready" }) });
+  assert.equal(harness.elements.get("badge").querySelector("span").textContent, "Connected");
+  assert.match(harness.elements.get("toast").textContent, /connection to your PC was restored/i);
+});
+
+
+test("desktop shutdown invalidates the stored browser session and stops reconnect attempts", async () => {
+  const harness = createHarness({ websocket: true });
+  await settle();
+
+  const socket = harness.webSockets[0];
+  socket.readyState = 1;
+  socket.onopen({});
+  socket.onmessage({ data: JSON.stringify({ type: "ready" }) });
+  socket.onmessage({ data: JSON.stringify({ type: "error", error: "server_shutdown" }) });
+
+  assert.equal(harness.sessionValues.has("ib.web.token"), false);
+  assert.equal(harness.elements.get("badge").querySelector("span").textContent, "Not paired");
+  assert.equal(harness.elements.get("pairPanel").classList.contains("hidden"), false);
+  assert.match(harness.elements.get("toast").textContent, /VPadConnect on the PC was stopped/i);
+  assert.equal(harness.webSockets.length, 1);
+  harness.runTimer(5000);
+  await settle();
+  assert.equal(harness.webSockets.length, 1);
 });
 
 

@@ -130,6 +130,9 @@ def test_persistent_websocket_stream_applies_states_and_releases_inputs(monkeypa
         assert mappers[0].hid_inputs[-1]["buttons"]["A"] == 1
         assert mappers[0].hid_inputs[-1]["joystick"]["left_x"] == 205
 
+        client.send(json.dumps({"type": "ping"}))
+        assert json.loads(client.receive(timeout=2)) == {"type": "pong"}
+
         client.close()
         client = None
         deadline = time.monotonic() + 2
@@ -143,6 +146,34 @@ def test_persistent_websocket_stream_applies_states_and_releases_inputs(monkeypa
         http_server.shutdown()
         http_server.server_close()
         thread.join(timeout=2)
+
+
+def test_desktop_shutdown_notifies_active_browser_streams():
+    import json
+    from core.web_remote import WebRemoteServer
+
+    class FakeStream:
+        def __init__(self):
+            self.messages = []
+            self.closed = []
+
+        def send(self, message):
+            self.messages.append(json.loads(message))
+
+        def close(self, **kwargs):
+            self.closed.append(kwargs)
+
+    server = WebRemoteServer(object(), object(), object())
+    stream = FakeStream()
+    server._sessions["active-token"] = {"stream_ws": stream}
+
+    server._notify_streams_shutdown()
+
+    assert stream.messages == [{"type": "error", "error": "server_shutdown"}]
+    assert stream.closed == [{
+        "reason": 1001,
+        "message": b"Desktop application stopped",
+    }]
 
 
 def test_persistent_controller_stream_route_is_registered():
