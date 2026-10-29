@@ -4,7 +4,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication
 
-from core import mouse as mouse_module
 from core.mapper import Mouse, Phone_mapper
 from ui.pages.server import ClientListItemWidget, validate_client_message
 
@@ -92,32 +91,3 @@ def test_phone_mouse_mapper_moves_scrolls_and_releases_buttons(monkeypatch):
     mapper.release_mouse_buttons()
     assert calls[-1] == ("up", "left")
     assert not mapper._mouse_buttons["left"]
-
-
-
-def test_relative_mouse_move_escapes_failsafe_corner_and_restores_safeguard(monkeypatch):
-    calls = []
-    cursor = {"position": (0, 0)}
-
-    monkeypatch.setattr(mouse_module.pyautogui, "FAILSAFE", True)
-    monkeypatch.setattr(mouse_module.pyautogui, "FAILSAFE_POINTS", [(0, 0)])
-    monkeypatch.setattr(
-        mouse_module.pyautogui, "position", lambda: cursor["position"]
-    )
-    monkeypatch.setattr(
-        mouse_module.pyautogui,
-        "moveRel",
-        lambda dx, dy, duration=0: calls.append(
-            (mouse_module.pyautogui.FAILSAFE, dx, dy, duration)
-        ),
-    )
-
-    mouse_module.Mouse.moveRel(14, 7)
-    assert calls == [(False, 14, 7, 0.0)]
-    assert mouse_module.pyautogui.FAILSAFE is True
-
-    # Away from the emergency point, keep PyAutoGUI's normal safeguard active.
-    cursor["position"] = (20, 30)
-    mouse_module.Mouse.moveRel(-4, 3)
-    assert calls[-1] == (True, -4, 3, 0.0)
-    assert mouse_module.pyautogui.FAILSAFE is True

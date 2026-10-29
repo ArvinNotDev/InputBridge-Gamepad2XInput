@@ -67,7 +67,7 @@ jobs:
 
       - name: Compile changed Python modules
         run: |
-          python -m compileall -q core/web_remote.py core/remote_protocol.py ui/animations.py ui/pages/settings.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
+          python -m compileall -q core/mouse.py tests/test_mouse_failsafe.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/pages/settings.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
 
       - name: Validate browser JavaScript syntax
         run: node --check ui/web/static/app.js

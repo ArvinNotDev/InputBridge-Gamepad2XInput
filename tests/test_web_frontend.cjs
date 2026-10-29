@@ -707,6 +707,37 @@ test("WebSocket backpressure drops stale mouse movement instead of replaying it 
   assert.equal(states.at(-1).state.mouse.dy, 0);
 });
 
+test("WebSocket backpressure drops stale mouse movement instead of replaying it with lag", async () => {
+  const harness = createHarness({ websocket: true });
+  await settle();
+
+  const socket = harness.webSockets[0];
+  socket.readyState = 1;
+  socket.onopen({});
+  socket.onmessage({ data: JSON.stringify({ type: "ready" }) });
+  harness.tickFrame();
+
+  harness.elements.get("airMouseToggle").dispatch("click");
+  harness.tickFrame();
+
+  socket.bufferedAmount = 8192;
+  for (let i = 0; i < 30; i += 1) {
+    harness.dispatchWindow("devicemotion", {
+      interval: 16,
+      rotationRate: { alpha: 0, beta: 0, gamma: 35 },
+      acceleration: { x: 0, y: 0, z: 0 },
+    });
+    harness.tickFrame();
+  }
+
+  socket.bufferedAmount = 0;
+  harness.tickFrame();
+  const states = socket.sent.filter((packet) => packet.type === "state");
+  assert.ok(states.length >= 2);
+  assert.equal(states.at(-1).state.mouse.dx, 0, "stale movement must not burst out when the socket recovers");
+  assert.equal(states.at(-1).state.mouse.dy, 0);
+});
+
 test("paired controller streams input over one persistent WebSocket without state POSTs", async () => {
   const harness = createHarness({ websocket: true });
   await settle();
