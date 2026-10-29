@@ -7,10 +7,11 @@ from PySide6.QtWidgets import (
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QAbstractSpinBox
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QUrl
+from PySide6.QtCore import Qt, QTimer, Signal, QUrl, Slot
 from PySide6.QtGui import QDesktopServices
 from ui.i18n import LANGUAGE_NAMES, tr
 from ui.animations import AnimatedStackedWidget, AnimatedTabBar
+from ui.pages.raw_hid_terminal import RawHidTerminalDialog
 from core.dev_logging import configure_developer_logging, resolve_log_path, clear_log_file as clear_developer_log_file
 
 
@@ -23,6 +24,7 @@ class SettingsPage(QWidget):
         self.theme_manager = theme_manager
         self.settings = settings
         self.profile_manager = profile_manager
+        self._raw_hid_terminal: RawHidTerminalDialog | None = None
         self._autosave_timer = QTimer(self)
         self._autosave_timer.setSingleShot(True)
         self._autosave_timer.setInterval(350)
@@ -351,8 +353,22 @@ class SettingsPage(QWidget):
         self.chk_debug = QCheckBox("Debug")
         dev_form.addRow(self.chk_debug)
 
+        raw_hid_row = QHBoxLayout()
+        raw_hid_row.setSpacing(10)
         self.chk_raw_hid = QCheckBox("Raw HID debug")
-        dev_form.addRow(self.chk_raw_hid)
+        self.chk_raw_hid.setToolTip(
+            "Stream live raw HID packets to the terminal and include rate-limited samples in diagnostic logs."
+        )
+        raw_hid_row.addWidget(self.chk_raw_hid)
+        raw_hid_row.addStretch(1)
+        self.btn_raw_hid_terminal = QPushButton("Open live terminal")
+        self.btn_raw_hid_terminal.setObjectName("settings_secondary")
+        self.btn_raw_hid_terminal.setMinimumWidth(150)
+        self.btn_raw_hid_terminal.setToolTip(
+            "Open a live, timestamped hex view of raw HID reports from connected physical controllers."
+        )
+        raw_hid_row.addWidget(self.btn_raw_hid_terminal)
+        dev_form.addRow(raw_hid_row)
 
         self.chk_log_to_file = QCheckBox("Log to file")
         dev_form.addRow(self.chk_log_to_file)
@@ -617,6 +633,8 @@ class SettingsPage(QWidget):
         self.dev_restore2.clicked.connect(self.restore_dev_defaults)
         self.dev_apply2.clicked.connect(self.apply_dev)
 
+        self.btn_raw_hid_terminal.clicked.connect(self._open_raw_hid_terminal)
+        self.chk_raw_hid.toggled.connect(self._on_raw_hid_toggled)
         self.btn_browse_log.clicked.connect(self._browse_log_file)
         self.btn_open_log.clicked.connect(self._open_log_file)
         self.btn_open_log_folder.clicked.connect(self._open_log_folder)
@@ -699,6 +717,10 @@ class SettingsPage(QWidget):
             for widget, state in zip(widgets, states):
                 widget.blockSignals(state)
 
+        if self._raw_hid_terminal is not None:
+            self._raw_hid_terminal.set_capture_enabled(
+                self.settings.get_raw_hid_debug()
+            )
         self._update_profile_label()
         self._apply_reduced_motion()
         log_path = configure_developer_logging(self.settings)
@@ -952,6 +974,40 @@ class SettingsPage(QWidget):
     # ==========================================================
     # DEVELOPER ACTIONS
     # ==========================================================
+    def _open_raw_hid_terminal(self) -> None:
+        """Open the live monitor and ensure raw capture is enabled first."""
+        if not self.chk_raw_hid.isChecked():
+            self.chk_raw_hid.setChecked(True)
+        self._autosave_timer.stop()
+        self._save_current_values()
+
+        if self._raw_hid_terminal is None:
+            self._raw_hid_terminal = RawHidTerminalDialog(
+                language=self.settings.get_ui_language(),
+                parent=self,
+            )
+        self._raw_hid_terminal.set_capture_enabled(self.chk_raw_hid.isChecked())
+        self._raw_hid_terminal.show()
+        self._raw_hid_terminal.raise_()
+        self._raw_hid_terminal.activateWindow()
+
+    def _on_raw_hid_toggled(self, enabled: bool) -> None:
+        terminal = self._raw_hid_terminal
+        if terminal is not None:
+            terminal.set_capture_enabled(enabled)
+
+    @Slot(str, bytes)
+    def append_raw_hid_report(self, controller_name: str, report: bytes) -> None:
+        """Receive HID reports queued onto the GUI thread and forward only to a visible terminal."""
+        terminal = self._raw_hid_terminal
+        if (
+            terminal is None
+            or not terminal.isVisible()
+            or not self.chk_raw_hid.isChecked()
+        ):
+            return
+        terminal.append_report(controller_name, report)
+
     def restore_dev_defaults(self):
         self.chk_debug.setChecked(False)
         self.chk_raw_hid.setChecked(False)
