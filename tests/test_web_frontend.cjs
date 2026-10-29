@@ -776,7 +776,7 @@ test("Focus stays on the selected mouse tab and focuses the touch surface", asyn
 });
 
 
-test("6-axis Air Mouse maps yaw to horizontal movement, inverts vertical pitch, and supports gyro bias calibration", async () => {
+test("6-axis Air Mouse uses the correct horizontal gyro axis, preserves vertical pitch, and calibrates robustly", async () => {
   const harness = createHarness();
   await settle();
 
@@ -791,9 +791,18 @@ test("6-axis Air Mouse maps yaw to horizontal movement, inverts vertical pitch, 
       acceleration: { x: 0, y: 0, z: 0 },
     });
   }
+  // A one-frame gyro spike while the page is hidden must not poison neutral calibration.
+  harness.document.hidden = true;
+  harness.dispatchWindow("devicemotion", {
+    interval: 16,
+    rotationRate: { alpha: 0, beta: 0, gamma: 180 },
+    acceleration: { x: 0, y: 0, z: 0 },
+  });
+  harness.document.hidden = false;
   harness.elements.get("airMouseCalibrate").dispatch("click");
   assert.match(harness.elements.get("airMouseStatus").textContent, /gyro.*calibrated/i);
 
+  // beta is the screen-side axis, not the twist/yaw axis used for horizontal cursor movement.
   for (let i = 0; i < 40; i += 1) {
     harness.dispatchWindow("devicemotion", {
       interval: 16,
@@ -802,8 +811,18 @@ test("6-axis Air Mouse maps yaw to horizontal movement, inverts vertical pitch, 
     });
   }
   await settle();
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dx < 0), "positive yaw must move the cursor left after correcting the reversed horizontal axis");
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dx <= -10), "gyro acceleration should feel responsive at default sensitivity");
+  assert.equal(stateRequests(harness).some((request) => request.mouse.dx !== 0), false, "beta-only rotation must not drive horizontal cursor movement");
+
+  for (let i = 0; i < 40; i += 1) {
+    harness.dispatchWindow("devicemotion", {
+      interval: 16,
+      rotationRate: { alpha: 0, beta: 0, gamma: 28 },
+      acceleration: { x: 0, y: 0, z: 0 },
+    });
+  }
+  await settle();
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx > 0), "positive gamma rotation should move the cursor right");
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx >= 10), "accelerated gyro movement should feel responsive at default sensitivity");
 
   for (let i = 0; i < 40; i += 1) {
     harness.dispatchWindow("devicemotion", {
@@ -813,7 +832,7 @@ test("6-axis Air Mouse maps yaw to horizontal movement, inverts vertical pitch, 
     });
   }
   await settle();
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dy < 0), "positive pitch rotation should move the cursor up");
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dy < 0), "vertical pitch must retain its existing alpha axis and move the cursor up");
 
   harness.elements.get("airMouseSensitivity").value = "50";
   harness.elements.get("airMouseSensitivity").dispatch("input");
