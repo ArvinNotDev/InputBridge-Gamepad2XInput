@@ -967,6 +967,12 @@ class SettingsPage(QWidget):
 
     def _browse_log_file(self) -> None:
         current = str(resolve_log_path(self.settings))
+        if self.edit_log_path.text().strip():
+            try:
+                from core.utils.paths import resolve_data_path
+                current = str(resolve_data_path(self.edit_log_path.text().strip()))
+            except (TypeError, ValueError):
+                pass
         filename, _ = QFileDialog.getSaveFileName(
             self, "Choose diagnostic log file", current,
             "Log files (*.log *.txt);;All files (*)",
@@ -991,6 +997,9 @@ class SettingsPage(QWidget):
             QMessageBox.warning(self, "Could not open log file", f"Open this file manually:\n{path}")
 
     def _open_log_folder(self) -> None:
+        self._apply_all_current_values()
+        self.settings.save()
+        configure_developer_logging(self.settings)
         path = resolve_log_path(self.settings)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -1001,6 +1010,9 @@ class SettingsPage(QWidget):
             QMessageBox.warning(self, "Could not open log folder", str(path.parent))
 
     def _clear_log_file(self) -> None:
+        self._apply_all_current_values()
+        self.settings.save()
+        configure_developer_logging(self.settings)
         path = resolve_log_path(self.settings)
         answer = QMessageBox.question(
             self, "Clear diagnostic logs?",
