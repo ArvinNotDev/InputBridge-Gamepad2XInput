@@ -21,6 +21,8 @@ from core.dualsense_lightbar import (
     resolve_lightbar_color,
 )
 from ui.i18n import tr
+from core.vigem import VIGEMBUS_RELEASES_URL, is_vigem_installed
+from ui.vigem_gate import VigemGate
 
 from core.hidhide import HIDHIDE_RELEASES_URL, HidHideError, HidHideManager
 
@@ -704,7 +706,12 @@ class EmuListItemWidget(QWidget):
 
 
 class ControllerEmulation(QWidget):
-    def __init__(self, settings, controllers_page, hotkey_page):
+    vigem_recheck_requested = Signal()
+
+    def __init__(
+        self, settings, controllers_page, hotkey_page, *,
+        vigem_available: bool | None = None,
+    ):
         super().__init__()
         layout_dashboard = QVBoxLayout(self)
         self.controllers_page = controllers_page
@@ -721,6 +728,11 @@ class ControllerEmulation(QWidget):
         self._reconnect_timer_active = False
         self.controllers_page.battery_updated.connect(self._on_battery_updated)
         hid.hid_manager.device_error.connect(self._on_device_error)
+        gamepad_content = QWidget(self)
+        gamepad_layout = QVBoxLayout(gamepad_content)
+        gamepad_layout.setContentsMargins(0, 0, 0, 0)
+        gamepad_layout.setSpacing(8)
+
         lbl_dashboard = QLabel("Controller Emulation Page\nPress {Share/Select/⚙️ + R3} to switch between mouse mode and controller mode")
         lbl_dashboard.setAlignment(Qt.AlignCenter)
 
@@ -757,11 +769,22 @@ class ControllerEmulation(QWidget):
         """)
 
 
-        layout_dashboard.addWidget(lbl_dashboard)
-        layout_dashboard.addWidget(emu_label)
-        layout_dashboard.addWidget(self.emu_list)
+        gamepad_layout.addWidget(lbl_dashboard)
+        gamepad_layout.addWidget(emu_label)
+        gamepad_layout.addWidget(self.emu_list)
+        gamepad_layout.addWidget(add_btn)
+
+        self.vigem_gate = VigemGate(gamepad_content)
+        self.vigem_gate.recheck_requested.connect(self.vigem_recheck_requested.emit)
+        self.vigem_gate.set_vigem_available(
+            is_vigem_installed() if vigem_available is None else vigem_available
+        )
+        layout_dashboard.addWidget(self.vigem_gate, 1)
+        # HidHide is an independent optional feature and stays usable without XInput.
         layout_dashboard.addWidget(self.hidhide_card)
-        layout_dashboard.addWidget(add_btn)
+
+    def set_vigem_available(self, available: bool) -> None:
+        self.vigem_gate.set_vigem_available(available)
 
     def _get_hidhide_devices(self) -> list[dict]:
         """Return supported connected HID devices for HidHide integration."""
