@@ -37,8 +37,6 @@ class VigemGate(QWidget):
     ) -> None:
         super().__init__(parent)
         self.content = content
-        self._blur = QGraphicsBlurEffect(self.content)
-        self._blur.setBlurRadius(5.5)
         self._available = True
 
         self._stack = QStackedLayout(self)
@@ -157,7 +155,9 @@ class VigemGate(QWidget):
             self.content.setEnabled(True)
             self.overlay.hide()
         else:
-            self.content.setGraphicsEffect(self._blur)
+            blur = QGraphicsBlurEffect(self.content)
+            blur.setBlurRadius(5.5)
+            self.content.setGraphicsEffect(blur)
             self.content.setEnabled(False)
             self.overlay.show()
         self.overlay.raise_()
