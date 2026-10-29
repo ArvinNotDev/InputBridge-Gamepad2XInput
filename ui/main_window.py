@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 from PySide6.QtWidgets import (
@@ -34,6 +35,9 @@ from ui.i18n import apply_translations, tr
 from core.version import APP_NAME
 from core.vigem import is_vigem_installed
 from core.dev_logging import configure_developer_logging
+
+logger = logging.getLogger("vpadconnect.main_window")
+
 
 class MainWindow(QMainWindow):
 
@@ -532,11 +536,11 @@ class MainWindow(QMainWindow):
         try:
             self.web_remote_page.shutdown()
         except Exception as exc:
-            print(f"[MainWindow] Web Companion shutdown failed: {exc}")
+            logger.exception("Web Companion shutdown failed")
         try:
             self.controller_emulation_page.shutdown()
         except Exception as exc:
-            print(f"[MainWindow] HID shutdown failed: {exc}")
+            logger.exception("HID shutdown failed")
         try:
             self.controllers_page.refresh_timer.stop()
         except Exception:
