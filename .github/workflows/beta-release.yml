@@ -47,7 +47,10 @@ jobs:
       - name: Install project dependencies
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip
+          $env:PIP_DEFAULT_TIMEOUT = "30"
+          $env:PIP_RETRIES = "1"
+          $env:PIP_PROGRESS_BAR = "off"
+          python -m pip install --disable-pip-version-check --timeout 30 --retries 1 --upgrade pip
           # Python 3.12 uses the stable PySide6 wheel from PyPI. The optional
           # Qt development index is only needed by the Python 3.15 marker, so
           # omit that global extra-index directive for this Windows release job.
