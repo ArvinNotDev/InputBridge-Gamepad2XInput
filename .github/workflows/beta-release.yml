@@ -44,20 +44,23 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+
       - name: Install project dependencies
         shell: pwsh
+        env:
+          UV_HTTP_TIMEOUT: "30"
+          UV_HTTP_RETRIES: "1"
         run: |
-          $env:PIP_DEFAULT_TIMEOUT = "30"
-          $env:PIP_RETRIES = "1"
-          $env:PIP_PROGRESS_BAR = "off"
-          python -m pip install --disable-pip-version-check --timeout 30 --retries 1 --upgrade pip
-          # Python 3.12 uses the stable PySide6 wheel from PyPI. The optional
-          # Qt development index is only needed by the Python 3.15 marker, so
-          # omit that global extra-index directive for this Windows release job.
+          # Python 3.12 uses stable PySide6 wheels from PyPI. Remove the
+          # optional Qt development index, which is only needed for Python 3.15.
           $requirements = Get-Content "requirements.txt" | Where-Object { $_ -notmatch '^\s*--extra-index-url\b' }
           $requirements | Set-Content ".release-requirements.txt" -Encoding utf8
-          python -m pip install --disable-pip-version-check --timeout 30 --retries 1 -r .release-requirements.txt
-          python -m pip install --disable-pip-version-check --timeout 30 --retries 1 pytest
+          uv pip install --system --index-url https://pypi.org/simple -r .release-requirements.txt pytest
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
