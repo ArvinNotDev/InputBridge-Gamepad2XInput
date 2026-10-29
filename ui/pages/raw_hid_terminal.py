@@ -278,14 +278,15 @@ class RawHidTerminalDialog(QDialog):
         self._metrics_timer = QTimer(self)
         self._metrics_timer.setInterval(500)
         self._metrics_timer.timeout.connect(self._update_metrics)
-        self._metrics_timer.start()
         self._refresh_status()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self._metrics_timer.start()
         self.visibility_changed.emit(True)
 
     def hideEvent(self, event) -> None:
+        self._metrics_timer.stop()
         super().hideEvent(event)
         self.visibility_changed.emit(False)
 
