@@ -115,6 +115,7 @@ def clear_log_file(settings: Any) -> bool:
             path.write_text("", encoding="utf-8")
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("", encoding="utf-8")
         for index in range(1, LOG_BACKUP_COUNT + 1):
             backup = Path(f"{path}.{index}")
             try:
