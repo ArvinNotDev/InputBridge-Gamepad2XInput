@@ -1,13 +1,17 @@
 import os
+from pathlib import Path
+
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
-    QLabel, QPushButton, QSlider, QFrame,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFormLayout,
+    QLabel, QPushButton, QSlider, QFrame, QScrollArea, QFileDialog,
     QSpinBox, QCheckBox, QComboBox, QLineEdit, QMessageBox, QGroupBox,
     QSizePolicy, QSpacerItem, QDoubleSpinBox, QInputDialog, QAbstractSpinBox
 )
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from ui.i18n import LANGUAGE_NAMES, tr
 from ui.animations import AnimatedStackedWidget, AnimatedTabBar
+from core.dev_logging import configure_developer_logging, resolve_log_path, clear_log_file as clear_developer_log_file
 
 
 class SettingsPage(QWidget):
@@ -15,6 +19,7 @@ class SettingsPage(QWidget):
 
     def __init__(self, theme_manager, settings: object, profile_manager=None):
         super().__init__()
+        self.setObjectName("settingsPage")
         self.theme_manager = theme_manager
         self.settings = settings
         self.profile_manager = profile_manager
@@ -31,8 +36,32 @@ class SettingsPage(QWidget):
                 pass
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(0)
+        self._settings_root_layout = root
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(8)
+        self.setStyleSheet("""
+            QWidget#settingsPage { background: transparent; }
+            QTabBar#settings_navigation { background: transparent; border: none; }
+            QTabBar#settings_navigation::tab {
+                padding: 9px 16px; margin: 0 3px 3px 0;
+                border-radius: 9px; border: 1px solid transparent;
+            }
+            QTabBar#settings_navigation::tab:selected {
+                background: rgba(99, 91, 255, 35);
+                border-color: rgba(99, 91, 255, 100);
+            }
+            QScrollArea#settings_scroll { background: transparent; border: none; }
+            QScrollArea#settings_scroll > QWidget > QWidget { background: transparent; }
+            QGroupBox { border-radius: 12px; margin-top: 10px; padding: 14px 10px 10px; }
+            QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; }
+            QCheckBox { padding: 5px 2px; spacing: 9px; }
+            QSlider { min-height: 24px; }
+            QPushButton#settings_primary { min-height: 36px; padding: 7px 15px; border-radius: 9px; }
+            QPushButton#settings_secondary { min-height: 36px; padding: 7px 12px; border-radius: 9px; }
+            QLabel#settings_page_heading { font-size: 19px; font-weight: 750; padding: 5px 0 2px; }
+            QLabel#settings_page_description { color: #91a2bc; font-size: 11px; padding-bottom: 3px; }
+            QLabel#settings_logging_status { color: #91a2bc; font-size: 11px; padding: 4px 0; }
+        """)
 
         # Compact horizontal sections, with the settings content directly underneath.
         self.menu = AnimatedTabBar()
@@ -61,18 +90,23 @@ class SettingsPage(QWidget):
         device_layout.setSpacing(12)
 
         header = QLabel("Device Settings")
-        header.setObjectName("header")
-        header.setProperty("class", "header")
+        header.setObjectName("settings_page_heading")
         header.setAlignment(Qt.AlignLeft)
-        header.setStyleSheet("QLabel { font-size:18px; font-weight:700; }")
         device_layout.addWidget(header)
+        device_description = QLabel("Customize controller input, mouse behavior, and output preferences.")
+        device_description.setObjectName("settings_page_description")
+        device_description.setWordWrap(True)
+        device_layout.addWidget(device_description)
 
         device_group = QGroupBox()
         device_form = QFormLayout()
         device_form.setLabelAlignment(Qt.AlignLeft)
         device_form.setFormAlignment(Qt.AlignLeft)
+        device_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        device_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         device_form.setHorizontalSpacing(18)
         device_form.setVerticalSpacing(12)
+        device_group.setMinimumWidth(0)
 
         # Input poll interval
         poll_row = QHBoxLayout()
@@ -196,7 +230,7 @@ class SettingsPage(QWidget):
         device_buttons.addWidget(self.dev_apply)
         device_layout.addLayout(device_buttons)
 
-        self.pages.addWidget(device_page)
+        self.pages.addWidget(self._make_scrollable_page(device_page))
 
         # ==========================================================
         # UI PAGE
@@ -207,15 +241,22 @@ class SettingsPage(QWidget):
         ui_layout.setSpacing(12)
 
         header_ui = QLabel("UI Settings")
+        header_ui.setObjectName("settings_page_heading")
         header_ui.setAlignment(Qt.AlignLeft)
-        header_ui.setStyleSheet("font-size:18px; font-weight:700;")
         ui_layout.addWidget(header_ui)
+        ui_description = QLabel("Personalize appearance and accessibility.")
+        ui_description.setObjectName("settings_page_description")
+        ui_description.setWordWrap(True)
+        ui_layout.addWidget(ui_description)
 
         ui_group = QGroupBox()
         ui_form = QFormLayout()
         ui_form.setLabelAlignment(Qt.AlignLeft)
+        ui_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        ui_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         ui_form.setHorizontalSpacing(18)
         ui_form.setVerticalSpacing(12)
+        ui_group.setMinimumWidth(0)
 
         self.combo_lang = QComboBox()
         for code, name in LANGUAGE_NAMES.items():
@@ -242,6 +283,13 @@ class SettingsPage(QWidget):
         self.combo_theme.addItems(theme_names)
         ui_form.addRow("Theme", self.combo_theme)
 
+        self.chk_reduced_motion = QCheckBox("Reduce interface animations")
+        self.chk_reduced_motion.setToolTip(
+            "Disable decorative page transitions and animated tab indicators. "
+            "Controller input and other functionality are unchanged."
+        )
+        ui_form.addRow(self.chk_reduced_motion)
+
         ui_group.setLayout(ui_form)
         ui_layout.addWidget(ui_group)
 
@@ -257,7 +305,7 @@ class SettingsPage(QWidget):
         ui_buttons.addWidget(self.ui_apply)
         ui_layout.addLayout(ui_buttons)
 
-        self.pages.addWidget(ui_page)
+        self.pages.addWidget(self._make_scrollable_page(ui_page))
 
         # ==========================================================
         # DEVELOPER PAGE
@@ -268,15 +316,22 @@ class SettingsPage(QWidget):
         dev_layout.setSpacing(12)
 
         header_dev = QLabel("Developer Settings")
+        header_dev.setObjectName("settings_page_heading")
         header_dev.setAlignment(Qt.AlignLeft)
-        header_dev.setStyleSheet("font-size:18px; font-weight:700;")
         dev_layout.addWidget(header_dev)
+        dev_description = QLabel("Diagnostics, raw controller reports, and rotating logs for troubleshooting.")
+        dev_description.setObjectName("settings_page_description")
+        dev_description.setWordWrap(True)
+        dev_layout.addWidget(dev_description)
 
         dev_group = QGroupBox()
         dev_form = QFormLayout()
         dev_form.setLabelAlignment(Qt.AlignLeft)
+        dev_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        dev_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         dev_form.setHorizontalSpacing(18)
         dev_form.setVerticalSpacing(12)
+        dev_group.setMinimumWidth(0)
 
         self.chk_debug = QCheckBox("Debug")
         dev_form.addRow(self.chk_debug)
@@ -290,12 +345,39 @@ class SettingsPage(QWidget):
         log_row = QHBoxLayout()
         lbl_path = QLabel("Log file path")
         self.edit_log_path = QLineEdit()
-        self.edit_log_path.setMinimumWidth(240)
-        log_row.addWidget(self.edit_log_path)
+        self.edit_log_path.setMinimumWidth(0)
+        self.edit_log_path.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.edit_log_path.setPlaceholderText("logs/mapper.log")
+        log_row.addWidget(self.edit_log_path, 1)
+        self.btn_browse_log = QPushButton("Browse…")
+        self.btn_browse_log.setObjectName("settings_secondary")
+        log_row.addWidget(self.btn_browse_log)
         dev_form.addRow(lbl_path, log_row)
+
+        self.lbl_logging_status = QLabel()
+        self.lbl_logging_status.setObjectName("settings_logging_status")
+        self.lbl_logging_status.setWordWrap(True)
+        dev_form.addRow("", self.lbl_logging_status)
 
         dev_group.setLayout(dev_form)
         dev_layout.addWidget(dev_group)
+
+        log_actions = QHBoxLayout()
+        log_actions.setSpacing(8)
+        self.btn_open_log = QPushButton("Open log file")
+        self.btn_open_log.setObjectName("settings_secondary")
+        self.btn_open_log.setToolTip("Open the current diagnostic log in the default text editor.")
+        log_actions.addWidget(self.btn_open_log)
+        self.btn_open_log_folder = QPushButton("Open log folder")
+        self.btn_open_log_folder.setObjectName("settings_secondary")
+        self.btn_open_log_folder.setToolTip("Open the directory containing the configured log file.")
+        log_actions.addWidget(self.btn_open_log_folder)
+        self.btn_clear_log = QPushButton("Clear logs")
+        self.btn_clear_log.setObjectName("settings_secondary")
+        self.btn_clear_log.setToolTip("Clear the current log and its rotated backups.")
+        log_actions.addWidget(self.btn_clear_log)
+        log_actions.addStretch(1)
+        dev_layout.addLayout(log_actions)
 
         dev_buttons = QHBoxLayout()
         dev_buttons.addItem(QSpacerItem(20, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
@@ -309,7 +391,7 @@ class SettingsPage(QWidget):
         dev_buttons.addWidget(self.dev_apply2)
         dev_layout.addLayout(dev_buttons)
 
-        self.pages.addWidget(dev_page)
+        self.pages.addWidget(self._make_scrollable_page(dev_page))
 
         # ==========================================================
         # SHARED BOTTOM BAR – Save to Profile
@@ -337,6 +419,7 @@ class SettingsPage(QWidget):
         self.btn_save_to_profile = QPushButton("  Save Settings to Profile  ")
         self.btn_save_to_profile.setObjectName("settings_save_profile")
         self.btn_save_to_profile.setProperty("class", "primary")
+        self.btn_save_to_profile.setMinimumWidth(0)
         self.btn_save_to_profile.setFixedHeight(36)
         bottom_bar.addWidget(self.btn_save_to_profile)
 
@@ -424,6 +507,10 @@ class SettingsPage(QWidget):
             current_theme = "dark"
         if current_theme in [self.combo_theme.itemText(i) for i in range(self.combo_theme.count())]:
             self.combo_theme.setCurrentText(current_theme)
+        try:
+            self.chk_reduced_motion.setChecked(self.settings.get_ui_reduced_motion())
+        except Exception:
+            self.chk_reduced_motion.setChecked(False)
 
         try:
             dbg = self.settings.get_developer_debug()
@@ -534,7 +621,7 @@ class SettingsPage(QWidget):
             self.left_slider, self.right_slider, self.chk_left_invert_x,
             self.chk_left_invert_y, self.chk_right_invert_x,
             self.chk_right_invert_y, self.chk_button_invert, self.combo_lang,
-            self.combo_theme, self.chk_debug, self.chk_raw_hid,
+            self.combo_theme, self.chk_reduced_motion, self.chk_debug, self.chk_raw_hid,
             self.chk_log_to_file, self.edit_log_path,
         ]
         states = [widget.blockSignals(True) for widget in widgets]
@@ -564,6 +651,7 @@ class SettingsPage(QWidget):
             if language in language_codes:
                 self.combo_lang.setCurrentIndex(language_codes.index(language))
             self.combo_theme.setCurrentText(self.settings.get_ui_theme())
+            self.chk_reduced_motion.setChecked(self.settings.get_ui_reduced_motion())
             self.chk_debug.setChecked(self.settings.get_developer_debug())
             self.chk_raw_hid.setChecked(self.settings.get_raw_hid_debug())
             self.chk_log_to_file.setChecked(self.settings.get_log_to_file())
@@ -573,6 +661,8 @@ class SettingsPage(QWidget):
                 widget.blockSignals(state)
 
         self._update_profile_label()
+        self._apply_reduced_motion()
+        self._refresh_logging_status()
         self.vibration_enabled_changed.emit(self.settings.get_vibration_enabled())
 
     def _apply_all_current_values(self):
@@ -600,6 +690,7 @@ class SettingsPage(QWidget):
         # UI
         self.settings.set_ui_language(self.combo_lang.currentData() or "eng")
         self.settings.set_ui_theme(self.combo_theme.currentText())
+        self.settings.set_ui_reduced_motion(self.chk_reduced_motion.isChecked())
 
         # Developer
         self.settings.set_developer_debug(self.chk_debug.isChecked())
@@ -620,6 +711,9 @@ class SettingsPage(QWidget):
         """Write the current controls to disk and refresh the save indicator."""
         self._apply_all_current_values()
         self.settings.save()
+        log_path = configure_developer_logging(self.settings)
+        self._apply_reduced_motion()
+        self._refresh_logging_status(log_path)
         self.lbl_autosave_status.setText(
             tr("✓ Auto-saved", self.settings.get_ui_language())
         )
@@ -790,6 +884,7 @@ class SettingsPage(QWidget):
         ]
         if "eng" in language_codes:
             self.combo_lang.setCurrentIndex(language_codes.index("eng"))
+        self.chk_reduced_motion.setChecked(False)
         if "dark" in [self.combo_theme.itemText(i) for i in range(self.combo_theme.count())]:
             self.combo_theme.setCurrentText("dark")
         else:
@@ -801,7 +896,9 @@ class SettingsPage(QWidget):
         self.settings.set_ui_language(self.combo_lang.currentData() or "eng")
         theme = self.combo_theme.currentText()
         self.settings.set_ui_theme(theme)
+        self.settings.set_ui_reduced_motion(self.chk_reduced_motion.isChecked())
         self.settings.save()
+        self._apply_reduced_motion()
         try:
             if hasattr(self.theme_manager, "apply_theme"):
                 self.theme_manager.apply_theme(theme)
@@ -819,8 +916,104 @@ class SettingsPage(QWidget):
         self._save_current_values()
 
     def apply_dev(self):
-        self.settings.set_developer_debug(self.chk_debug.isChecked())
-        self.settings.set_raw_hid_debug(self.chk_raw_hid.isChecked())
-        self.settings.set_log_to_file(self.chk_log_to_file.isChecked())
-        self.settings.set_log_file_path(self.edit_log_path.text() or "logs/mapper.log")
+        self._apply_all_current_values()
         self.settings.save()
+        log_path = configure_developer_logging(self.settings)
+        self._refresh_logging_status(log_path)
+
+    def _browse_log_file(self) -> None:
+        current = str(resolve_log_path(self.settings))
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Choose diagnostic log file", current,
+            "Log files (*.log *.txt);;All files (*)",
+        )
+        if filename:
+            self.edit_log_path.setText(filename)
+            self._schedule_autosave()
+
+    def _open_log_file(self) -> None:
+        self._apply_all_current_values()
+        self.settings.save()
+        configure_developer_logging(self.settings)
+        path = resolve_log_path(self.settings)
+        if not path.exists():
+            QMessageBox.information(
+                self, "Log file not created yet",
+                "Enable 'Log to file' and generate a diagnostic message first. "
+                "The file is created automatically when the first log entry is written.",
+            )
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+            QMessageBox.warning(self, "Could not open log file", f"Open this file manually:\n{path}")
+
+    def _open_log_folder(self) -> None:
+        path = resolve_log_path(self.settings)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            QMessageBox.warning(self, "Could not open log folder", str(exc))
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent))):
+            QMessageBox.warning(self, "Could not open log folder", str(path.parent))
+
+    def _clear_log_file(self) -> None:
+        path = resolve_log_path(self.settings)
+        answer = QMessageBox.question(
+            self, "Clear diagnostic logs?",
+            f"Clear the current log and its rotated backups?\n\n{path}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if clear_developer_log_file(self.settings):
+            self.lbl_logging_status.setText(tr("Diagnostic logs cleared.", self.settings.get_ui_language()))
+        else:
+            QMessageBox.warning(
+                self, "Could not clear logs",
+                f"Close any application that may be using this file, then try again:\n{path}",
+            )
+
+    def _refresh_logging_status(self, active_path: Path | None = None) -> None:
+        if active_path is None and self.settings.get_log_to_file():
+            active_path = resolve_log_path(self.settings)
+        if self.settings.get_log_to_file():
+            self.lbl_logging_status.setText(
+                f"File logging enabled · rotating at 2 MiB, keeping 3 backups\n{active_path}"
+            )
+        elif self.settings.get_developer_debug() or self.settings.get_raw_hid_debug():
+            self.lbl_logging_status.setText(
+                "Detailed diagnostics are enabled. Turn on Log to file to retain them after closing the app."
+            )
+        else:
+            self.lbl_logging_status.setText(
+                "File logging is off. Enable it to save diagnostic logs to disk."
+            )
+
+    def _apply_reduced_motion(self) -> None:
+        app = QApplication.instance()
+        if app is not None:
+            app.setProperty("reducedMotion", bool(self.chk_reduced_motion.isChecked()))
+
+    @staticmethod
+    def _make_scrollable_page(page: QWidget) -> QScrollArea:
+        page.setMinimumWidth(0)
+        scroll = QScrollArea()
+        scroll.setObjectName("settings_scroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setWidget(page)
+        return scroll
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.width() < 980:
+            self._settings_root_layout.setContentsMargins(10, 8, 10, 8)
+            self._settings_root_layout.setSpacing(5)
+            self.menu.setMinimumHeight(34)
+        else:
+            self._settings_root_layout.setContentsMargins(16, 12, 16, 12)
+            self._settings_root_layout.setSpacing(8)
+            self.menu.setMinimumHeight(36)
