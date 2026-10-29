@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "core/mouse.py"
+      - "core/mapper.py"
       - "core/web_remote.py"
       - "core/remote_protocol.py"
       - "core/remote_actions.py"
@@ -26,6 +27,7 @@ on:
   pull_request:
     paths:
       - "core/mouse.py"
+      - "core/mapper.py"
       - "core/web_remote.py"
       - "core/remote_protocol.py"
       - "core/remote_actions.py"
@@ -71,9 +73,9 @@ jobs:
 
       - name: Compile changed Python modules
         run: |
-          python -m compileall -q core/mouse.py tests/test_mouse_failsafe.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/pages/settings.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
+          python -m compileall -q core/mouse.py core/mapper.py tests/test_mouse_failsafe.py core/web_remote.py core/remote_protocol.py ui/animations.py ui/pages/settings.py ui/pages/web_remote.py ui/main_window.py tests/test_web_remote.py tests/test_remote_protocol.py
 
-      - name: Test relative mouse failsafe recovery
+      - name: Test mouse fail-safe and motion smoothing
         run: python -m pytest -q tests/test_mouse_failsafe.py
 
       - name: Validate browser JavaScript syntax

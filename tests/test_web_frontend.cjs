@@ -319,7 +319,12 @@ test("browser control preferences restore and persist without storing the sessio
   harness.elements.get("tapToClick").dispatch("change");
   harness.elements.get("reverseScroll").checked = true;
   harness.elements.get("reverseScroll").dispatch("change");
-  harness.elements.get("scrollSensitivity").value = "20";
+  harness.elements.get("scrollSensitivity").value = "1";
+  harness.elements.get("scrollSensitivity").dispatch("input");
+  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).scrollSensitivity, 0.1);
+  assert.equal(harness.elements.get("scrollSensitivityValue").textContent, "0.1×");
+
+  harness.elements.get("scrollSensitivity").value = "200";
   harness.elements.get("scrollSensitivity").dispatch("input");
   harness.elements.get("hapticsEnabled").checked = true;
   harness.elements.get("hapticsEnabled").dispatch("change");
@@ -520,7 +525,7 @@ test("two-finger touchpad movement sends mouse scroll input", async () => {
   await settle();
 
   assert.equal(stateRequests(harness).at(-1).mode, "mouse");
-  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -3);
+  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -20);
 });
 
 test("reverse scrolling reverses two-finger touchpad direction", async () => {
@@ -537,8 +542,12 @@ test("reverse scrolling reverses two-finger touchpad direction", async () => {
   for (let i = 0; i < 10; i += 1) harness.tickFrame();
   await settle();
 
-  assert.equal(stateRequests(harness).at(-1).mouse.scroll, 3);
+  assert.equal(stateRequests(harness).at(-1).mouse.scroll, 20);
   assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).reverseScroll, true);
+});
+
+test("touchpad scroll slider exposes very low and very high sensitivities", () => {
+  assert.match(appHtml, /id="scrollSensitivity" type="range" min="1" max="200" value="20"/);
 });
 
 test("scroll sensitivity scales the faster two-finger touchpad scroll amount", async () => {
@@ -551,12 +560,13 @@ test("scroll sensitivity scales the faster two-finger touchpad scroll amount", a
 
   harness.touchpad.dispatch("pointerdown", { pointerId: 51, clientX: 100, clientY: 100 });
   harness.touchpad.dispatch("pointerdown", { pointerId: 52, clientX: 110, clientY: 100 });
-  harness.touchpad.dispatch("pointermove", { pointerId: 52, clientX: 110, clientY: 128 });
+  harness.touchpad.dispatch("pointermove", { pointerId: 52, clientX: 110, clientY: 102 });
   for (let i = 0; i < 10; i += 1) harness.tickFrame();
   await settle();
 
-  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -7);
-  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).scrollSensitivity, 2);
+  assert.equal(stateRequests(harness).at(-1).mouse.scroll, -20);
+  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).scrollSensitivity, 20);
+  assert.equal(harness.elements.get("scrollSensitivityValue").textContent, "20.0×");
 });
 
 test("keyboard arrows operate and recenter a focused stick", async () => {

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import math
 import time
+import threading
+from collections import deque
+from collections.abc import Callable
 
 import pyautogui
 
@@ -46,6 +49,117 @@ class MouseMotion:
         self._remainder_x -= dx
         self._remainder_y -= dy
         return dx, dy
+
+
+class MouseDeltaSmoother:
+    """Spread relative mouse deltas over a few short ticks to mask packet jitter.
+
+    This is a mouse-only worker. Gamepad and joystick input do not pass through
+    it. Three weighted steps span about 8 ms and keep latency low; bursts are
+    coalesced so the queue cannot grow without bound.
+    """
+
+    _WEIGHTS = (0.25, 0.5, 0.25)
+
+    def __init__(
+        self,
+        move_callback: Callable[[int, int], None],
+        interval_ms: float = 4.0,
+        max_queued_segments: int = 9,
+    ) -> None:
+        self._move_callback = move_callback
+        self._interval_seconds = max(0.001, float(interval_ms) / 1000.0)
+        self._max_queued_segments = max(3, int(max_queued_segments))
+        self._condition = threading.Condition()
+        self._segments: deque[tuple[float, float]] = deque()
+        self._next_tick: float | None = None
+        self._fraction_x = 0.0
+        self._fraction_y = 0.0
+        self._closed = False
+        self._worker = threading.Thread(
+            target=self._run,
+            name="VPadMouseMotionSmoother",
+            daemon=True,
+        )
+        self._worker.start()
+
+    def _append_batch(self, dx: float, dy: float) -> None:
+        for weight in self._WEIGHTS:
+            self._segments.append((dx * weight, dy * weight))
+
+    def add(self, dx: int, dy: int) -> None:
+        """Queue relative movement without blocking the network receiver."""
+        dx, dy = int(dx), int(dy)
+        if not dx and not dy:
+            return
+        with self._condition:
+            if self._closed:
+                return
+            was_empty = not self._segments
+            self._append_batch(dx, dy)
+            if len(self._segments) > self._max_queued_segments:
+                # Preserve total displacement while bounding burst latency.
+                total_x = sum(segment[0] for segment in self._segments)
+                total_y = sum(segment[1] for segment in self._segments)
+                self._segments.clear()
+                self._append_batch(total_x, total_y)
+            if was_empty:
+                self._next_tick = None
+            self._condition.notify()
+
+    def clear_pending(self) -> None:
+        """Discard queued motion when mouse output changes or disconnects."""
+        with self._condition:
+            self._segments.clear()
+            self._next_tick = None
+            self._fraction_x = 0.0
+            self._fraction_y = 0.0
+            self._condition.notify_all()
+
+    def close(self) -> None:
+        """Stop the daemon worker and discard movement not yet applied."""
+        with self._condition:
+            self._closed = True
+            self._segments.clear()
+            self._next_tick = None
+            self._fraction_x = 0.0
+            self._fraction_y = 0.0
+            self._condition.notify_all()
+        if threading.current_thread() is not self._worker:
+            self._worker.join(timeout=0.2)
+
+    def _run(self) -> None:
+        while True:
+            with self._condition:
+                while not self._closed and not self._segments:
+                    self._condition.wait()
+                if self._closed:
+                    return
+
+                now = time.monotonic()
+                if self._next_tick is not None and now < self._next_tick:
+                    self._condition.wait(timeout=self._next_tick - now)
+                    continue
+
+                step_x, step_y = self._segments.popleft()
+                self._fraction_x += step_x
+                self._fraction_y += step_y
+                move_x = math.trunc(self._fraction_x)
+                move_y = math.trunc(self._fraction_y)
+                self._fraction_x -= move_x
+                self._fraction_y -= move_y
+                self._next_tick = (
+                    time.monotonic() + self._interval_seconds
+                    if self._segments
+                    else None
+                )
+
+            if move_x or move_y:
+                try:
+                    self._move_callback(move_x, move_y)
+                except Exception:
+                    # A backend hiccup must not kill future mouse movement.
+                    continue
 
 
 class Mouse:
