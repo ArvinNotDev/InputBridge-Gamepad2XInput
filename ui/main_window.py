@@ -32,6 +32,7 @@ from core.utils.hotkeys import Hotkey
 from core.utils.paths import data_path, resource_path
 from ui.i18n import apply_translations, tr
 from core.version import APP_NAME
+from core.vigem import is_vigem_installed
 
 class MainWindow(QMainWindow):
 
@@ -64,6 +65,7 @@ class MainWindow(QMainWindow):
         self.settings = SettingsManager()
         self.profile_manager = ProfileManager(self.settings)
         self.profile_manager.create_default_profile()
+        self.vigem_available = is_vigem_installed()
         self._applying_language = False
 
         # quitting flag
@@ -216,19 +218,32 @@ class MainWindow(QMainWindow):
         self.pages = AnimatedStackedWidget()
         self.pages.setObjectName("content_stack")
 
-        controllers_page = ControllersPage(self.settings)
+        controllers_page = ControllersPage(
+            self.settings, vigem_available=self.vigem_available
+        )
         self.controllers_page = controllers_page
         hotkey_page = HotkeyPage(self.hotkey)
         self.hotkey_page = hotkey_page
 
         self.controller_emulation_page = ControllerEmulation(
-            self.settings, controllers_page, hotkey_page
+            self.settings, controllers_page, hotkey_page,
+            vigem_available=self.vigem_available,
+        )
+        self.controller_emulation_page.vigem_recheck_requested.connect(
+            self._refresh_vigem_status
+        )
+        self.controllers_page.vigem_recheck_requested.connect(
+            self._refresh_vigem_status
         )
         self.pages.addWidget(self.controller_emulation_page)
 
         self.web_remote_page = WebRemotePage(
             self.settings, controllers_page, hotkey_page,
             status_changed=self._refresh_tray_menu,
+            vigem_available=self.vigem_available,
+        )
+        self.web_remote_page.vigem_recheck_requested.connect(
+            self._refresh_vigem_status
         )
         self.pages.addWidget(self.web_remote_page)
         self.pages.addWidget(hotkey_page)
@@ -284,6 +299,19 @@ class MainWindow(QMainWindow):
             self._init_tray_icon()
             app.setQuitOnLastWindowClosed(False)
         app.aboutToQuit.connect(self.shutdown)
+
+    # --------------------
+    # ViGEmBus prerequisite
+    # --------------------
+
+    def _refresh_vigem_status(self) -> None:
+        """Refresh all UI gates after the user installs the optional driver."""
+        available = is_vigem_installed()
+        self.vigem_available = available
+        self.controller_emulation_page.set_vigem_available(available)
+        self.controllers_page.set_vigem_available(available)
+        self.web_remote_page.set_vigem_available(available)
+        self._refresh_tray_menu()
 
     # --------------------
     # Menu
