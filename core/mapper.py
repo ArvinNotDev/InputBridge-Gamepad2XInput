@@ -466,11 +466,12 @@ class Mapper:
 
         if mouse_active:
             sensitivity = max(0.1, float(self.settings.get_mouse_sensitivity()))
+            mouse_deadzone = self.settings.get_mouse_deadzone()
             nx = self._mouse_response(
-                self._mouse_deadzone(ljx / 32767.0)
+                self._mouse_deadzone(ljx / 32767.0, mouse_deadzone)
             )
             ny = self._mouse_response(
-                self._mouse_deadzone(ljy / 32767.0)
+                self._mouse_deadzone(ljy / 32767.0, mouse_deadzone)
             )
 
             # Pixels per second. The time-based motion integrator below makes
