@@ -93,8 +93,6 @@ def configure_developer_logging(settings: Any) -> Path | None:
 def clear_log_file(settings: Any) -> bool:
     """Clear the active log and its rotation backups without leaving stale handlers."""
     path = resolve_log_path(settings)
-    if not path.exists():
-        return True
 
     logger = logging.getLogger(LOGGER_NAME)
     matching_handler = None
@@ -113,7 +111,10 @@ def clear_log_file(settings: Any) -> bool:
         matching_handler.close()
 
     try:
-        path.write_text("", encoding="utf-8")
+        if path.exists():
+            path.write_text("", encoding="utf-8")
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
         for index in range(1, LOG_BACKUP_COUNT + 1):
             backup = Path(f"{path}.{index}")
             try:
