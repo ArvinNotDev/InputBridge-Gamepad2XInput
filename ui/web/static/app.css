@@ -292,3 +292,91 @@ input[type=checkbox]:active{transform:scale(.92)}
     scroll-behavior:auto!important;
   }
 }
+
+
+/* Stable face-button geometry: the ABXY diamond must not drift in landscape Focus. */
+.faces{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  grid-template-rows:repeat(3,minmax(0,1fr));gap:3px;
+  align-items:center;justify-items:center;overflow:visible;
+}
+.faces .face{
+  position:static!important;inset:auto!important;left:auto!important;right:auto!important;
+  top:auto!important;bottom:auto!important;transform:none!important;
+  width:min(100%,48px)!important;height:min(100%,48px)!important;
+  min-height:0!important;aspect-ratio:1;border-radius:50%;
+}
+.faces .face.y{grid-column:2;grid-row:1}
+.faces .face.x{grid-column:1;grid-row:2}
+.faces .face.b{grid-column:3;grid-row:2}
+.faces .face.a{grid-column:2;grid-row:3}
+
+/* Larger trigger hit areas keep analog throttle/brake usable on touchscreens. */
+.console-top .trigger{min-width:0;min-height:68px;padding:3px 2px;align-items:stretch}
+.trigger-label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;line-height:1.05;min-height:25px}
+.trigger-purpose{display:none;color:#a9c4ff;font-size:9px;font-weight:900;letter-spacing:.7px}
+#controller.preset-driving .trigger-purpose{display:block;color:#9ae7cf}
+#controller.preset-shooter .trigger-purpose{display:block;color:#f8c982}
+.console-top .trigger input[type=range]{
+  appearance:none;-webkit-appearance:none;display:block;width:100%;max-width:none;min-width:0;
+  height:40px;min-height:40px;margin:0;padding:0;border:0;background:transparent;
+  accent-color:#7ea7ff;touch-action:pan-x;cursor:pointer;
+}
+.console-top .trigger input[type=range]::-webkit-slider-runnable-track{
+  height:11px;border:1px solid #465b7c;border-radius:999px;background:linear-gradient(90deg,#223650,#324966);
+}
+.console-top .trigger input[type=range]::-webkit-slider-thumb{
+  appearance:none;-webkit-appearance:none;width:27px;height:27px;margin-top:-9px;
+  border:2px solid #c0d8ff;border-radius:50%;background:#557dbb;box-shadow:0 2px 9px #0006;
+}
+.console-top .trigger input[type=range]::-moz-range-track{
+  height:11px;border:1px solid #465b7c;border-radius:999px;background:linear-gradient(90deg,#223650,#324966);
+}
+.console-top .trigger input[type=range]::-moz-range-thumb{
+  width:23px;height:23px;border:2px solid #c0d8ff;border-radius:50%;background:#557dbb;box-shadow:0 2px 9px #0006;
+}
+#controller.preset-driving .trigger input[type=range]{accent-color:#4cc6a0}
+#controller.preset-driving .trigger input[type=range]::-webkit-slider-thumb{background:#249c7b;border-color:#a7f4dc;width:30px;height:30px;margin-top:-10px}
+.trigger-digital{
+  display:none;align-items:center;justify-content:center;width:100%;min-height:45px;padding:8px 4px;
+  border:1px solid #7c6541;border-radius:11px;background:linear-gradient(145deg,#4a3a24,#30291f);
+  color:#ffe4b2;font-size:10px;font-weight:900;letter-spacing:.4px;touch-action:none;user-select:none;
+}
+#controller.preset-shooter .trigger input[type=range]{display:none}
+#controller.preset-shooter .trigger-digital{display:flex}
+.trigger-digital.pressed{background:linear-gradient(145deg,#d49a45,#956b2f);border-color:#ffe1a0;color:#17131c;transform:translateY(1px) scale(.98)}
+#controller.preset-driving .trigger input[type=range]{height:46px;min-height:46px}
+@media(max-width:760px){
+  .console-top .trigger{min-height:74px;padding:2px 1px}
+  .console-top .trigger input[type=range]{height:47px;min-height:47px}
+  .trigger-digital{min-height:49px;font-size:9px}
+}
+@media(orientation:landscape) and (max-height:560px){
+  .console-top .trigger{min-height:61px;padding:0}
+  .console-top .trigger input[type=range]{height:41px;min-height:41px}
+  .trigger-digital{min-height:39px;padding:4px 2px}
+}
+body.focus-mode .faces{width:108px;height:108px}
+@media(orientation:landscape) and (max-height:560px){
+  body.focus-mode .faces{width:108px;height:108px}
+}
+@media(prefers-reduced-motion:reduce){
+  .trigger-digital{transition:none!important}
+}
+
+/* A low-pressure, optional donation ask lives in Settings rather than interrupting play. */
+.donation-card{
+  grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  padding:clamp(16px,3vw,24px);border-color:#6f593d;
+  background:radial-gradient(ellipse at 0 0,#3b3024 0%,transparent 58%),linear-gradient(130deg,#171e2c,#211f2b);
+}
+.donation-copy{min-width:0;max-width:720px}
+.donation-eyebrow{color:#f5c780;font-size:10px;font-weight:900;letter-spacing:1.5px;margin-bottom:6px}
+.donation-card h2{margin:0 0 6px;font-size:clamp(17px,2.5vw,21px)}
+.donation-card p{margin:0;color:#b6c3d7;font-size:13px;line-height:1.55}
+.donation-button{flex-shrink:0;gap:8px;background:linear-gradient(135deg,#ffd58f,#efa94d);border-color:#ffe0ab;color:#2b241b;font-weight:900;box-shadow:0 7px 20px #0002}
+.donation-button:hover{filter:brightness(1.06);transform:translateY(-1px)}
+@media(max-width:640px){
+  .donation-card{align-items:stretch;flex-direction:column}
+  .donation-button{justify-content:center;width:100%}
+}

@@ -6,8 +6,8 @@ import json
 import threading
 
 import qrcode
-from PySide6.QtCore import Qt, QTimer, QObject, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QTimer, QObject, Signal, QUrl
+from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -188,12 +188,49 @@ class WebRemotePage(QWidget):
         pairing_layout.addLayout(code_column, 1)
         root.addWidget(pairing)
 
+        donate_card = QFrame()
+        donate_card.setObjectName("webDonateCard")
+        donate_layout = QHBoxLayout(donate_card)
+        donate_layout.setContentsMargins(18, 12, 18, 12)
+        donate_layout.setSpacing(18)
+        donate_copy = QVBoxLayout()
+        donate_copy.setSpacing(4)
+        donate_eyebrow = QLabel("COMMUNITY SUPPORTED")
+        donate_eyebrow.setObjectName("webDonateEyebrow")
+        donate_title = QLabel("Enjoying VPadConnect?")
+        donate_title.setObjectName("webDonateTitle")
+        donate_description = QLabel(
+            "VPadConnect is free to use, with its source available on GitHub. "
+            "A coffee helps support compatibility testing, bug fixes, and new features."
+        )
+        donate_description.setObjectName("webMuted")
+        donate_description.setWordWrap(True)
+        donate_copy.addWidget(donate_eyebrow)
+        donate_copy.addWidget(donate_title)
+        donate_copy.addWidget(donate_description)
+        donate_layout.addLayout(donate_copy, 1)
+        self.donate_button = QPushButton("☕  Buy me a coffee")
+        self.donate_button.setObjectName("webDonateButton")
+        self.donate_button.setMinimumHeight(40)
+        self.donate_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl("https://reymit.ir/arvinnotdev"))
+        )
+        donate_layout.addWidget(self.donate_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        root.addWidget(donate_card)
+
         self.setStyleSheet("""
             QWidget#webCompanionPage { background: transparent; }
             QFrame#webHero { border: 1px solid #2a3d5b; border-radius: 15px;
                 background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #172841,stop:1 #211a3b); }
             QFrame#webCard, QFrame#webPairingCard { border: 1px solid #2b3b53;
                 border-radius: 13px; background: #121c2b; }
+            QFrame#webDonateCard { border: 1px solid #6d583c; border-radius: 13px;
+                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #29251f,stop:1 #1c2130); }
+            QLabel#webDonateEyebrow { color: #f4c37b; font-size: 9px; font-weight: 800; letter-spacing: 1.5px; }
+            QLabel#webDonateTitle { color: #fff3df; font-size: 15px; font-weight: 800; }
+            QPushButton#webDonateButton { background: #f4c37b; border-color: #ffd99a;
+                color: #24202a; font-weight: 800; padding: 9px 16px; }
+            QPushButton#webDonateButton:hover:enabled { background: #ffdaa0; }
             QFrame#webPairingCard:disabled { border-color: #292f3a; background: #1a202b; }
             QLabel { background: transparent; color: #eaf1ff; }
             QLabel#webEyebrow { color: #91b3ff; font-size: 9px; font-weight: 800; letter-spacing: 2px; }

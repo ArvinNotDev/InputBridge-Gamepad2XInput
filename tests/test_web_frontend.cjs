@@ -14,6 +14,11 @@ const appCss = fs.readFileSync(
   "utf8",
 );
 
+const appHtml = fs.readFileSync(
+  path.join(__dirname, "../ui/web/templates/index.html"),
+  "utf8",
+);
+
 function createElement(id, attributes = {}) {
   const classes = new Set();
   const listeners = new Map();
@@ -679,4 +684,36 @@ test("web companion navigation and controls use reduced-motion-aware animations"
   assert.match(appCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(appCss, /transition-duration:\s*\.01ms\s*!important/);
   assert.match(appCss, /animation-duration:\s*\.01ms\s*!important/);
+});
+
+
+test("Shooter preset turns L2/R2 into digital hold controls and persists", async () => {
+  const harness = createHarness({ preferences: { preset: "shooter" } });
+  await settle();
+
+  assert.equal(harness.elements.get("shooter").classList.contains("active"), true);
+  assert.equal(harness.elements.get("controller").classList.contains("preset-shooter"), true);
+  assert.equal(harness.elements.get("leftTriggerHint").textContent, "AIM");
+  assert.equal(harness.elements.get("rightTriggerHint").textContent, "FIRE");
+
+  harness.elements.get("rightTriggerDigital").dispatch("pointerdown", { pointerId: 71 });
+  await settle();
+  assert.equal(stateRequests(harness).at(-1).analog.R2, 255);
+  assert.equal(harness.elements.get("rightTriggerDigital").getAttribute("aria-pressed"), "true");
+
+  harness.elements.get("rightTriggerDigital").dispatch("pointerup", { pointerId: 71 });
+  await settle();
+  assert.equal(stateRequests(harness).at(-1).analog.R2, 0);
+  assert.equal(harness.elements.get("rightTriggerDigital").getAttribute("aria-pressed"), "false");
+  assert.equal(JSON.parse(harness.preferenceValues.get("ib.web.preferences")).preset, "shooter");
+});
+
+test("web companion keeps ABXY positions stable and exposes the Reymit support link", () => {
+  assert.match(appCss, /\.faces \.face|\.faces\s*\{[^}]*display:grid/s);
+  assert.match(appCss, /\.faces \.face\.y\s*\{grid-column:2;grid-row:1\}/);
+  assert.match(appCss, /\.faces \.face\.x\s*\{grid-column:1;grid-row:2\}/);
+  assert.match(appCss, /\.faces \.face\.b\s*\{grid-column:3;grid-row:2\}/);
+  assert.match(appCss, /\.faces \.face\.a\s*\{grid-column:2;grid-row:3\}/);
+  assert.match(appHtml, /href="https:\/\/reymit\.ir\/arvinnotdev"/);
+  assert.match(appHtml, /Buy me a coffee/);
 });

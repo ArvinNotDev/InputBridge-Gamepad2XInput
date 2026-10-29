@@ -42,6 +42,18 @@ The latest release includes a self-contained Windows `.exe`, so Python is **not 
 > See the full [changelog](CHANGELOG.md)
 > and the [latest release](https://github.com/ArvinNotDev/VPadConnect/releases/latest).
 
+## Support VPadConnect ☕
+
+VPadConnect is free to use, and its source code is publicly available on GitHub. If it has made your controller setup easier, consider buying me a coffee. Your support helps fund compatibility testing, bug fixes, and new controller features — and helps me spend more time maintaining the project.
+
+<p align="center">
+  <a href="https://reymit.ir/arvinnotdev">
+    <img src="https://img.shields.io/badge/☕_Buy_me_a_coffee-Support_VPadConnect-FFB86B?style=for-the-badge&labelColor=202633" alt="Buy me a coffee to support VPadConnect">
+  </a>
+</p>
+
+Thank you for helping VPadConnect keep growing. Using the app without donating is always welcome; support is entirely optional.
+
 ## Features
 
 * HID controller discovery and live device monitoring
