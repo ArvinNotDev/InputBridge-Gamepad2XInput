@@ -329,7 +329,7 @@ test("browser control preferences restore and persist without storing the sessio
     name: "Bedroom phone",
     mouseSensitivity: 2.5,
     steeringSensitivity: 2,
-    airMouseSensitivity: 1.2,
+    airMouseSensitivity: 2,
     tapToClick: true,
     reverseScroll: true,
     scrollSensitivity: 2,
