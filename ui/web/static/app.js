@@ -58,7 +58,7 @@ function readCode(){var p=new URLSearchParams(window.location.hash.replace(/^#/,
 function verifyBrowserFingerprint(){return fetch("/api/info",{cache:"no-store"}).then(function(r){if(!r.ok)throw new Error("Could not read the web server identity.");return r.json();}).then(function(info){var actual=normalizeFingerprint(info.fingerprint);if(!actual||actual.length!==64)throw new Error("The server did not provide a valid SHA-256 TLS fingerprint.");if(expectedFingerprint&&actual!==expectedFingerprint)throw new Error("TLS fingerprint mismatch. Do not pair: this is not the server shown in the QR.");if(expectedFingerprint){message("pairMessage","TLS fingerprint matches the QR code. Entering pairing code…",false,true);}else{var formatted=(info.fingerprint||"").toUpperCase();if(!window.confirm("Compare this server fingerprint with the desktop before proceeding:\n\n"+formatted+"\n\nContinue only if the fingerprints match and you trust this network."))throw new Error("Pairing cancelled because the TLS fingerprint was not confirmed.");}return info;});}
 function setGamepadAvailability(available){
  gamepadAvailable=available!==false;
- var view=$("view-gamepad"),notice=$("gamepadUnavailableNotice"),tabButton=document.querySelector('.tab[data-tab="gamepad"]');
+ var view=$("view-gamepad"),notice=$("gamepadUnavailableNotice"),tabButton=$("gamepadTab");
  if(view)view.classList.toggle("gamepad-unavailable",!gamepadAvailable);
  if(notice)notice.classList.toggle("hidden",gamepadAvailable);
  if(tabButton){tabButton.classList.toggle("unavailable",!gamepadAvailable);tabButton.setAttribute("aria-disabled",String(!gamepadAvailable));tabButton.title=gamepadAvailable?"Virtual Xbox/XInput controller is available":"ViGEmBus is required for virtual gamepad output";}
