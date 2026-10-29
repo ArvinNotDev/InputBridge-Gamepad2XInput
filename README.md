@@ -37,10 +37,14 @@ The project is built with **PySide6** and packaged for Windows using **PyInstall
 
 The latest release includes a self-contained Windows `.exe`, so Python is **not required** to run the packaged application. For source setup and build instructions, see [Build From Source](#build-from-source).
 
-> **Current release: v2.0.8** — per-controller DualSense Lightbar colors,
-> optional battery and charging indications, and USB/Bluetooth output support.
-> See the full [changelog](CHANGELOG.md)
-> and the [latest release](https://github.com/ArvinNotDev/VPadConnect/releases/latest).
+> **Current beta: VPadConnect 0.2.1 Beta 1** — a fresh pre-1.0 baseline with
+> responsive desktop Settings, a live Raw HID terminal, improved mouse latency,
+> and the mobile Web Companion.
+>
+> **Recommended:** [Download the Windows one-file EXE](https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1).
+> This is a **pre-release**; back up important profiles and report any issues.
+> See [What's new](.github/release-notes/0.2.1-beta.1.md) and the
+> [changelog](CHANGELOG.md).
 
 ## Support VPadConnect ☕
 
@@ -90,19 +94,43 @@ work. This is separate from **browser-to-PC remote keyboard input**, which is
 available through the Web Companion's PC Remote tab after the PC user enables
 the relevant permission.
 
-## Download
+## Choose how to use VPadConnect
 
-Download the latest version from the [Releases](https://github.com/ArvinNotDev/VPadConnect/releases) page.
+### Option A — Download the ready-to-run Windows app (recommended)
 
-For most users, download:
+**[Download VPadConnect 0.2.1 Beta 1](https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1)** · [All Releases](https://github.com/ArvinNotDev/VPadConnect/releases)
 
-```text
-VPadConnect.exe
+Download **`VPadConnect.exe`** from the release assets. It is a Windows x64 **PyInstaller one-file build**: you do not need to install Python, pip, or the project's dependencies.
+
+1. Download `VPadConnect.exe` to a folder where your Windows account can write files.
+2. If you need a virtual Xbox/XInput controller, install the system-level **ViGEmBus** driver first. It is not bundled into the executable. Mouse controls and the Web Companion's PC Remote features can work without it.
+3. Double-click `VPadConnect.exe` and follow [Quick Start](#quick-start).
+
+The first beta also includes `SHA256SUMS.txt` in the release assets. Use it to verify the downloaded executable's SHA-256 checksum. Since this is a beta, keep backups of important profiles and settings before testing.
+
+### Option B — Run from the command line (source/developer setup)
+
+Choose this option if you want to inspect the code, run tests, or build the executable yourself. These commands use PowerShell on Windows:
+
+```powershell
+git clone https://github.com/ArvinNotDev/VPadConnect.git
+cd VPadConnect
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python main.py
 ```
 
-The packaged application is intended to run directly on Windows without requiring a Python installation.
+`python main.py` starts the **desktop GUI**. The repository does **not** currently contain a separate headless CLI application that provides controller remapping entirely through terminal commands; the terminal workflow is for installing, running, testing, and building the desktop app.
 
-Place the executable in a writable directory and launch it. On first run, VPadConnect creates its required user configuration files automatically.
+To build the same single-file executable locally, after installing the dependencies run:
+
+```powershell
+python -m PyInstaller --clean --noconfirm VPadConnect_onefile.spec
+```
+
+The executable will be written to `dist\\VPadConnect.exe`. The official release workflow additionally runs automated tests, builds the one-file EXE on Windows, generates the checksum file, publishes the beta release, and cleans up older releases and non-main branches after the new release is available.
 
 ## System Requirements
 
@@ -132,7 +160,7 @@ permission.
 
 ## Quick Start
 
-1. Download `VPadConnect.exe` from the latest [Release](https://github.com/ArvinNotDev/VPadConnect/releases).
+1. Download `VPadConnect.exe` from the [current beta release](https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1).
 2. Install **ViGEmBus** if you want virtual Xbox 360 / XInput emulation.
 3. Connect your physical controller.
 4. Launch **VPadConnect**.
@@ -368,6 +396,8 @@ C:\Program Files\
 unless the application has the required write permissions.
 
 ## Build From Source
+
+The commands below are intended for contributors and users who want to inspect or package the application themselves. For the simplest install, use the pre-built one-file executable linked in [Choose how to use VPadConnect](#choose-how-to-use-vpadconnect).
 
 ### Clone the repository
 
