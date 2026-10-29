@@ -589,6 +589,14 @@ class SettingsPage(QWidget):
         self.dev_restore2.clicked.connect(self.restore_dev_defaults)
         self.dev_apply2.clicked.connect(self.apply_dev)
 
+        self.btn_browse_log.clicked.connect(self._browse_log_file)
+        self.btn_open_log.clicked.connect(self._open_log_file)
+        self.btn_open_log_folder.clicked.connect(self._open_log_folder)
+        self.btn_clear_log.clicked.connect(self._clear_log_file)
+        self._apply_reduced_motion()
+        initial_log_path = configure_developer_logging(self.settings)
+        self._refresh_logging_status(initial_log_path)
+
         self.btn_save_to_profile.clicked.connect(self._on_save_to_profile)
 
     # ==========================================================
@@ -976,10 +984,14 @@ class SettingsPage(QWidget):
 
     def _refresh_logging_status(self, active_path: Path | None = None) -> None:
         if active_path is None and self.settings.get_log_to_file():
-            active_path = resolve_log_path(self.settings)
-        if self.settings.get_log_to_file():
+            active_path = configure_developer_logging(self.settings)
+        if self.settings.get_log_to_file() and active_path is not None:
             self.lbl_logging_status.setText(
                 f"File logging enabled · rotating at 2 MiB, keeping 3 backups\n{active_path}"
+            )
+        elif self.settings.get_log_to_file():
+            self.lbl_logging_status.setText(
+                "Could not activate file logging. Check that the selected folder exists and is writable."
             )
         elif self.settings.get_developer_debug() or self.settings.get_raw_hid_debug():
             self.lbl_logging_status.setText(
