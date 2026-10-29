@@ -118,7 +118,9 @@ jobs:
           $repo = $env:GITHUB_REPOSITORY
           $tag = "v$env:RELEASE_VERSION"
           $hasExe = gh api "repos/$repo/releases/tags/$tag" --jq 'any(.assets[]; .name == "VPadConnect.exe")'
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify the new release." }
           $hasChecksum = gh api "repos/$repo/releases/tags/$tag" --jq 'any(.assets[]; .name == "SHA256SUMS.txt")'
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify the checksum asset." }
           if ($hasExe.Trim() -ne "true" -or $hasChecksum.Trim() -ne "true") {
             throw "The new beta release or one of its expected assets is missing; refusing to delete old releases or branches."
           }
@@ -132,15 +134,18 @@ jobs:
           $repo = $env:GITHUB_REPOSITORY
           $newTag = "v$env:RELEASE_VERSION"
           $releaseIds = gh api --paginate "repos/$repo/releases" --jq '.[].id'
+          if ($LASTEXITCODE -ne 0) { throw "Could not list releases; refusing repository cleanup." }
           foreach ($line in ($releaseIds -split "`r?`n")) {
             $id = $line.Trim()
             if (-not $id) { continue }
             $existingTag = gh api "repos/$repo/releases/$id" --jq '.tag_name'
+            if ($LASTEXITCODE -ne 0) { throw "Could not inspect release $id; refusing further cleanup." }
             if ($existingTag.Trim() -eq $newTag) {
               continue
             }
             Write-Host "Deleting previous release $existingTag (id $id)"
             gh api --method DELETE "repos/$repo/releases/$id"
+            if ($LASTEXITCODE -ne 0) { throw "Could not delete old release $existingTag; branch cleanup will not run." }
           }
           Write-Host "Historical releases removed; the new beta release is retained."
 
@@ -151,14 +156,18 @@ jobs:
         run: |
           $repo = $env:GITHUB_REPOSITORY
           $branchNames = gh api --paginate "repos/$repo/branches" --jq '.[].name'
+          if ($LASTEXITCODE -ne 0) { throw "Could not list branches; refusing branch cleanup." }
           foreach ($line in ($branchNames -split "`r?`n")) {
             $branch = $line.Trim()
             if (-not $branch -or $branch -eq "main") { continue }
             Write-Host "Deleting branch: $branch"
             gh api --method DELETE "repos/$repo/git/refs/heads/$branch"
+            if ($LASTEXITCODE -ne 0) { throw "Could not delete branch '$branch'." }
           }
           $remaining = gh api --paginate "repos/$repo/branches" --jq '.[].name'
-          if (($remaining -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join "," -ne "main") {
+          if ($LASTEXITCODE -ne 0) { throw "Could not verify remaining branches." }
+          $remainingNames = @($remaining -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+          if ($remainingNames.Count -ne 1 -or $remainingNames[0] -ne "main") {
             throw "Branch cleanup did not leave exactly one branch named main."
           }
           Write-Host "Branch cleanup verified: main is the only remaining branch."
