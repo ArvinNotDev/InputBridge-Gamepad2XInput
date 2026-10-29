@@ -146,6 +146,21 @@ class SettingsPage(QWidget):
         sens_row.addStretch()
         device_form.addRow("Mouse sensitivity", sens_row)
 
+        mouse_deadzone_row = QHBoxLayout()
+        self.mouse_deadzone_slider = QSlider(Qt.Orientation.Horizontal)
+        self.mouse_deadzone_slider.setRange(0, 500)
+        self.mouse_deadzone_slider.setSingleStep(5)
+        self.mouse_deadzone_slider.setPageStep(25)
+        self.mouse_deadzone_slider.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self.mouse_deadzone_value = QLabel("10.0%")
+        self.mouse_deadzone_value.setMinimumWidth(52)
+        self.mouse_deadzone_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        mouse_deadzone_row.addWidget(self.mouse_deadzone_slider, 1)
+        mouse_deadzone_row.addWidget(self.mouse_deadzone_value)
+        device_form.addRow("Mouse deadzone", mouse_deadzone_row)
+
         # Deadzones
         deadzone_layout = QGridLayout()
         deadzone_layout.setHorizontalSpacing(12)
@@ -464,6 +479,12 @@ class SettingsPage(QWidget):
             self.spin_mouse_sens.setValue(self.settings.get_mouse_sensitivity())
         except Exception:
             self.spin_mouse_sens.setValue(1.0)
+        try:
+            mouse_deadzone = self.settings.get_mouse_deadzone()
+        except Exception:
+            mouse_deadzone = 0.10
+        self.mouse_deadzone_slider.setValue(int(round(mouse_deadzone * 1000)))
+        self.mouse_deadzone_value.setText(f"{mouse_deadzone * 100:.1f}%")
 
         try:
             left_dz, right_dz = self.settings.get_deadzones()
@@ -549,6 +570,12 @@ class SettingsPage(QWidget):
         # ==========================================================
         # SIGNALS
         # ==========================================================
+        self.mouse_deadzone_slider.valueChanged.connect(
+            lambda v: (
+                self.mouse_deadzone_value.setText(f"{v / 10:.1f}%"),
+                self._schedule_autosave(),
+            )
+        )
         self.left_slider.valueChanged.connect(
             lambda v: (self.left_val.setText(f"{v/1000:.2f}"), self._schedule_autosave())
         )
@@ -626,7 +653,7 @@ class SettingsPage(QWidget):
         widgets = [
             self.spin_poll, self.chk_reconnect, self.chk_dpad_mouse,
             self.chk_mouse_mode, self.chk_vibration, self.spin_mouse_sens,
-            self.left_slider, self.right_slider, self.chk_left_invert_x,
+            self.mouse_deadzone_slider, self.left_slider, self.right_slider, self.chk_left_invert_x,
             self.chk_left_invert_y, self.chk_right_invert_x,
             self.chk_right_invert_y, self.chk_button_invert, self.combo_lang,
             self.combo_theme, self.chk_reduced_motion, self.chk_debug, self.chk_raw_hid,
@@ -640,6 +667,9 @@ class SettingsPage(QWidget):
             self.chk_mouse_mode.setChecked(self.settings.get_mouse_mode())
             self.chk_vibration.setChecked(self.settings.get_vibration_enabled())
             self.spin_mouse_sens.setValue(self.settings.get_mouse_sensitivity())
+            mouse_deadzone = self.settings.get_mouse_deadzone()
+            self.mouse_deadzone_slider.setValue(int(round(mouse_deadzone * 1000)))
+            self.mouse_deadzone_value.setText(f"{mouse_deadzone * 100:.1f}%")
 
             left_dz, right_dz = self.settings.get_deadzones()
             self.left_slider.setValue(int(left_dz * 1000))
@@ -686,6 +716,7 @@ class SettingsPage(QWidget):
         self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
         self.settings.set_vibration_enabled(self.chk_vibration.isChecked())
         self.settings.set_mouse_sensitivity(self.spin_mouse_sens.value())
+        self.settings.set_mouse_deadzone(self.mouse_deadzone_slider.value() / 1000.0)
 
         left = self.left_slider.value() / 1000.0
         right = self.right_slider.value() / 1000.0
@@ -840,6 +871,8 @@ class SettingsPage(QWidget):
         self.chk_mouse_mode.setChecked(False)
         self.chk_vibration.setChecked(True)
         self.spin_mouse_sens.setValue(1.0)
+        self.mouse_deadzone_slider.setValue(100)
+        self.mouse_deadzone_value.setText("10.0%")
         self.left_slider.setValue(100)
         self.right_slider.setValue(100)
         self.left_val.setText("0.10")
@@ -860,6 +893,7 @@ class SettingsPage(QWidget):
         self.settings.set_mouse_mode(self.chk_mouse_mode.isChecked())
         self.settings.set_vibration_enabled(self.chk_vibration.isChecked())
         self.settings.set_mouse_sensitivity(self.spin_mouse_sens.value())
+        self.settings.set_mouse_deadzone(self.mouse_deadzone_slider.value() / 1000.0)
 
         left = self.left_slider.value() / 1000.0
         right = self.right_slider.value() / 1000.0
