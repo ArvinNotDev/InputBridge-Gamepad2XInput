@@ -272,6 +272,9 @@ class MainWindow(QMainWindow):
         self.controller_emulation_page.raw_hid_report.connect(
             self.settings_page.append_raw_hid_report
         )
+        self.settings_page.raw_hid_monitor_state_changed.connect(
+            self.controller_emulation_page.set_raw_hid_monitor_active
+        )
         self.pages.addWidget(self.settings_page)
         self.settings_page.combo_lang.currentIndexChanged.connect(
             lambda _index: self._apply_language()
