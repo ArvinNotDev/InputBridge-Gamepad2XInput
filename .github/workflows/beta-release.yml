@@ -48,7 +48,12 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          # Python 3.12 uses the stable PySide6 wheel from PyPI. The optional
+          # Qt development index is only needed by the Python 3.15 marker, so
+          # omit that global extra-index directive for this Windows release job.
+          $requirements = Get-Content "requirements.txt" | Where-Object { $_ -notmatch '^\s*--extra-index-url\b' }
+          $requirements | Set-Content ".release-requirements.txt" -Encoding utf8
+          python -m pip install -r .release-requirements.txt
           python -m pip install pytest
 
       - name: Set up Node.js
