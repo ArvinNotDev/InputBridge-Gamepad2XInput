@@ -39,7 +39,8 @@ class SettingsManager:
                 }
                 self.config["ui"] = {
                     "language": "eng",
-                    "theme": "dark"
+                    "theme": "dark",
+                    "reduced_motion": "false",
                 }
                 self.config["developer"] = {
                     "debug": "false",
@@ -231,6 +232,14 @@ class SettingsManager:
             self.config.add_section("ui")
         self.config.set("ui", "theme", str(theme_name))
 
+    def get_ui_reduced_motion(self) -> bool:
+        return self.config.getboolean("ui", "reduced_motion", fallback=False)
+
+    def set_ui_reduced_motion(self, enabled: bool) -> None:
+        if not self.config.has_section("ui"):
+            self.config.add_section("ui")
+        self.config.set("ui", "reduced_motion", "true" if enabled else "false")
+
     # -------- developer --------
     def get_developer_debug(self):
         return self.config.getboolean("developer", "debug", fallback=False)
@@ -349,6 +358,10 @@ class SettingsManager:
             self.set_ui_theme(theme)
         except Exception:
             self.set_ui_theme("dark")
+        try:
+            self.set_ui_reduced_motion(self.get_ui_reduced_motion())
+        except Exception:
+            self.set_ui_reduced_motion(False)
 
         # Developer defaults
         if not self.config.has_section("developer"):
