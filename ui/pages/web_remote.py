@@ -6,8 +6,8 @@ import json
 import threading
 
 import qrcode
-from PySide6.QtCore import Qt, QTimer, QObject, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt, QTimer, QObject, Signal, QUrl
+from PySide6.QtGui import QPixmap, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from core.web_remote import WebRemoteServer
 from core.remote_actions import load_remote_permissions, save_remote_permissions
+from core.vigem import VIGEMBUS_RELEASES_URL, is_vigem_installed
 
 
 class _WebRemoteSignals(QObject):
@@ -40,9 +41,16 @@ class WebRemotePage(QWidget):
     """Start/stop the HTTPS browser companion and display short-lived pairing credentials."""
 
     FIXED_PORT = 8765
+    vigem_recheck_requested = Signal()
 
-    def __init__(self, settings, controllers_page, hotkey_page, status_changed=None):
+    def __init__(
+        self, settings, controllers_page, hotkey_page, status_changed=None, *,
+        vigem_available: bool | None = None,
+    ):
         super().__init__()
+        self._vigem_available = (
+            is_vigem_installed() if vigem_available is None else bool(vigem_available)
+        )
         self.setObjectName("webCompanionPage")
         self._status_changed = status_changed
         self._last_client_count = -1
@@ -87,6 +95,37 @@ class WebRemotePage(QWidget):
         intro_layout.addWidget(title)
         intro_layout.addWidget(description)
         root.addWidget(intro)
+
+        # The browser gamepad needs ViGEmBus, but mouse and PC Remote do not.
+        self.vigem_notice = QFrame()
+        self.vigem_notice.setObjectName("webVigemNotice")
+        notice_layout = QHBoxLayout(self.vigem_notice)
+        notice_layout.setContentsMargins(12, 9, 12, 9)
+        notice_layout.setSpacing(10)
+        notice_copy = QVBoxLayout()
+        notice_copy.setSpacing(3)
+        self.vigem_notice_title = QLabel("Virtual gamepad unavailable")
+        self.vigem_notice_title.setObjectName("webVigemNoticeTitle")
+        self.vigem_notice_detail = QLabel(
+            "Install ViGEmBus on this Windows PC to enable virtual Xbox/XInput output. "
+            "Touch mouse and PC Remote stay available without it."
+        )
+        self.vigem_notice_detail.setObjectName("webVigemNoticeDetail")
+        self.vigem_notice_detail.setWordWrap(True)
+        notice_copy.addWidget(self.vigem_notice_title)
+        notice_copy.addWidget(self.vigem_notice_detail)
+        notice_layout.addLayout(notice_copy, 1)
+        self.vigem_install_button = QPushButton("Install ViGEmBus ↗")
+        self.vigem_install_button.setObjectName("webVigemInstall")
+        self.vigem_install_button.clicked.connect(
+            lambda: QDesktopServices.openUrl(QUrl(VIGEMBUS_RELEASES_URL))
+        )
+        notice_layout.addWidget(self.vigem_install_button)
+        self.vigem_recheck_button = QPushButton("Recheck")
+        self.vigem_recheck_button.setObjectName("webVigemRecheck")
+        self.vigem_recheck_button.clicked.connect(self.vigem_recheck_requested.emit)
+        notice_layout.addWidget(self.vigem_recheck_button)
+        root.addWidget(self.vigem_notice)
 
         setup = QFrame()
         setup.setObjectName("webCard")
@@ -224,7 +263,23 @@ class WebRemotePage(QWidget):
             QPushButton#webStartButton[running="true"]:hover:enabled { background: #d34859; }
             QPushButton#webCopyButton { padding: 4px 8px; font-size: 11px; }
             QPushButton#webPermissionsButton { padding: 0; font-size: 17px; }
+            QFrame#webVigemNotice { border: 1px solid #806239; border-radius: 12px;
+                background: #2a2119; }
+            QLabel#webVigemNoticeTitle { color: #ffd49a; font-size: 12px; font-weight: 800; }
+            QLabel#webVigemNoticeDetail { color: #d8c5aa; font-size: 11px; }
+            QPushButton#webVigemInstall { background: #77501e; border-color: #ae7a37;
+                color: #fff3df; font-weight: 800; }
+            QPushButton#webVigemInstall:hover:enabled { background: #8b612a; }
+            QPushButton#webVigemRecheck { background: #1b283a; }
         """)
+        self._set_vigem_available(self._vigem_available)
+
+    def set_vigem_available(self, available: bool) -> None:
+        self._vigem_available = bool(available)
+        self._set_vigem_available(self._vigem_available)
+
+    def _set_vigem_available(self, available: bool) -> None:
+        self.vigem_notice.setVisible(not bool(available))
 
     def _toggle_server(self) -> None:
         if self._server_busy:
