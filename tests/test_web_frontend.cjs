@@ -821,8 +821,8 @@ test("6-axis Air Mouse uses the correct horizontal gyro axis, preserves vertical
     });
   }
   await settle();
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dx > 0), "positive gamma rotation should move the cursor right");
-  assert.ok(stateRequests(harness).some((request) => request.mouse.dx >= 10), "accelerated gyro movement should feel responsive at default sensitivity");
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx < 0), "positive gamma rotation should move the cursor left after reversing horizontal direction");
+  assert.ok(stateRequests(harness).some((request) => request.mouse.dx <= -10), "accelerated gyro movement should feel responsive at default sensitivity");
 
   for (let i = 0; i < 40; i += 1) {
     harness.dispatchWindow("devicemotion", {
