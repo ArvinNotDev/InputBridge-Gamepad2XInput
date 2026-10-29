@@ -14,8 +14,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ArvinNotDev/VPadConnect/releases/latest">
-    <img src="https://img.shields.io/github/v/release/ArvinNotDev/VPadConnect?style=flat-square&color=635bff" alt="Latest release">
+  <a href="https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1">
+    <img src="https://img.shields.io/badge/pre--release-0.2.1--beta.1-635bff?style=flat-square" alt="Current beta release">
   </a>
   <a href="https://github.com/ArvinNotDev/VPadConnect/releases">
     <img src="https://img.shields.io/github/downloads/ArvinNotDev/VPadConnect/total?style=flat-square&color=20b8d4" alt="Downloads">
