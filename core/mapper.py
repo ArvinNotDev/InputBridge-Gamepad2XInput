@@ -40,6 +40,7 @@ class Mapper:
         hotkey_page,
         debug: bool = False,
         lightbar_output=None,
+        raw_hid_report_callback=None,
     ):
         self.controller = controller
         self.controller_type = controller_type
@@ -47,7 +48,9 @@ class Mapper:
         self.debug = bool(debug)
         self.settings = settings
         self.controllers_page = controllers_page
+        self.raw_hid_report_callback = raw_hid_report_callback
         self._last_raw_report_log_at = 0.0
+        self._last_raw_hid_stream_at = 0.0
         self._last_debug_state_log_at = 0.0
 
         self.mouse_mode = False
@@ -152,22 +155,32 @@ class Mapper:
         if not self._connected or self.emulator is None:
             return
 
-        # Raw report logging is opt-in and throttled to at most ten reports per
-        # second per physical controller to keep logs readable and bounded.
+        # Raw report capture is opt-in. File logging stays capped at 10 Hz,
+        # while the live terminal callback is rate-limited separately so it can
+        # show responsive updates without flooding the Qt event queue.
         try:
             raw_debug = bool(self.settings.get_raw_hid_debug())
         except Exception:
             raw_debug = False
         now = time.monotonic()
-        if raw_debug and now - self._last_raw_report_log_at >= 0.1:
+        if raw_debug:
             report = bytes(data)
-            preview = report[:64].hex(" ")
-            suffix = " …" if len(report) > 64 else ""
-            logger.debug(
-                "RAW HID controller=%s length=%d bytes=%s%s",
-                self.controller.name, len(report), preview, suffix,
-            )
-            self._last_raw_report_log_at = now
+            callback = self.raw_hid_report_callback
+            if callback is not None and now - self._last_raw_hid_stream_at >= (1.0 / 30.0):
+                try:
+                    callback(self.controller.name, report)
+                except Exception:
+                    logger.debug("Could not publish a raw HID report to the live terminal", exc_info=True)
+                self._last_raw_hid_stream_at = now
+
+            if now - self._last_raw_report_log_at >= 0.1:
+                preview = report[:64].hex(" ")
+                suffix = " …" if len(report) > 64 else ""
+                logger.debug(
+                    "RAW HID controller=%s length=%d bytes=%s%s",
+                    self.controller.name, len(report), preview, suffix,
+                )
+                self._last_raw_report_log_at = now
 
         if isinstance(self.emulator, EmulateX360):
             self._handle_x360_input(data)
