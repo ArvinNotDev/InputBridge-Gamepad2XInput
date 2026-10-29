@@ -3,6 +3,50 @@
 All notable user-facing changes to VPadConnect are documented
 here. Version numbers follow semantic-versioning conventions where practical.
 
+## [0.2.1-beta.1] — 2026-10-29
+
+This is the first pre-1.0 beta under the VPadConnect version line. It gathers the
+current desktop and Web Companion work into a fresh downloadable Windows release.
+
+### Raw HID live terminal and developer diagnostics
+
+- Added a dedicated dark live terminal for timestamped hexadecimal HID reports,
+  with packet count, receive rate, last-report size, and controller name.
+- Added pause/resume, clear, copy-latest, save-capture, and optional auto-scroll
+  controls. Terminal history is bounded to 1,600 lines.
+- Limited UI report delivery to 30 updates per second and disabled delivery while
+  the terminal is hidden, avoiding unnecessary pressure on the UI thread.
+- Kept file diagnostics separate, rate-limited, and rotated to bound disk usage.
+
+### Settings and input responsiveness
+
+- Made Device, UI, and Developer Settings scroll independently in compact windows.
+- Added a persistent Reduce interface animations option and an adjustable mouse
+  deadzone for physical-controller mouse mode.
+- Removed the redundant OS cursor-position query before every relative mouse move,
+  while retaining recovery from PyAutoGUI's fail-safe corner.
+- Added visible developer logging controls for choosing, opening, and clearing
+  diagnostic logs.
+
+### Web Companion and desktop experience
+
+- Improved the mobile Web Companion's touch gamepad, touch mouse, scrolling,
+  PC Remote, connection handling, and browser-local preferences.
+- Kept the input stream persistent over an authenticated WebSocket when available,
+  with an HTTP state fallback and cleanup of held inputs on disconnect.
+- Added the current indigo/cyan desktop motion polish and reduced-motion support.
+- Gated virtual XInput output on the optional ViGEmBus driver while keeping
+  touch mouse and PC Remote features available without it.
+
+### Distribution and validation
+
+- Reset the application version line to `0.2.1-beta.1` to mark the VPadConnect
+  beta as a pre-1.0 release.
+- The release workflow builds a Windows x64 **one-file** `VPadConnect.exe`,
+  runs automated tests before publishing, and attaches a SHA-256 checksum file.
+- This is a beta: automated checks do not replace testing on every Windows PC
+  and with every physical controller. Please report reproducible issues.
+
 ## [Unreleased]
 
 ### PySide6 desktop motion polish
@@ -175,7 +219,8 @@ remain future work; they are not represented as implemented here.
 
 - Added live vibration settings and XInput vibration testing.
 
-[2.0.8]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.8
-[2.0.7]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.7
-[2.0.6]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.6
-[2.0.5]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v2.0.5
+[0.2.1-beta.1]: https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1
+[2.0.8]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.8
+[2.0.7]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.7
+[2.0.6]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.6
+[2.0.5]: https://github.com/ArvinNotDev/VPadConnect/tree/v2.0.5
