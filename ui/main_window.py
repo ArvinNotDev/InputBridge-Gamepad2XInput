@@ -14,8 +14,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSizeGrip,
 )
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QColor, QFont
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon, QAction, QPixmap, QPainter, QBrush, QPen, QColor, QFont
 
 from ui.theme_manager import ThemeManager
 from ui.animations import AnimatedStackedWidget, AnimatedTabBar, ButtonHoverAnimations
@@ -194,7 +194,23 @@ class MainWindow(QMainWindow):
         self.menu.addTab("Hotkeys")
         self.menu.addTab("Input Test")
         self.menu.setMinimumHeight(38)
-        main_layout.addWidget(self.menu)
+        self.menu.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+
+        navigation_row = QWidget()
+        navigation_layout = QHBoxLayout(navigation_row)
+        navigation_layout.setContentsMargins(0, 0, 0, 0)
+        navigation_layout.setSpacing(12)
+        navigation_layout.addWidget(self.menu, 0, Qt.AlignmentFlag.AlignLeft)
+        navigation_layout.addStretch(1)
+
+        self.donate_button = QPushButton("☕ Buy me a coffee")
+        self.donate_button.setObjectName("nav_donate_button")
+        self.donate_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.donate_button.setMinimumHeight(34)
+        self.donate_button.setStyleSheet("QPushButton#nav_donate_button { color: #25202a; background: #f4c37b; border: 1px solid #ffdda2; border-radius: 9px; padding: 6px 14px; font-weight: 800; } QPushButton#nav_donate_button:hover { background: #ffdaa0; }")
+        self.donate_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://reymit.ir/arvinnotdev")))
+        navigation_layout.addWidget(self.donate_button, 0, Qt.AlignmentFlag.AlignRight)
+        main_layout.addWidget(navigation_row)
 
         # Pages are kept in one stack; Profiles and Settings open from the title bar.
         self.pages = AnimatedStackedWidget()
