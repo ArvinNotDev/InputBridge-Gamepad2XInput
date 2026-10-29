@@ -35,6 +35,7 @@ class SettingsManager:
                     "left_stick_invert_y": "true",
                     "mouse_mode": "false",
                     "mouse_sensitivity": "1.0",
+                    "mouse_deadzone": "0.10",
                     "vibration_enabled": "true"
                 }
                 self.config["ui"] = {
@@ -154,6 +155,16 @@ class SettingsManager:
         if not self.config.has_section("device"):
             self.config.add_section("device")
         self.config.set("device", "mouse_sensitivity", f"{float(sens):.6f}")
+
+    def get_mouse_deadzone(self) -> float:
+        value = self.config.getfloat("device", "mouse_deadzone", fallback=0.10)
+        return max(0.0, min(0.50, value))
+
+    def set_mouse_deadzone(self, deadzone: float) -> None:
+        if not self.config.has_section("device"):
+            self.config.add_section("device")
+        value = max(0.0, min(0.50, float(deadzone)))
+        self.config.set("device", "mouse_deadzone", f"{value:.3f}")
 
     def get_vibration_enabled(self):
         return self.config.getboolean("device", "vibration_enabled", fallback=True)
@@ -340,6 +351,10 @@ class SettingsManager:
             self.set_mouse_sensitivity(sens)
         except Exception:
             self.set_mouse_sensitivity(1.0)
+        try:
+            self.set_mouse_deadzone(self.get_mouse_deadzone())
+        except Exception:
+            self.set_mouse_deadzone(0.10)
         try:
             self.set_vibration_enabled(self.get_vibration_enabled())
         except Exception:
