@@ -12,33 +12,32 @@
 
 **VPadConnect** is a Windows desktop app that maps physical HID controllers to virtual Xbox/XInput output, mouse controls, and hotkeys. It also includes a browser-based companion for mobile gamepad and PC remote controls.
 
-## Download the beta
+## Download Beta 2
 
-**[Download VPadConnect 0.2.1 Beta 1](https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1)** · [All releases](https://github.com/ArvinNotDev/VPadConnect/releases)
+**[Download VPadConnect 0.2.1 Beta 2](https://github.com/ArvinNotDev/VPadConnect/releases/latest)** · [All releases](https://github.com/ArvinNotDev/VPadConnect/releases)
 
-Download `VPadConnect.exe` from the release assets. It is a Windows x64, PyInstaller one-file build; Python is not needed to run it. `SHA256SUMS.txt` is provided to verify the executable.
+Download and run `VPadConnect-Setup.exe`. This self-contained Windows x64 installer includes the application and the original ViGEmBus 1.22.0 installer. Python and an internet connection during installation are not required. `SHA256SUMS.txt` contains the installer checksum.
 
 ### Requirements and installation
 
-- Windows 10 or later, 64-bit.
-- Save the executable in a folder your Windows account can write to.
-- Install **ViGEmBus** only if you want virtual Xbox/XInput controller emulation. Mouse controls, hotkeys, and Web Companion PC Remote features do not require it.
+- Windows 10 or later, 64-bit x64.
+- Administrator approval for installation and any required driver setup.
+- A restart may be required after ViGEmBus installation. Setup never restarts Windows automatically.
 
-1. Download `VPadConnect.exe` from the [beta release](https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1).
-2. Install ViGEmBus if you need virtual XInput output.
-3. Connect your physical controller and launch `VPadConnect.exe`.
-4. Open **Controller Emulation → Add Controller**, choose the controller's HID interface, configure its mapping, and start emulation.
+Setup lets you choose the installation folder, creates a Start Menu shortcut, and creates a Desktop shortcut by default. You can disable the Desktop shortcut and choose whether VPadConnect launches when setup finishes. The application runs normally as your user after installation.
 
-For a quick tour, see [Quick start](#quick-start). Read [What's new in this beta](.github/release-notes/0.2.1-beta.1.md) and the [full changelog](CHANGELOG.md).
+ViGEmBus is installed automatically when a working compatible driver is not found. Existing working installations are left in place. Mouse controls, hotkeys, and Web Companion features that do not use virtual XInput remain available if driver setup fails. Uninstalling VPadConnect preserves user data and never removes the shared ViGEmBus driver.
+
+For a quick tour, see [Quick start](#quick-start). Read [What's new in this beta](.github/release-notes/0.2.1-beta.2.md) and the [full changelog](CHANGELOG.md).
 
 > **Beta:** Controller and Windows compatibility can vary. Back up important profiles before testing and report reproducible problems. Automated checks do not mean every controller has been manually tested.
 
 ## Quick start
 
-1. Connect a controller and open **Controller Emulation → Add Controller**.
-2. Select the HID interface that supplies its input reports.
-3. Choose virtual XInput output, mouse control, or hotkeys and configure the mapping.
-4. Install ViGEmBus before using virtual XInput output; other modes do not need that driver.
+1. Run `VPadConnect-Setup.exe` and choose the install folder and shortcut options.
+2. Connect a controller and open **Controller Emulation → Add Controller**.
+3. Select the HID interface that supplies its input reports.
+4. Choose virtual XInput output, mouse control, or hotkeys and configure the mapping.
 5. Start emulation. Use **Settings → Developer** for diagnostics, including the live Raw HID terminal.
 
 To use a phone or tablet, open **Web Companion** in the desktop app, start its web server, and open the displayed HTTPS address on a device on the same trusted network. Browser gamepad, touch mouse, scrolling, and permission-controlled PC Remote features are available. A browser may warn about the local self-signed certificate; compare its fingerprint with the one shown by the desktop app.
@@ -52,9 +51,9 @@ To use a phone or tablet, open **Web Companion** in the desktop app, start its w
 - Live Raw HID terminal with timestamped hexadecimal reports, packet statistics, pause/resume, copy, and capture save.
 - Mobile Web Companion with touch gamepad, touch mouse, scrolling, and authenticated persistent input when WebSocket is available.
 
-Virtual XInput requires the system-level ViGEmBus driver. The driver is not bundled with VPadConnect. Mouse and Web Companion PC Remote features that do not use virtual XInput can be used without it.
+Virtual XInput requires the system-level ViGEmBus driver. The installer checks its service and Plug and Play state, skips a working installation, and installs its bundled copy when missing. ViGEmBus was retired on November 2, 2023; version 1.22.0 is its final release and will not receive upstream updates. Compatibility with future Windows releases is not guaranteed. VPadConnect is not affiliated with or endorsed by Nefarius Software Solutions e.U.; see the installed `THIRD-PARTY-NOTICES.txt` for its license. Mouse and Web Companion PC Remote features that do not use virtual XInput can be used without the driver.
 
-## Run from source / command line
+## Run from source and build
 
 `main.py` starts the PySide6 desktop GUI. This repository does **not** provide a separate headless command-line controller-remapping app; the commands below are for running, testing, and building the GUI from source. These PowerShell commands use Python 3.12 and stable packages from PyPI:
 
@@ -82,21 +81,25 @@ node --test tests/test_web_frontend.cjs
 
 # Build the Windows x64 one-file executable.
 & $python -m PyInstaller --clean --noconfirm VPadConnect_onefile.spec
+
+# Build the all-in-one installer (requires Inno Setup 6).
+.\scripts\build_installer.ps1
 ```
 
-The one-file build is written to `dist\VPadConnect.exe`. The application entry point launches the desktop GUI; no terminal-only controller-remapping commands are currently available.
+The one-file build is written to `dist\VPadConnect.exe` and is retained as an internal build artifact. The installer build downloads the official ViGEmBus payload to the ignored `build/vendor/` directory, verifies its SHA-256, embeds it, and writes `dist\VPadConnect-Setup.exe` plus `dist\SHA256SUMS.txt`. The final installer is self-contained. The application entry point launches the desktop GUI; no terminal-only controller-remapping commands are currently available.
 
 ## Known limitations
 
 - Physical-controller-to-keyboard mapping is not currently available. Web Companion keyboard input is a separate, permission-controlled remote feature.
-- Virtual XInput output depends on ViGEmBus being installed and working on the PC.
-- HID interfaces and behavior vary between controller models; check the [beta notes](.github/release-notes/0.2.1-beta.1.md) for validation details and current limitations.
+- ViGEmBus is retired and no longer receives upstream updates. Virtual XInput output requires the bundled v1.22.0 driver to install and work on the PC; compatibility with future Windows releases is not guaranteed.
+- If driver installation fails, virtual XInput output is unavailable until it is repaired. Mouse control, hotkeys, and Web Companion features that do not use XInput remain available.
+- HID interfaces and behavior vary between controller models; check the [beta notes](.github/release-notes/0.2.1-beta.2.md) for validation details and current limitations.
 
 ## Links
 
-- [Download Beta](https://github.com/ArvinNotDev/VPadConnect/releases/tag/v0.2.1-beta.1)
+- [Download Beta](https://github.com/ArvinNotDev/VPadConnect/releases/latest)
 - [Full changelog](CHANGELOG.md)
-- [Beta release notes](.github/release-notes/0.2.1-beta.1.md)
+- [Beta release notes](.github/release-notes/0.2.1-beta.2.md)
 - [GitHub repository](https://github.com/ArvinNotDev/VPadConnect)
 
 ## License

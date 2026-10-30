@@ -1,15 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 
 project_root = Path(SPECPATH)
+default_settings = Path(
+    os.environ.get(
+        "VPADCONNECT_DEFAULT_SETTINGS",
+        str(project_root / "config" / "settings.conf"),
+    )
+)
 
 datas = [
-    (str(project_root / "config"), "config"),
-    (str(project_root / "profiles"), "profiles"),
+    (str(default_settings), "config"),
+    *[
+        (str(project_root / "profiles" / filename), "profiles")
+        for filename in (
+            "DualSense.json",
+            "Dualshock4.json",
+            "Generic.json",
+            "Unojoy.json",
+        )
+    ],
     (str(project_root / "ui" / "themes"), "ui/themes"),
     (str(project_root / "ui" / "assets"), "ui/assets"),
     (str(project_root / "ui" / "web"), "ui/web"),
@@ -41,7 +56,17 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    excludes=["PyQt6"],
+    # Optional packages pulled by Flask's CLI/IPython integration and
+    # PyAutoGUI's OpenCV screenshot backend are not used by VPadConnect.
+    excludes=[
+        "PyQt6",
+        "cv2",
+        "IPython",
+        "ipykernel",
+        "matplotlib",
+        "pytest",
+        "zmq",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

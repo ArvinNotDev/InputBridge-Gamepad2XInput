@@ -3,6 +3,38 @@
 All notable user-facing changes to VPadConnect are documented
 here. Version numbers follow semantic-versioning conventions where practical.
 
+## [0.2.1-beta.2] — 2026-10-30
+
+### Windows installer
+
+- Added `VPadConnect-Setup.exe`, an administrator-assisted Inno Setup installer
+  with a selectable install folder, Start Menu shortcut, optional Desktop
+  shortcut, and optional launch after setup.
+- Bundled the original signed ViGEmBus 1.22.0 installer. Setup checks the driver
+  service and Plug and Play device state, installs the driver when missing, and
+  reports when Windows needs a restart or the driver could not be confirmed.
+- Moved installed-build settings, profiles, logs, and persistent Web Companion
+  data to `%LOCALAPPDATA%\VPadConnect`. Existing beside-the-executable data is
+  copied without overwriting conflicts or deleting the source.
+- Uninstall preserves user data and never removes ViGEmBus. Added the driver's
+  BSD 3-Clause notice to the installer and installed files.
+- Documented the retirement of ViGEmBus and its final upstream release.
+
+### Validation
+
+- `python -m compileall -q core ui tests main.py` — passed.
+- `python -m pytest -q` — 100 passed.
+- `node --check ui/web/static/app.js` — passed.
+- `node --test tests/test_web_frontend.cjs` — 32 passed.
+- PyInstaller and Inno Setup builds completed; the official ViGEmBus payload
+  checksum and Authenticode signature were verified.
+- Driver skip/success/failure/restart handling passed mocked Windows
+  orchestration tests. No kernel driver was installed or changed on the build
+  host; isolated installer install/upgrade/uninstall tests remain unverified.
+- The silent switches match the Microsoft WinGet manifest; the official driver
+  installer was not executed because no isolated Windows environment was
+  available.
+
 ## [0.2.1-beta.1] — 2026-10-30
 
 This is the first pre-1.0 beta under the VPadConnect version line. It gathers the
